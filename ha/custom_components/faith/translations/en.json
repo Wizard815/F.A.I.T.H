@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to FAITH",
+        "description": "FAITH's address and a Home Assistant token made with `faith token add ha homeassistant`.",
+        "data": {
+          "url": "FAITH URL",
+          "token": "Token",
+          "panel_url": "Address for the sidebar page (optional, e.g. https://faith.home.lan)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Couldn't reach FAITH at that address.",
+      "invalid_auth": "FAITH refused the token. It must be an `ha` token."
+    },
+    "abort": {
+      "already_configured": "FAITH is already set up."
+    }
+  }
+}

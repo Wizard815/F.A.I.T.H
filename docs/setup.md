@@ -1,0 +1,104 @@
+# Connecting FAITH to everything
+
+Every source gets up to two tokens:
+- **Household** (the blanket family token): FAITH uses it when nobody is signed in. It can only see shared things.
+- **Person** (one per family member): used once they sign in. It also sees their own private things.
+
+The names of the variables go in `faith.yaml` (`household_token_env`, `person_token_env: X_{ID}`). The values go in `.env`. Leave a value empty and that source isn't offered in that view.
+
+Run `docker exec faith faith doctor` after each step. For each view it lists the sources, the tools (`*` = changes things) and what failed.
+
+## Argos (the engine)
+
+- Point `model.base_url` at Argos's `/v1`.
+- Pick `model.model`, a model with good tool calling. A Qwen3 instruct model works well, and an alias in Argos keeps the config stable when you swap models.
+- If Argos has API keys (Settings → Security), put one in `ARGOS_API_KEY`.
+- **Photos:** set `model.vision_model` to a vision model id (Qwen3-VL). Turns with a photo use it.
+- **Voice:**
+  - Set `voice.stt_model` to the speech-to-text model Argos serves on `/v1/audio/transcriptions` (a whisper.cpp model).
+  - Set `voice.tts_model` and `voice.tts_voice` for `/v1/audio/speech`.
+  - The screen's 🎤 button records, Argos transcribes, and the reply is spoken when 🔊 is on, or always when you spoke.
+- Argos serves models on demand: the first question after a while can take as long as a model load.
+
+## Family wiki (LLM-will-remember-this)
+
+The wiki already has exactly this model (`schema/agents.md` → Family). On the vault host:
+
+```bash
+node scripts/family-setup.mjs add-shared faith FAITH   # FAITH as the family's shared agent
+node scripts/family-setup.mjs token faith              # -> WIKI_TOKEN_HOUSEHOLD
+node scripts/family-setup.mjs token wizard             # -> WIKI_TOKEN_WIZARD (one per member)
+```
+
+- Connector URL: `http://<vault>:27123/family-mcp`.
+- The shared-agent token reads `household/` and each profile's "Shared with the family" section, never private notes. A member's token reads their own root as well.
+- **Check first:** the wiki's own note says `/family-mcp` still needs checking on RaidLab after the bridge is deployed. `faith doctor` calls `wiki_whoami` with each token.
+- The wiki's rule is that personal roots are read only by local models. Argos is local, so FAITH follows it; don't point `model.base_url` at a cloud API.
+
+## ALLGlance
+
+Needs ALLGlance's scoped tokens: branch `claude/nice-darwin-wx3t3u` of Wizard815/ALLGlance (commit `de238ec`) until it's merged.
+
+```bash
+docker exec allglance node scripts/tokens.mjs add-household faith                  # -> ALLGLANCE_TOKEN_HOUSEHOLD
+docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard       # -> ALLGLANCE_TOKEN_WIZARD
+```
+
+- **`GATEWAY_TOKEN` must be set on ALLGlance.** Without it the gateway is open, and anyone could skip the scoped tokens.
+- **What is private:**
+  - Vikunja: a task with the label `private`, or one in a project listed in `VIKUNJA_PRIVATE_PROJECTS`.
+  - dayGLANCE: a block with `#private` in its title.
+  - lastGLANCE chores and lifeGLANCE milestones have no private marker, so everyone sees them.
+- **Omi:**
+  - Omi's tools go only to the person named in `OMI_OWNER_ID`.
+  - Vikunja's native passthrough tools are admin-only, so FAITH doesn't get them.
+- **Ids:**
+  - `allglance_owner_id` in `faith.yaml` is the person's id in `allglance_list_users`.
+  - When Vikunja and dayGLANCE use different ids for one person, give `add-person` the extra ones with `--also`.
+- Check with `curl -H "Authorization: Bearer $TOKEN" http://<host>:8090/api/allglance/whoami`.
+
+## Home Assistant (and Mealie through it)
+
+1. **Make FAITH an HA user.** In HA: Settings → People → add a user `FAITH`, not an admin. As that user: Profile → Security → Long-lived token → `HA_TOKEN`.
+   - FAITH can still only touch what `expose` lists, and roles narrow it further (children: lights, media, fans).
+   - Optional: give each person their own HA token (`person_token_env: HA_TOKEN_{ID}`) so HA's logbook shows who did what.
+2. **Mealie.** Add HA's Mealie integration (Mealie URL and an API token from your Mealie profile).
+   - Each Mealie shopping list becomes a `todo.*` entity: list them in `shopping_lists`.
+   - The meal plan becomes `calendar.mealie_*` entities: list them in `meal_calendars`. FAITH can then read and change both, and changes reach Mealie.
+   - For `meal_plan` and `recipes_search`, set `mealie_config_entry_id`: Settings → Devices & services → Mealie → ⋮ → Copy entry ID.
+3. **The other direction (HA → FAITH)** is the integration: see [home-assistant.md](home-assistant.md).
+
+## Coinpile
+
+- In Coinpile: Settings → Home Assistant & API → make a token with the **mcp** scope for each person → `COINPILE_TOKEN_<ID>`.
+- Connector URL: `http://<host>:8190/api/v1/mcp`.
+- Money is never in the household view: there's no household token.
+- Coinpile's change tools only *ask*, and wait for a Yes inside Coinpile.
+- Coinpile withholds a linked partner's numbers from other apps over MCP, so FAITH sees only that person's own share.
+
+## Pondering Orb
+
+- Orb is Wizard's personal dashboard and stays his. FAITH reaches it only in Wizard's view.
+- Add `faith:<random>` to Orb's `ORB_API_TOKENS` and put the same `<random>` in `ORB_TOKEN_WIZARD`. Orb records `faith` as the writer.
+- Connector URL: `http://<host>:8095/mcp`.
+
+## Hermes and Hermes Studio
+
+- **Hermes agent:** enable the API server (`API_SERVER_ENABLED=true`, `API_SERVER_KEY`) and put the key in `HERMES_API_KEY`.
+  - Make one profile per person (`hermes profile create wizard`). FAITH calls `/p/<person>/v1`, so each person's Hermes has its own memory.
+  - Children don't get Hermes by default.
+- **Hermes Studio:** each person signs in with their own Studio account (`STUDIO_USER_<ID>`, `STUDIO_PASSWORD_<ID>`).
+  - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio.
+  - Studio's MCP bridge is stdio-only, so this goes through Studio's REST API, like Orb does.
+
+## Mattermost and the other apps
+
+Every app the family uses goes under `apps:` in `faith.yaml`. They become the launcher at the top of the home screen.
+- `who: person` hides an app until someone signs in.
+- `roles` / `people` limit it further (Orb for Wizard only, Coinpile for adults).
+
+Mattermost is a launcher link for now. A FAITH bot in Mattermost is on the [roadmap](roadmap.md).
+
+## Tokens for other apps
+
+`faith token add household <name>` / `person <id> <name>` makes a token for FAITH's OpenAI-compatible endpoint (`/v1/chat/completions`, model `faith`). Omi, Open WebUI or a script can then talk to FAITH with that view's access and rules.

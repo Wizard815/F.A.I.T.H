@@ -1,0 +1,21 @@
+# FAITH on Unraid: copy to docker-compose.yml next to a .env (see .env.example).
+# The config lives in ${FAITH_APPDATA}/config/faith.yaml (start from config/faith.example.yaml).
+services:
+  faith:
+    build: .
+    image: faith:local
+    container_name: faith
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: ${TZ:-America/Detroit}
+    ports:
+      - "8097:8097"
+    volumes:
+      - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/data:/data
+      - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/config:/config
+    networks: [ai_net]
+
+networks:
+  ai_net:
+    external: true   # where Argos, the wiki, ALLGlance, Coinpile and Orb already are
