@@ -1,0 +1,137 @@
+# FAITH: Family Agent for Intelligent Tasks & Help
+# Copy to /mnt/user/appdata/faith/config/faith.yaml (mounted at /config/faith.yaml).
+# Secrets never go in this file: it names environment variables (*_env) and the
+# values live in .env next to the compose file.
+
+name: Faith                      # what the assistant calls itself
+family_name: the Wizard household
+public_url: https://faith.home.lan   # https is needed for Face ID (passkeys); see docs/hub.md
+
+# The engine: one OpenAI-compatible endpoint. Argos serves the local models.
+model:
+  base_url: http://argos:8080/v1
+  model: faith                   # an Argos model id or alias (a good tool-calling model, e.g. Qwen3)
+  api_key_env: ARGOS_API_KEY     # leave the variable empty if Argos has no keys
+  max_rounds: 6                  # tool rounds per answer
+  temperature: 0.4
+  history_messages: 16           # past messages sent with each turn
+  context_chars: 4000            # how much of the wiki's context_for to include
+
+# The family. ids match the wiki's schema/family.md members.
+people:
+  - id: wizard
+    name: Wizard
+    role: admin                  # admin | adult | child
+    color: "#7c5cff"
+    allglance_owner_id: wizard   # from ALLGlance's allglance_list_users, if it differs
+    ha_user_id: ""               # Home Assistant user id: Assist from this HA user acts as Wizard
+    face_names: [Wizard]         # what a face-recognition sensor calls him
+  - id: partner
+    name: Partner
+    role: adult
+    color: "#ff7a90"
+# Later:
+#  - { id: kid1, name: Kid, role: child, color: "#3fb68b" }
+
+# What each role may do. Defaults shown for child; admin/adult/household allow everything
+# their tokens can reach.
+roles:
+  child:
+    writes: allowlist            # allow | allowlist | deny
+    allow_writes: [shopping_add, home_control, wiki_memory_capture, wiki_memory_log]   # home_control is limited by ha_domains
+    ha_domains: [light, media_player, fan]
+    deny_tools: [hermes_*, coinpile_*]
+  household:                     # nobody signed in (the wall screen's shared view)
+    deny_tools: [hermes_*]
+
+# Where the information lives. Each source gets two kinds of token:
+#   household_token_env  the blanket family token: shared things only
+#   person_token_env     each person's own token ({ID} = their id in capitals):
+#                        their private things as well
+# No token for a view = that source isn't offered in that view.
+connectors:
+  - id: wiki
+    type: mcp
+    url: http://192.168.20.5:27123/family-mcp
+    description: "The family wiki (LLMWIKI): long-term memory, notes, profiles, today's notes"
+    household_token_env: WIKI_TOKEN_HOUSEHOLD   # a shared_agents token: family-setup.mjs add-shared faith FAITH
+    person_token_env: WIKI_TOKEN_{ID}           # member tokens: family-setup.mjs token <id>
+    tools: [whoami, who_is, family_members, context_for, memory_log, memory_capture, notes_search, note_read, query_wiki, conversation_log]
+
+  - id: allglance
+    type: mcp
+    url: http://192.168.20.5:8090/mcp
+    description: "ALLGlance: the family calendar, tasks, chores and life events"
+    household_token_env: ALLGLANCE_TOKEN_HOUSEHOLD   # scripts/tokens.mjs add-household faith
+    person_token_env: ALLGLANCE_TOKEN_{ID}           # scripts/tokens.mjs add-person <owner_id>
+    tools: [allglance_*]
+
+  - id: homeassistant
+    type: homeassistant
+    url: http://192.168.20.10:8123
+    token_env: HA_TOKEN            # long-lived token of a non-admin HA user called "FAITH"
+    # person_token_env: HA_TOKEN_{ID}  # optional: HA's logbook then shows who did it
+    expose:
+      domains: [light, switch, fan, climate, cover, lock, media_player, scene, script, vacuum, sensor, binary_sensor, weather, person]
+      entities: []
+      exclude: ["*_debug*"]
+    confirm_domains: [lock, alarm_control_panel, cover]
+    # Mealie, through HA's Mealie integration:
+    shopping_lists: [todo.mealie_shopping_list]
+    meal_calendars: [calendar.mealie_breakfast, calendar.mealie_lunch, calendar.mealie_dinner]
+    mealie_config_entry_id: ""     # Settings > Devices & services > Mealie > ⋮ > copy entry id
+    trust_ha_users: true           # Assist from an HA user mapped above acts as that person
+
+  - id: coinpile
+    type: mcp
+    url: http://192.168.20.5:8190/api/v1/mcp
+    description: "Coinpile: this person's money (Firefly III)"
+    person_token_env: COINPILE_TOKEN_{ID}    # no household token: money is never in the shared view
+    roles: [admin, adult]
+
+  - id: orb
+    type: mcp
+    url: http://192.168.20.5:8095/mcp
+    description: "Pondering Orb: this person's dashboard, projects and journal"
+    person_token_env: ORB_TOKEN_{ID}         # one Orb per person
+    roles: [admin, adult]
+
+  - id: hermes
+    type: hermes
+    url: http://192.168.20.5:8642
+    key_env: HERMES_API_KEY
+    model: hermes-agent
+    roles: [admin, adult]
+    # household_profile: household
+
+# The wall screens (paired with `faith pair <id>`).
+hub:
+  idle_seconds: 120              # no camera: sign out after this long without a tap
+  away_seconds: 45               # with a camera: sign out once nobody's there and nobody's tapped for this long
+  max_idle_seconds: 900          # with a camera: sign out after this long without a tap, even if someone's there
+  max_hours: 8
+  show_people_to_unpaired: false
+  pin_on_personal_devices: false # PINs only on paired screens
+  devices:
+    - id: kitchen
+      name: Kitchen
+      presence_entity: binary_sensor.kitchen_person_occupancy   # Frigate / camera person detection
+      face_entity: sensor.kitchen_last_recognized_face           # optional: Frigate face recognition
+      face_unlock: false         # true = a recognized face signs in; false = it only highlights their tile
+
+personal:
+  idle_days: 14
+  max_days: 30
+
+voice:
+  confirm_on_voice: false        # locks etc. by voice need a screen unless this is true
+
+dashboard:
+  entities: [climate.house, lock.front_door, sensor.outside_temperature]
+  cards:
+    - { id: today, title: Today, builtin: today }
+    - { id: meals, title: Meals, builtin: meals }
+    - { id: shopping, title: Shopping, builtin: shopping }
+    - { id: chores, title: Chores, builtin: chores }
+    - { id: home, title: Home, builtin: home }
+    - { id: mine, title: My notes, tool: wiki_context_for, args: { person: "{person}" }, who: person }

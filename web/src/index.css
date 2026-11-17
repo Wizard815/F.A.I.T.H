@@ -1,0 +1,61 @@
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/fraunces/wght-italic.css";
+@import "@fontsource-variable/instrument-sans";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fonts are bundled with the app, never fetched from the internet. */
+:root {
+  color-scheme: light;
+  --background: 247 243 236;   /* warm paper */
+  --surface: 252 250 246;
+  --surface-2: 241 235 225;
+  --border: 230 222 210;
+  --border-strong: 212 201 186;
+  --foreground: 38 31 44;
+  --muted: 112 101 112;
+  --primary: 104 76 208;       /* FAITH violet */
+  --primary-hover: 90 63 190;
+  --primary-foreground: 255 255 255;
+  --primary-soft: 236 231 250;
+  --success: 72 136 92;
+  --warning: 190 145 60;
+  --danger: 196 67 78;
+  --shadow-surface: 0 1px 2px rgba(38, 31, 44, 0.04);
+  --shadow-lift: 0 10px 30px rgba(38, 31, 44, 0.12);
+}
+.dark {
+  color-scheme: dark;
+  --background: 14 14 16;
+  --surface: 24 24 27;
+  --surface-2: 20 20 23;
+  --border: 40 39 44;
+  --border-strong: 58 56 63;
+  --foreground: 242 240 237;
+  --muted: 168 163 168;
+  --primary: 160 140 255;
+  --primary-hover: 176 158 255;
+  --primary-foreground: 20 12 38;
+  --primary-soft: 36 30 54;
+  --success: 98 170 116;
+  --warning: 214 180 96;
+  --danger: 236 110 120;
+  --shadow-surface: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 12px 34px rgba(0, 0, 0, 0.55);
+}
+html, body, #root { height: 100%; }
+body { @apply bg-background text-foreground font-sans antialiased; -webkit-tap-highlight-color: transparent; }
+h1, h2, h3 { @apply font-serif; }
+::selection { background: rgb(var(--primary) / 0.25); }
+
+@layer components {
+  .card { @apply rounded-card border border-border bg-surface shadow-surface; }
+  .eyebrow { @apply text-[12px] font-medium uppercase tracking-[0.14em] text-muted; }
+  .btn { @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-input px-4 font-semibold transition-colors disabled:opacity-50; }
+  .btn-primary { @apply btn bg-primary text-primary-foreground hover:bg-primary-hover; }
+  .btn-soft { @apply btn border border-border bg-surface text-foreground hover:bg-surface-2; }
+  .btn-ghost { @apply btn text-muted hover:text-foreground; }
+  .icon-btn { @apply inline-flex h-11 w-11 items-center justify-center rounded-input border border-border bg-surface text-foreground transition-colors hover:bg-surface-2; }
+  .field { @apply min-h-[44px] w-full rounded-input border border-border bg-background px-3.5 text-foreground placeholder:text-muted focus:border-primary focus:outline-none; }
+}
