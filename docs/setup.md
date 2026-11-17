@@ -37,7 +37,7 @@ node scripts/family-setup.mjs token wizard             # -> WIKI_TOKEN_WIZARD (o
 
 ## ALLGlance
 
-Needs ALLGlance's scoped tokens: branch `claude/nice-darwin-wx3t3u` of Wizard815/ALLGlance (commit `de238ec`) until it's merged.
+Needs ALLGlance's scoped tokens (on ALLGlance's `main` since commit `de238ec`).
 
 ```bash
 docker exec allglance node scripts/tokens.mjs add-household faith                  # -> ALLGLANCE_TOKEN_HOUSEHOLD
