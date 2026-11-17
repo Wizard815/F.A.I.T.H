@@ -32,7 +32,7 @@ const model = await fakeModel((req) => {
   if (last.role === "tool") {
     const out = (() => { try { return JSON.parse(last.content); } catch { return {}; } })();
     if (out.status === "sent_for_approval") return { content: `I've asked a grown-up to approve that: **${out.action}**. It'll happen as soon as someone says yes.` };
-    if (out.status === "waiting_for_confirmation") return { content: "I'll lock the front door as soon as you tap **Yes**." };
+    if (out.status === "waiting_for_confirmation") return { content: "I'll lock the front door as soon as you say **yes**." };
     if (out.meals) return { content: `Tonight's dinner is **${out.meals.find((m: any) => m.meal === "dinner")?.what ?? "not planned yet"}**. Want me to add anything for it to the shopping list?` };
     if (out.ok && out.added) return { content: `Added **${out.added}** to the shopping list.` };
     if (out.blocks) return { content: `Here's today:\n${out.blocks.map((b: any) => `- **${b.start}** ${b.title}`).join("\n")}` };
@@ -49,7 +49,9 @@ const model = await fakeModel((req) => {
 const env = { ...process.env, WIKI_TOKEN_HOUSEHOLD: "w-house", WIKI_TOKEN_WIZARD: "w-wiz", WIKI_TOKEN_PARTNER: "w-par", ALLG_HOUSEHOLD: "a-house", ALLG_WIZARD: "a-wiz", ALLG_PARTNER: "a-par", HA_TOKEN: "ha" };
 const cfg = parseConfig({
   name: "Faith", family_name: "the demo family", model: { base_url: model.url, model: "demo" },
-  people: [{ id: "wizard", name: "Wizard", role: "admin", color: "#7c5cff" }, { id: "partner", name: "Sam", role: "adult", color: "#ff7a90" }, { id: "kid", name: "Robin", role: "child", color: "#3fb68b" }],
+  people: [{ id: "wizard", name: "Wizard", role: "admin", color: "#7c5cff", mattermost_username: "wizard" }, { id: "partner", name: "Sam", role: "adult", color: "#ff7a90", mattermost_username: "sam" }, { id: "kid", name: "Robin", role: "child", color: "#3fb68b", mattermost_username: "robin" }],
+  // With MATTERMOST_URL (and MATTERMOST_BOT_TOKEN) set, FAITH also runs as a Mattermost bot.
+  ...(process.env.MATTERMOST_URL ? { mattermost: { url: process.env.MATTERMOST_URL, team: process.env.MATTERMOST_TEAM || "family" } } : {}),
   connectors: [
     { id: "wiki", type: "mcp", url: wiki.url, household_token_env: "WIKI_TOKEN_HOUSEHOLD", person_token_env: "WIKI_TOKEN_{ID}" },
     { id: "allglance", type: "mcp", url: allg.url, household_token_env: "ALLG_HOUSEHOLD", person_token_env: "ALLG_{ID}" },
@@ -66,9 +68,14 @@ const cfg = parseConfig({
   ],
 }, {});
 const port = Number(process.env.PORT || 8097);
-const { app, auth } = await buildApp({ config: () => ({ ...cfg, port }), dataFile: ":memory:", env, webDir: resolve(import.meta.dirname, "../../web/dist") });
+const { app, auth, agent, approvals, db } = await buildApp({ config: () => ({ ...cfg, port }), dataFile: ":memory:", env, webDir: resolve(import.meta.dirname, "../../web/dist") });
 auth.setPin("wizard", "1234"); auth.setPin("partner", "5678"); auth.setPin("kid", "0000"); auth.setPassword("wizard", "demo-password");
 await app.listen({ port, host: "127.0.0.1" });
+if (cfg.mattermost) {
+  const { MattermostBot } = await import("../src/mattermost.js");
+  const bot = new MattermostBot(() => cfg, db, agent, approvals, { info: (o, m) => console.log("[mattermost]", m, JSON.stringify(o)), warn: (o, m) => console.warn("[mattermost]", m, JSON.stringify(o)) }, env);
+  await bot.start();
+}
 console.log(`FAITH demo on http://localhost:${port}
   Pair this browser as the kitchen screen with code: ${auth.pairCode("kitchen")}
   PINs: Wizard 1234 · Sam 5678 · Robin 0000. Wizard's password: demo-password`);

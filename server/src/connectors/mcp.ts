@@ -69,7 +69,9 @@ export class McpConnector implements Connector {
   describe() { return this.cfg.description || `${this.id} (MCP)`; }
 
   tokenFor(caller: Caller) {
-    return caller.scope.kind === "person" ? envValue(personEnv(this.cfg.person_token_env, caller.scope.person.id), this.env) : envValue(this.cfg.household_token_env, this.env);
+    if (caller.scope.kind === "person") return envValue(personEnv(this.cfg.person_token_env, caller.scope.person.id), this.env);
+    if (caller.audience === "parents") return envValue(this.cfg.parents_token_env, this.env) ?? envValue(this.cfg.household_token_env, this.env);
+    return envValue(this.cfg.household_token_env, this.env);
   }
   private client(token: string) {
     const k = sha256(token);

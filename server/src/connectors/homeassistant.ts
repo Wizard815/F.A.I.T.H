@@ -1,5 +1,5 @@
 import { anyGlob, envValue, personEnv, type Config, type HomeAssistantConnector as HaCfg } from "../config.js";
-import { policyName, type Caller } from "../scope.js";
+import { policyOf, type Caller } from "../scope.js";
 import { call, ToolError, type Connector, type Tool } from "./types.js";
 
 type State = { entity_id: string; state: string; attributes: Record<string, any>; last_changed?: string };
@@ -14,7 +14,7 @@ export class HomeAssistant implements Connector {
   id: string;
   private areas?: { at: number; map: Map<string, string> };
   /** Friendly names seen so far, so a Yes card says "lock Front door", not "lock lock.front_door". */
-  private names = new Map<string, string>();
+  private names = new Map<string, string>(); private namesAt = 0;
   private say(entityId: string, service: string) { return `${service.replace(/_/g, " ")} ${this.names.get(entityId) || entityId}`; }
   constructor(private cfg: HaCfg, private config: () => Config, private env: NodeJS.ProcessEnv = process.env) { this.id = cfg.id; }
 
@@ -50,7 +50,7 @@ export class HomeAssistant implements Connector {
   }
   /** May this caller change this entity? */
   controllable(caller: Caller, entityId: string) {
-    const pol = this.config().roles[policyName(caller.scope)], domain = entityId.split(".")[0];
+    const pol = this.config().roles[policyOf(caller)], domain = entityId.split(".")[0];
     if (!this.exposed(entityId)) return false;
     if (!pol.ha_domains && !pol.ha_entities) return true;
     return !!pol.ha_domains?.includes(domain) || anyGlob(pol.ha_entities, entityId);
@@ -88,6 +88,11 @@ export class HomeAssistant implements Connector {
 
   async tools(caller: Caller): Promise<Tool[]> {
     if (!this.token(caller)) return [];
+    // Learn device names (every 5 minutes at most) so a Yes card or a log line says "Front door".
+    if (Date.now() - this.namesAt > 5 * 60_000) {
+      this.namesAt = Date.now();
+      try { for (const x of (await this.api("GET", "/api/states", undefined, caller)) as State[]) if (x.attributes?.friendly_name) this.names.set(x.entity_id, x.attributes.friendly_name); } catch { /* names are a nicety */ }
+    }
     const T: Tool[] = [];
     const add = (t: Omit<Tool, "connector">) => T.push({ ...t, connector: this.id });
 

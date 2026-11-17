@@ -1,0 +1,240 @@
+import { envValue, type Config, type Person } from "./config.js";
+import type { Db } from "./db.js";
+import type { Agent } from "./harness/agent.js";
+import { Approvals, type ApprovalEvent } from "./approvals.js";
+import type { Caller } from "./scope.js";
+
+/** Where a Mattermost message was written, and so who reads the answer. */
+export type Room = { kind: "personal"; person: Person } | { kind: "family" } | { kind: "parents" };
+type Post = { id: string; user_id: string; channel_id: string; message: string; root_id?: string; type?: string };
+type Log = { info: (o: any, m?: string) => void; warn: (o: any, m?: string) => void };
+
+export class MattermostError extends Error {}
+
+const YES = /^(yes|y|yep|yeah|ok|okay|sure|do it|go ahead|confirm)\b/i, NO = /^(no|n|nope|cancel|stop|don'?t)\b/i;
+const DECIDE = /^(approve|deny)\s+([A-Za-z0-9_-]{3,})\b/i;
+
+/** FAITH as a Mattermost bot. It makes and looks after three kinds of chat:
+ *  - a personal DM with each family member: their own view, private things included;
+ *  - a family channel everyone is in: shared things only, whoever asks;
+ *  - a parents channel only grown-ups are in: approvals land there.
+ *  Who someone is comes from their Mattermost account (people[].mattermost_username). */
+export class MattermostBot {
+  me?: { id: string; username: string };
+  team?: { id: string; name: string };
+  rooms = new Map<string, Room>();
+  users = new Map<string, Person>();          // Mattermost user id -> person
+  ids = new Map<string, string>();            // person id -> Mattermost user id
+  familyId?: string; parentsId?: string;
+  private pending = new Map<string, { id: string; by: string }>();
+  private ws?: WebSocket; private seq = 1; private stopped = false; private retry = 1000; private resync?: NodeJS.Timeout;
+
+  constructor(private cfg: () => Config, private db: Db, private agent: Agent, private approvals: Approvals, private log: Log, private env: NodeJS.ProcessEnv = process.env) {
+    db.exec("CREATE TABLE IF NOT EXISTS mm_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    approvals.on((e) => { this.onApproval(e).catch((err) => this.log.warn({ err: err.message }, "mattermost: couldn't post an approval")); });
+  }
+
+  private get mm() { const m = this.cfg().mattermost; if (!m) throw new MattermostError("Mattermost isn't configured."); return m; }
+  private token() { const t = envValue(this.mm.token_env, this.env); if (!t) throw new MattermostError(`Mattermost needs the bot's token in ${this.mm.token_env}.`); return t; }
+
+  async api(method: string, path: string, body?: unknown): Promise<any> {
+    let r: Response;
+    try {
+      r = await fetch(`${this.mm.url}/api/v4${path}`, { method, signal: AbortSignal.timeout(20000),
+        headers: { Authorization: `Bearer ${this.token()}`, "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e: any) { throw new MattermostError(`Couldn't reach Mattermost (${e?.cause?.code || e?.message}).`); }
+    const text = await r.text(); let data: any = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!r.ok) { const err = new MattermostError(`Mattermost ${method} ${path} answered ${r.status}: ${data?.message || text.slice(0, 160)}`); (err as any).status = r.status; throw err; }
+    return data;
+  }
+  private kv(key: string) { return (this.db.prepare("SELECT value FROM mm_state WHERE key = ?").get(key) as any)?.value as string | undefined; }
+  private setKv(key: string, value: string) { this.db.prepare("INSERT OR REPLACE INTO mm_state (key, value) VALUES (?, ?)").run(key, value); }
+
+  // ---------------- setting up the chats ----------------
+
+  /** Find the family's accounts, make the two channels, open a DM with each
+   *  person, and put the right people (and only them) in each channel. */
+  async setup() {
+    const mm = this.mm, people = this.cfg().people;
+    this.me = await this.api("GET", "/users/me");
+    try { this.team = await this.api("GET", `/teams/name/${encodeURIComponent(mm.team)}`); }
+    catch (e: any) { throw new MattermostError(`FAITH's bot can't see the team "${mm.team}". Add the bot to that team in Mattermost (System Console → Bot Accounts, or the team's Add Members). ${e.message}`); }
+
+    const names = people.map((p) => p.mattermost_username).filter(Boolean) as string[];
+    const found: any[] = names.length ? await this.api("POST", "/users/usernames", names) : [];
+    this.users.clear(); this.ids.clear();
+    for (const p of people) {
+      const u = found.find((x) => x.username?.toLowerCase() === p.mattermost_username);
+      if (p.mattermost_username && !u) this.log.warn({ person: p.id }, `mattermost: no account called @${p.mattermost_username}`);
+      if (u) { this.users.set(u.id, p); this.ids.set(p.id, u.id); }
+    }
+    this.rooms.clear();
+    const family = people.filter((p) => this.ids.has(p.id)), parents = family.filter((p) => p.role !== "child");
+    this.familyId = await this.channel(mm.family_channel, "The whole family, with FAITH. Everyone reads this: shared things only.", family);
+    this.parentsId = await this.channel(mm.parents_channel, "Grown-ups only, with FAITH. Approvals for the family's requests land here.", parents);
+    this.rooms.set(this.familyId, { kind: "family" });
+    this.rooms.set(this.parentsId, { kind: "parents" });
+    for (const p of family) {
+      const dm = await this.api("POST", "/channels/direct", [this.me!.id, this.ids.get(p.id)]);
+      this.rooms.set(dm.id, { kind: "personal", person: p });
+      if (!this.kv(`welcomed:${p.id}`)) {
+        await this.post(dm.id, `Hi ${p.name}, I'm ${this.cfg().name}. This is our private chat: only you see it, so I can help with your own things here too, like your notes, tasks and money. The whole family can also find me in ~${mm.family_channel.name}${p.role !== "child" ? `, and the grown-ups in ~${mm.parents_channel.name}` : ""}.`);
+        this.setKv(`welcomed:${p.id}`, String(Date.now()));
+      }
+    }
+    this.log.info({ people: family.map((p) => p.id), family: this.familyId, parents: this.parentsId }, "mattermost: chats ready");
+    return { family: this.familyId, parents: this.parentsId, people: family.map((p) => p.id) };
+  }
+
+  /** A private channel with exactly these people (and the bot). */
+  private async channel(spec: { name: string; display_name: string }, purpose: string, members: Person[]) {
+    const team = this.team!.id, want = new Set(members.map((p) => this.ids.get(p.id)!));
+    let ch: any;
+    try { ch = await this.api("GET", `/teams/${team}/channels/name/${spec.name}?include_deleted=true`); }
+    catch (e: any) { if ((e as any).status !== 404 && (e as any).status !== 403) throw e; }
+    if (ch?.delete_at) { await this.api("POST", `/channels/${ch.id}/restore`); }
+    if (!ch) {
+      ch = await this.api("POST", "/channels", { team_id: team, name: spec.name, display_name: spec.display_name, type: "P", purpose });
+      this.log.info({ channel: spec.name }, "mattermost: made a channel");
+    }
+    if (!this.cfg().mattermost!.manage_members) return ch.id as string;
+    const current: any[] = await this.api("GET", `/channels/${ch.id}/members?per_page=200`);
+    const have = new Set(current.map((m) => m.user_id));
+    for (const id of want) if (!have.has(id)) await this.api("POST", `/channels/${ch.id}/members`, { user_id: id });
+    for (const m of current) {
+      if (m.user_id === this.me!.id || want.has(m.user_id)) continue;
+      // Someone who doesn't belong (a child in the parents' chat, a guest): take them out.
+      await this.api("DELETE", `/channels/${ch.id}/members/${m.user_id}`);
+      this.log.warn({ channel: spec.name, user: m.user_id }, "mattermost: removed someone who doesn't belong in this chat");
+    }
+    return ch.id as string;
+  }
+
+  async post(channelId: string, message: string, rootId?: string) {
+    return this.api("POST", "/posts", { channel_id: channelId, message, ...(rootId ? { root_id: rootId } : {}) });
+  }
+
+  // ---------------- messages ----------------
+
+  /** The caller FAITH answers as, for a room and the person writing. */
+  callerFor(room: Room, speaker: Person, channelId: string): Caller {
+    if (room.kind === "personal") return { scope: { kind: "person", person: room.person }, channel: "mattermost", deviceId: channelId, label: `${room.person.id} on mattermost` };
+    return { scope: { kind: "household" }, channel: "mattermost", deviceId: channelId, speaker, audience: room.kind, label: `${speaker.id} in the ${room.kind} chat` };
+  }
+  private approver(p: Person) { return this.cfg().approvals.approvers.includes(p.role); }
+
+  /** One message, from the websocket (or a test). Returns what FAITH posted, if anything. */
+  async handle(post: Post, channelType?: string): Promise<string | undefined> {
+    if (!this.me || post.user_id === this.me.id || (post.type && post.type !== "")) return;
+    const room = this.rooms.get(post.channel_id), person = this.users.get(post.user_id);
+    if (!room) {
+      if (channelType === "D") return this.say(post, `Sorry, I only talk with the family I know. Ask whoever runs FAITH to add your Mattermost name (mattermost_username) to faith.yaml.`);
+      return;
+    }
+    if (!person) return; // someone FAITH doesn't know, in a family chat (manage_members takes them out)
+    if (room.kind === "personal" && room.person.id !== person.id) return;
+    if (room.kind === "parents" && person.role === "child") return;
+    let text = String(post.message || "").trim();
+
+    // "yes" / "no" to something waiting for a confirmation in this chat.
+    const wait = this.pending.get(post.channel_id);
+    if (wait && (YES.test(text) || NO.test(text))) {
+      if (wait.by !== person.id && !(room.kind !== "personal" && this.approver(person))) return;
+      this.pending.delete(post.channel_id);
+      const by = this.cfg().people.find((p) => p.id === wait.by) ?? person;
+      try { const r = await this.agent.confirm(this.callerFor(room, by, post.channel_id), wait.id, YES.test(text)); return this.say(post, r.text); }
+      catch (e: any) { return this.say(post, e.message); }
+    }
+
+    // "approve abc12" / "deny abc12" from a grown-up (parents' chat or their own DM).
+    const d = text.match(DECIDE);
+    if (d && room.kind !== "family" && this.approver(person)) {
+      const id = this.approvals.resolveId(d[2]);
+      if (!id) return this.say(post, `I can't find a request "${d[2]}". The code is in the message that asked for approval.`);
+      try {
+        const r = await this.approvals.decide({ scope: { kind: "person", person }, channel: "mattermost", deviceId: post.channel_id, label: `${person.id} on mattermost` }, id, d[1].toLowerCase() === "approve");
+        return room.kind === "parents" ? undefined /* the decision is announced to the parents' chat */ : this.say(post, r.text);
+      } catch (e: any) { return this.say(post, e.message); }
+    }
+
+    if (room.kind !== "personal") {
+      const mention = new RegExp(`@${this.me.username}\\b`, "i"), byName = new RegExp(`^(hey\\s+)?${this.cfg().name}\\b[,:!]?`, "i");
+      if (this.mm.answer_in_groups === "mention" && !mention.test(text) && !byName.test(text)) return;
+      text = text.replace(mention, "").replace(byName, "").trim();
+      if (!text) return this.say(post, `Yes, ${person.name}?`);
+    }
+
+    const typing = setInterval(() => this.typing(post.channel_id, post.root_id), 4000); this.typing(post.channel_id, post.root_id);
+    try {
+      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text, extId: `mm:${post.channel_id}` });
+      let reply = r.text || "Done.";
+      if (r.pending.length) {
+        this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
+        if (!/\byes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
+      }
+      if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
+      return this.say(post, reply);
+    } catch (e: any) {
+      return this.say(post, `Sorry, that didn't work: ${e.message}`);
+    } finally { clearInterval(typing); }
+  }
+
+  private async say(post: Post, message: string) { await this.post(post.channel_id, message, post.root_id || undefined); return message; }
+
+  private typing(channelId: string, parentId?: string) {
+    if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ action: "user_typing", seq: this.seq++, data: { channel_id: channelId, parent_id: parentId || "" } }));
+  }
+
+  /** Requests from the shared screen (or a child in the family chat) go to the parents' chat. */
+  async onApproval(e: ApprovalEvent) {
+    if (!this.parentsId) return;
+    const r = e.request;
+    if (e.kind === "created") {
+      await this.post(this.parentsId, `**Waiting for approval:** ${r.summary}\nAsked by ${r.requested_by.replace(/^household on /, "the ")}. Reply \`approve ${Approvals.code(r.id)}\` or \`deny ${Approvals.code(r.id)}\`.`);
+      return;
+    }
+    await this.post(this.parentsId, e.text || `${r.status}: ${r.summary}`);
+    // Tell the chat it was asked from, if that was a Mattermost chat other than the parents'.
+    if (e.channel === "mattermost" && e.device_id && e.device_id !== this.parentsId && this.rooms.has(e.device_id)) await this.post(e.device_id, e.text || `${r.status}: ${r.summary}`);
+  }
+
+  // ---------------- the websocket ----------------
+
+  /** One websocket frame from Mattermost. */
+  async onEvent(raw: string) {
+    let ev: any; try { ev = JSON.parse(raw); } catch { return; }
+    if (ev.event === "hello") { this.retry = 1000; this.log.info({}, "mattermost: connected"); return; }
+    if (ev.event === "posted") {
+      let post: Post; try { post = JSON.parse(ev.data.post); } catch { return; }
+      await this.handle(post, ev.data.channel_type);
+      return;
+    }
+    // Channels changing under us (someone added to or taken out of a chat): set up again.
+    if (["user_added", "user_removed", "channel_converted", "channel_deleted"].includes(ev.event) && this.rooms.has(ev.broadcast?.channel_id || ev.data?.channel_id)) {
+      clearTimeout(this.resync); this.resync = setTimeout(() => this.setup().catch((e) => this.log.warn({ err: e.message }, "mattermost: setup failed")), 2000);
+    }
+  }
+
+  async start() {
+    this.stopped = false;
+    try { await this.setup(); }
+    catch (e: any) { this.log.warn({ err: e.message }, "mattermost: setup failed; trying again in a minute"); setTimeout(() => this.start(), 60_000).unref(); return; }
+    this.connect();
+    setInterval(() => this.setup().catch((e) => this.log.warn({ err: e.message }, "mattermost: periodic setup failed")), 15 * 60_000).unref();
+  }
+
+  private connect() {
+    if (this.stopped) return;
+    const url = this.mm.url.replace(/^http/, "ws") + "/api/v4/websocket";
+    const ws = new WebSocket(url); this.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ seq: this.seq++, action: "authentication_challenge", data: { token: this.token() } }));
+    ws.onmessage = (m) => { this.onEvent(String(m.data)).catch((e) => this.log.warn({ err: e.message }, "mattermost: a message failed")); };
+    ws.onclose = () => {
+      if (this.stopped) return;
+      this.log.warn({ retryInMs: this.retry }, "mattermost: disconnected");
+      setTimeout(() => this.connect(), this.retry).unref(); this.retry = Math.min(this.retry * 2, 60_000);
+    };
+    ws.onerror = () => { /* onclose follows */ };
+  }
+  stop() { this.stopped = true; this.ws?.close(); }
+}

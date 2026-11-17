@@ -69,3 +69,34 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
   const url = await listen(s);
   return { url, services, shopping, states, close: () => s.close() };
 }
+
+/** Enough of Mattermost's REST API for the bot: users, a team, channels, members, posts. */
+export async function fakeMattermost(usernames: string[]) {
+  const bot = { id: "bot1", username: "faith" };
+  const users = usernames.map((u) => ({ id: `u_${u}`, username: u }));
+  const team = { id: "team1", name: "family" };
+  const channels = new Map<string, { id: string; name: string; type: string; members: Set<string>; delete_at: number }>();
+  const posts: { channel_id: string; message: string; root_id?: string }[] = [];
+  const s = createServer(async (req, res) => {
+    const u = new URL(req.url!, "http://x"), p = u.pathname.replace(/^\/api\/v4/, ""), b = await body(req);
+    const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(v)); };
+    if (req.headers.authorization !== "Bearer mm-token") return json({ message: "Invalid token" }, 401);
+    let m;
+    if (p === "/users/me") return json(bot);
+    if ((m = p.match(/^\/teams\/name\/(.+)$/))) return m[1] === team.name ? json(team) : json({ message: "not found" }, 404);
+    if (p === "/users/usernames") return json(users.filter((x) => b.includes(x.username)));
+    if ((m = p.match(/^\/teams\/team1\/channels\/name\/([^/?]+)$/))) { const c = [...channels.values()].find((x) => x.name === m![1]); return c ? json({ id: c.id, name: c.name, type: c.type, delete_at: c.delete_at }) : json({ message: "not found" }, 404); }
+    if (p === "/channels" && req.method === "POST") { const id = `ch_${b.name}`; channels.set(id, { id, name: b.name, type: b.type, members: new Set([bot.id]), delete_at: 0 }); return json({ id, name: b.name, type: b.type }, 201); }
+    if (p === "/channels/direct") { const id = `dm_${b[1]}`; if (!channels.has(id)) channels.set(id, { id, name: id, type: "D", members: new Set(b), delete_at: 0 }); return json({ id }, 201); }
+    if ((m = p.match(/^\/channels\/([^/]+)\/members$/))) {
+      const c = channels.get(m[1])!;
+      if (req.method === "GET") return json([...c.members].map((user_id) => ({ user_id })));
+      c.members.add(b.user_id); return json({ user_id: b.user_id }, 201);
+    }
+    if ((m = p.match(/^\/channels\/([^/]+)\/members\/([^/]+)$/)) && req.method === "DELETE") { channels.get(m[1])!.members.delete(m[2]); return json({ status: "OK" }); }
+    if (p === "/posts") { posts.push(b); return json({ id: `p${posts.length}`, ...b }, 201); }
+    json({ message: `fake mattermost has no ${req.method} ${p}` }, 404);
+  });
+  const url = await listen(s);
+  return { url, bot, users, team, channels, posts, id: (name: string) => `u_${name}`, close: () => s.close() };
+}

@@ -4,7 +4,8 @@ import { parse } from "yaml";
 /** Roles a family member can have. "household" is not a role a person has: it is
  *  the policy used when nobody is signed in (the shared hub view). */
 export type Role = "admin" | "adult" | "child";
-export type PolicyName = Role | "household";
+/** "parents" is the policy of the parents-only group chat (only admins and adults read it). */
+export type PolicyName = Role | "household" | "parents";
 export const ROLES: Role[] = ["admin", "adult", "child"];
 
 export type Person = {
@@ -16,12 +17,14 @@ export type Person = {
   ha_user_id?: string;         // Home Assistant user id: Assist requests from this HA user act as this person
   face_names?: string[];       // names a camera face-recognition sensor reports for this person
   hermes_profile?: string;     // Hermes profile to use for this person (defaults to id)
+  mattermost_username?: string; // their Mattermost account: their DMs with FAITH act as them
 };
 
 export type McpConnector = {
   id: string; type: "mcp"; url: string;
   household_token_env?: string;  // the blanket family token: shared things only
   person_token_env?: string;     // per-person token, e.g. WIKI_TOKEN_{ID}: that person's private things too
+  parents_token_env?: string;    // optional: what the parents-only chat may see (defaults to the household token)
   tools?: string[];              // globs of the server's tool names to offer the model (default: all)
   roles?: PolicyName[];          // who gets this connector at all (default: everyone)
   prefix?: string;               // tool name prefix (default "<id>_", skipped when the name already has it)
@@ -93,6 +96,16 @@ export type Config = {
   apps: AppLink[];
   approvals: { approvers: Role[]; ttl_hours: number };
   embed: { allow_from: string[]; cookie_samesite: "strict" | "lax" | "none" };
+  mattermost?: MattermostConfig;
+};
+
+/** FAITH as a Mattermost bot: a DM with each person, a family channel, a parents channel. */
+export type MattermostConfig = {
+  url: string; token_env: string; team: string;
+  family_channel: { name: string; display_name: string };
+  parents_channel: { name: string; display_name: string };
+  answer_in_groups: "mention" | "always";   // in the two group channels: only when @mentioned (default) or every message
+  manage_members: boolean;                   // add the right people and remove anyone else from the two channels
 };
 
 export class ConfigError extends Error {}
@@ -109,6 +122,8 @@ const DEFAULT_ROLES: Record<PolicyName, RolePolicy> = {
   },
   // Nobody signed in: changes are asked for, and a family member approves them.
   household: { writes: "approve", allow_writes: [], approve_skip: [] },
+  // The parents-only chat: only grown-ups read it, so changes go straight through.
+  parents: { writes: "allow", allow_writes: [], approve_skip: [] },
 };
 
 const DEFAULT_CARDS: Card[] = [
@@ -142,14 +157,15 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const role = str(p.role, "adult") as Role;
     if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
-      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined };
+      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined,
+      mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined };
   });
   const dup = people.map((p) => p.id).find((id, i, a) => a.indexOf(id) !== i);
   if (dup) throw new ConfigError(`Two people have the id "${dup}".`);
 
   const roles = { ...DEFAULT_ROLES } as Record<PolicyName, RolePolicy>;
   for (const [k, v] of Object.entries(raw.roles || {})) {
-    if (!(k in DEFAULT_ROLES)) throw new ConfigError(`roles.${k}: use admin, adult, child or household.`);
+    if (!(k in DEFAULT_ROLES)) throw new ConfigError(`roles.${k}: use admin, adult, child, household or parents.`);
     const r: any = v || {}; const base = DEFAULT_ROLES[k as PolicyName];
     const writes = str(r.writes, base.writes) as RolePolicy["writes"];
     if (!["allow", "allowlist", "deny", "approve"].includes(writes)) throw new ConfigError(`roles.${k}.writes must be allow, allowlist, deny or approve.`);
@@ -166,7 +182,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const url = str(c.url).replace(/\/+$/, "");
     if (!/^https?:\/\//.test(url)) throw new ConfigError(`connectors.${id}.url must start with http:// or https://.`);
     const roles = c.roles ? (list(c.roles) as PolicyName[]) : undefined;
-    if (type === "mcp") return { id, type, url, household_token_env: c.household_token_env, person_token_env: c.person_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description } as McpConnector;
+    if (type === "mcp") return { id, type, url, household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description } as McpConnector;
     if (type === "homeassistant") {
       const ex = c.expose || {};
       return { id, type, url, token_env: str(c.token_env, "HA_TOKEN"), person_token_env: c.person_token_env, roles,
@@ -213,6 +229,22 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   if (approvers.some((r) => !ROLES.includes(r))) throw new ConfigError("approvals.approvers lists roles: admin, adult, child.");
   const samesite = str(raw.embed?.cookie_samesite, "strict");
   if (!["strict", "lax", "none"].includes(samesite)) throw new ConfigError("embed.cookie_samesite is strict, lax or none.");
+  let mattermost: MattermostConfig | undefined;
+  if (raw.mattermost?.url) {
+    const mm = raw.mattermost, url = str(mm.url).replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(url)) throw new ConfigError("mattermost.url must start with http:// or https://.");
+    if (!mm.team) throw new ConfigError("mattermost.team is the team (its URL name) FAITH's channels go in.");
+    const chan = (v: any, name: string, display: string) => {
+      const n = str(v?.name, name).toLowerCase();
+      if (!/^[a-z0-9][a-z0-9_-]{1,63}$/.test(n)) throw new ConfigError(`mattermost channel name "${n}": lowercase letters, digits, - or _.`);
+      return { name: n, display_name: str(v?.display_name, display) };
+    };
+    const ans = str(mm.answer_in_groups, "mention");
+    if (!["mention", "always"].includes(ans)) throw new ConfigError("mattermost.answer_in_groups is mention or always.");
+    mattermost = { url, token_env: str(mm.token_env, "MATTERMOST_BOT_TOKEN"), team: str(mm.team).toLowerCase(),
+      family_channel: chan(mm.family_channel, "faith-family", "Family"), parents_channel: chan(mm.parents_channel, "faith-parents", "Parents"),
+      answer_in_groups: ans as MattermostConfig["answer_in_groups"], manage_members: bool(mm.manage_members, true) };
+  }
   const publicUrl = str(env.FAITH_PUBLIC_URL || raw.public_url).replace(/\/+$/, "");
   return {
     name: str(raw.name, "Faith"), family_name: str(raw.family_name, "the family"),
@@ -230,6 +262,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     dashboard: { entities: list(d.entities), cards },
     apps, approvals: { approvers, ttl_hours: num(ap.ttl_hours, 24) },
     embed: { allow_from: list(raw.embed?.allow_from), cookie_samesite: samesite as Config["embed"]["cookie_samesite"] },
+    mattermost,
   };
 }
 

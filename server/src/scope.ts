@@ -5,8 +5,9 @@ import type { Config, Person, PolicyName } from "./config.js";
  *  things. Person = one signed-in member: their own tokens. */
 export type Scope = { kind: "household" } | { kind: "person"; person: Person };
 
-/** Where the request comes from. Confirmations need a screen (hub/personal). */
-export type Channel = "hub" | "personal" | "api" | "voice";
+/** Where the request comes from. Confirmations need someone who can answer
+ *  (a screen, or a Mattermost chat where they reply "yes"). */
+export type Channel = "hub" | "personal" | "api" | "voice" | "mattermost";
 
 export type Caller = {
   scope: Scope;
@@ -14,7 +15,16 @@ export type Caller = {
   deviceId?: string;
   sessionHash?: string;
   label: string;           // for logs: "wizard on kitchen", "household on kitchen", "token:ha"
+  /** Group chats: who wrote the message. The scope stays "household" because
+   *  everyone in the chat reads the answer; the speaker only decides whose
+   *  changes need approval. */
+  speaker?: Person;
+  /** Group chats: who reads the answer. */
+  audience?: "family" | "parents";
 };
+
+/** The role policy that applies: the parents' chat has its own. */
+export const policyOf = (c: Caller): PolicyName => (c.audience === "parents" ? "parents" : policyName(c.scope));
 
 export const policyName = (s: Scope): PolicyName => (s.kind === "person" ? s.person.role : "household");
 export const scopeKey = (s: Scope) => (s.kind === "person" ? `person:${s.person.id}` : "household");

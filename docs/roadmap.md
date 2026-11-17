@@ -10,13 +10,11 @@
 - Argos as the engine: chat, vision (photos), speech-to-text, text-to-speech.
 - Home Assistant integration: Assist agent with the HA user, sidebar page, sensors.
 - FAITH as an OpenAI-compatible model for other apps.
+- Mattermost: a personal DM for each person, a family channel and a parents' channel that FAITH makes and keeps tidy; approvals in the parents' chat (tested against a real Mattermost).
 
 ## Next
 
-1. **Mattermost.**
-   - A FAITH bot account. Family members DM it, and their Mattermost user maps to their person, so it gets their view.
-   - Approvals are posted to a family channel with Approve / Deny buttons.
-   - Uses Mattermost's bot WebSocket (DMs aren't possible with outgoing webhooks).
+1. **Mattermost extras:** photos sent in a chat go to the vision model; voice messages through Argos's speech-to-text; a morning brief in each personal DM.
 2. **Knowing who's speaking.** HA hands conversation agents text, not audio, so this goes in front of speech-to-text:
    - A small speaker-ID service (ECAPA-style voice embeddings, local) that each person enrols by reading a few sentences while signed in.
    - FAITH's own mic sends audio, so it can be identified there first.
