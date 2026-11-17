@@ -4,7 +4,7 @@
 
 - One container: home screen, wall view, chat, apps launcher, approvals; light and dark.
 - Sign-in: PIN on paired screens, password, Face ID (passkeys), camera face suggestion or unlock; auto sign-out from idle and presence.
-- Household and person views on the backends' own tokens: wiki, ALLGlance (scoped tokens on ALLGlance branch `claude/nice-darwin-wx3t3u`), Home Assistant, Coinpile, Orb, Hermes, Hermes Studio.
+- Household and person views on the backends' own tokens: wiki, ALLGlance (household and person tokens), Home Assistant, Coinpile, Orb, Hermes, Hermes Studio.
 - Roles: admin, adult, child, household. The household view's changes wait for approval, an admin can overrule a denial, and locks / alarm / garage wait for a Yes.
 - Mealie through Home Assistant: shopping lists, meal plan, recipes.
 - Argos as the engine: chat, vision (photos), speech-to-text, text-to-speech.
