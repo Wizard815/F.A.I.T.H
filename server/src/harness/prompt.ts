@@ -6,6 +6,7 @@ const CHANNEL: Record<Caller["channel"], string> = {
   personal: "this person's own phone or computer",
   api: "an app connected to FAITH",
   voice: "a voice assistant in the house; answers are spoken aloud, so use one or two plain sentences and no lists or markdown",
+  mattermost: "the family's Mattermost chat; answer like a person in a chat: short, Markdown is fine",
 };
 
 export function timeLine(now = new Date(), tz = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone) {
@@ -21,10 +22,14 @@ export function timeLine(now = new Date(), tz = process.env.TZ || Intl.DateTimeF
 export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts: { context?: string; extra?: string; now?: Date } = {}) {
   const s = caller.scope;
   const family = cfg.people.map((p) => `${p.name} (id ${p.id}${p.allglance_owner_id && p.allglance_owner_id !== p.id ? `, ALLGlance owner_id ${p.allglance_owner_id}` : ""}, ${p.role})`).join("; ");
-  const whoLine = s.kind === "person"
+  const sp = caller.speaker;
+  const groupLine = caller.audience === "parents"
+    ? `This is the parents' private group chat. Only ${cfg.people.filter((p) => p.role !== "child").map((p) => p.name).join(" and ") || "the grown-ups"} read it; children never see it. ${sp ? `${sp.name} wrote the last message.` : ""} Every grown-up in the chat reads your answer, so use the family's shared things (and what this chat is given), never one parent's private notes or money.`
+    : `This is the whole family's group chat: everyone, children included, reads your answer. ${sp ? `${sp.name} (${sp.role}) wrote the last message.` : ""} Use only the family's shared things; never anyone's private notes, tasks or money, even if the person asking could see them elsewhere. For something private, suggest they message you directly. ${sp && sp.role === "child" ? "Changes a child asks for are sent to a parent for approval." : "Changes asked for here happen straight away, under the name of the person who asked."}`;
+  const whoLine = caller.audience ? groupLine : s.kind === "person"
     ? `You are talking with ${s.person.name} (id ${s.person.id}, ${s.person.role}). They are signed in, so you can see their own private notes, tasks and money as well as the family's shared things. When a tool takes a person, owner or owner_id, ${s.person.name}'s is "${s.person.allglance_owner_id || s.person.id}".`
     : `Nobody is signed in: this is the shared household view. You only see the family's shared things; private notes, money and personal tasks are hidden from you. If someone wants something private, tell them to sign in on the screen. Before writing something that belongs to one person (a note, a task), ask who it's for and pass their id.`;
-  const role = cfg.roles[s.kind === "person" ? s.person.role : "household"];
+  const role = cfg.roles[caller.audience === "parents" ? "parents" : s.kind === "person" ? s.person.role : "household"];
   const lines = [
     `You are ${cfg.name}, ${cfg.family_name}'s home assistant (FAITH: Family Agent for Intelligent Tasks & Help).`,
     `Now: ${timeLine(opts.now)}.`,

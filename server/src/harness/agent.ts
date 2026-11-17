@@ -18,7 +18,7 @@ const PENDING_TTL = 10 * 60_000;
 export class Agent {
   constructor(private db: Db, private cfg: () => Config, private registry: Registry, private env: NodeJS.ProcessEnv = process.env, private approvals?: Approvals) {}
 
-  ownerKey(c: Caller) { return `${scopeKey(c.scope)}|${c.channel}|${c.deviceId || ""}`; }
+  ownerKey(c: Caller) { return `${scopeKey(c.scope)}${c.audience ? ":" + c.audience : ""}|${c.channel}|${c.deviceId || ""}`; }
 
   private conversation(c: Caller, id?: string, extId?: string) {
     const key = this.ownerKey(c), now = Date.now();
@@ -39,7 +39,8 @@ export class Agent {
     this.db.prepare("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)").run(conversationId, role, content, Date.now());
   }
   audit(c: Caller, tool: string, summary: string, ok: boolean) {
-    this.db.prepare("INSERT INTO audit (at, who, channel, tool, summary, ok) VALUES (?, ?, ?, ?, ?, ?)").run(Date.now(), who(c.scope) + (c.deviceId ? `@${c.deviceId}` : ""), c.channel, tool, summary.slice(0, 500), ok ? 1 : 0);
+    const by = c.speaker ? `${c.speaker.id} in ${c.audience} chat` : who(c.scope) + (c.deviceId ? `@${c.deviceId}` : "");
+    this.db.prepare("INSERT INTO audit (at, who, channel, tool, summary, ok) VALUES (?, ?, ?, ?, ?, ?)").run(Date.now(), by, c.channel, tool, summary.slice(0, 500), ok ? 1 : 0);
   }
 
   /** The person's context from the wiki (profile, today's note, inbox), once per conversation. */
@@ -55,7 +56,7 @@ export class Agent {
     } catch { return undefined; }
   }
 
-  private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal"; }
+  private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost"; }
 
   /** Tools wrapped with confirmation and the action log. */
   private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void) {
@@ -71,11 +72,12 @@ export class Agent {
         const summary = t.confirm?.(args);
         if (summary && !(c.channel === "voice" && this.cfg().voice.confirm_on_voice)) {
           if (!this.canConfirm(c)) return { error: `"${summary}" needs someone to tap Yes on a FAITH screen. It can't be done from here.` };
+          if (c.speaker && c.speaker.role === "child") return { error: `"${summary}" is for grown-ups. Ask a parent.` };
           const id = newId();
           this.db.prepare("INSERT INTO pending (id, conversation_id, owner_key, tool, args, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .run(id, conversationId, this.ownerKey(c), t.name, JSON.stringify(args ?? {}), summary, Date.now());
           pending.push({ id, summary }); emit({ type: "confirm", id, summary });
-          return { status: "waiting_for_confirmation", action: summary, note: "Nothing has happened yet. Tell the person what you'll do and that they need to tap Yes." };
+          return { status: "waiting_for_confirmation", action: summary, note: c.channel === "mattermost" ? "Nothing has happened yet. Tell the person what you'll do and that they need to reply yes." : "Nothing has happened yet. Tell the person what you'll do and that they need to tap Yes." };
         }
         try {
           const out = await t.run(args);

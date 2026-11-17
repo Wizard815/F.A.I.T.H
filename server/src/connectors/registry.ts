@@ -1,5 +1,5 @@
 import { anyGlob, type Config } from "../config.js";
-import { policyName, type Caller } from "../scope.js";
+import { policyOf, type Caller } from "../scope.js";
 import { Hermes } from "./hermes.js";
 import { HomeAssistant } from "./homeassistant.js";
 import { McpConnector } from "./mcp.js";
@@ -26,7 +26,7 @@ export class Registry {
   }
 
   allowedConnector(caller: Caller, id: string) {
-    const cfg = this.cfg(), role = policyName(caller.scope);
+    const cfg = this.cfg(), role = policyOf(caller);
     const c = cfg.connectors.find((x) => x.id === id);
     if (!c) return false;
     if (c.roles && !c.roles.includes(role)) return false;
@@ -36,12 +36,20 @@ export class Registry {
 
   /** Is this write allowed outright for the caller's role? */
   writeAllowed(caller: Caller, name: string) {
-    const pol = this.cfg().roles[policyName(caller.scope)];
+    const pol = this.cfg().roles[policyOf(caller)];
     return pol.writes === "allow" || pol.writes === "approve" || (pol.writes === "allowlist" && anyGlob(pol.allow_writes, name));
   }
 
+  /** Household changes wait for approval, unless a known grown-up asked
+   *  (e.g. a parent writing in the family chat): they are the approver. */
+  needsApproval(caller: Caller, name: string) {
+    const cfg = this.cfg(), pol = cfg.roles[policyOf(caller)];
+    if (pol.writes !== "approve" || anyGlob(pol.approve_skip, name)) return false;
+    return !(caller.speaker && cfg.approvals.approvers.includes(caller.speaker.role));
+  }
+
   async toolsFor(caller: Caller): Promise<ToolSet> {
-    const pol = this.cfg().roles[policyName(caller.scope)];
+    const pol = this.cfg().roles[policyOf(caller)];
     const out: Tool[] = [], sources: string[] = [], problems: string[] = [];
     await Promise.all(this.connectors.map(async (c) => {
       if (!this.allowedConnector(caller, c.id)) return;
@@ -51,7 +59,7 @@ export class Registry {
         for (const t of ts) {
           if (anyGlob(pol.deny_tools, t.name)) continue;
           if (t.write && !this.writeAllowed(caller, t.name)) continue;
-          out.push(t.write && pol.writes === "approve" && !anyGlob(pol.approve_skip, t.name) ? { ...t, approval: true } : t);
+          out.push(t.write && this.needsApproval(caller, t.name) ? { ...t, approval: true } : t);
         }
       } catch (e: any) { problems.push(`${c.id}: ${e.message}`); }
     }));

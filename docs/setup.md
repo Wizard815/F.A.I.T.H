@@ -91,13 +91,15 @@ docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard    
   - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio.
   - Studio's MCP bridge is stdio-only, so this goes through Studio's REST API, like Orb does.
 
-## Mattermost and the other apps
+## Mattermost
 
-Every app the family uses goes under `apps:` in `faith.yaml`. They become the launcher at the top of the home screen.
+FAITH runs as a bot with a personal DM for each person, a family channel and a parents' channel: see [mattermost.md](mattermost.md).
+
+## The other apps
+
+Every app the family uses goes under `apps:` in `faith.yaml`. They become the launcher on the home screen and the Apps tab.
 - `who: person` hides an app until someone signs in.
 - `roles` / `people` limit it further (Orb for Wizard only, Coinpile for adults).
-
-Mattermost is a launcher link for now. A FAITH bot in Mattermost is on the [roadmap](roadmap.md).
 
 ## Tokens for other apps
 

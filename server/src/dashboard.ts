@@ -1,7 +1,7 @@
 import type { Card, Config } from "./config.js";
 import type { Registry } from "./connectors/registry.js";
 import type { Tool } from "./connectors/types.js";
-import { policyName, type Caller } from "./scope.js";
+import { policyOf, type Caller } from "./scope.js";
 import type { Approvals } from "./approvals.js";
 
 export type Item = { title: string; time?: string; meta?: string; label?: string; done?: boolean };
@@ -72,7 +72,7 @@ export async function dashboard(cfg: Config, registry: Registry, caller: Caller,
     if (card.who === "person" && caller.scope.kind !== "person") return null;
     if (card.who === "household" && caller.scope.kind !== "household") return null;
     if (card.people && !(caller.scope.kind === "person" && card.people.includes(caller.scope.person.id))) return null;
-    if (card.roles && !card.roles.includes(policyName(caller.scope))) return null;
+    if (card.roles && !card.roles.includes(policyOf(caller))) return null;
     const kind: CardOut["kind"] = card.builtin === "today" ? "schedule" : card.builtin === "meals" ? "meals" : card.builtin === "shopping" || card.builtin === "chores" ? "checklist" : "list";
     const base = { id: card.id, title: card.title, kind };
     try {

@@ -10,12 +10,14 @@ FAITH is the family's front-end agent: one container (server + web app) and a Ho
 | `web/` | React + Tailwind | `npm run build -w web` |
 | `ha/custom_components/faith` | HA integration | `cd ha && pytest` (needs `pytest-homeassistant-custom-component`) |
 | `server/scripts/demo.ts` | the whole thing with fakes | `node --import tsx server/scripts/demo.ts` |
+| `server/src/mattermost.ts` | the Mattermost bot (personal, family, parents chats) | `npm test`; real Mattermost: `server/scripts/mattermost/` (see `docs/mattermost.md`) |
 
 ## Rules
 
 - **Privacy comes from tokens, not prompts.**
   - Never give the household view a person's token, and never run an approved household request with the approver's token.
   - A source without a token for a view must offer no tools.
+  - Group chats (Mattermost family and parents) answer with the household (or parents) tokens, never the speaker's: everyone in the chat reads the answer.
 - **Every tool call goes through `Agent.wrap`:** approval, confirmation, then the action log. New tools must not bypass it.
 - **Secrets go in env vars only.** Config names the variable (`*_env`, `{ID}` templates). Store hashes, never tokens.
 - **Local models only.** Don't add calls to cloud services or fetch fonts or assets from the internet.

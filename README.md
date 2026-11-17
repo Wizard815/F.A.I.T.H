@@ -6,8 +6,8 @@ homepage for every app, and an agent that can use all of them. Home Assistant
 is its hands, and Argos (local models) is its brain.
 
 ```
- wall tablet (HA kiosk) ──┐   phone / laptop ──┐   HA Assist voice ──┐   other apps (OpenAI API)
-                          ▼                    ▼                     ▼                ▼
+ wall tablet (HA kiosk) ──┐   phone / laptop ──┐   HA Assist voice ──┐   Mattermost ──┐   other apps (OpenAI API)
+                          ▼                    ▼                     ▼                ▼                 ▼
                ┌──────────────────────── FAITH (one container, :8097) ────────────────────────┐
                │ home screen + app launcher · sign-in (PIN, password, Face ID, camera)         │
                │ household view ⇄ person view · approvals · chat · voice in/out · photos      │
@@ -51,6 +51,7 @@ is its hands, and Argos (local models) is its brain.
 | Pondering Orb | Wizard's own dashboard, only for Wizard |
 | Hermes | big jobs, run in each person's own Hermes profile |
 | Hermes Studio | that person's chats, and starting a job there |
+| Mattermost | FAITH as a bot: a personal DM each, a family channel, a parents' channel where approvals land ([details](docs/mattermost.md)) |
 | Argos | speech-to-text for the mic, text-to-speech for replies, and a vision model for photos |
 
 **Home Assistant is part of it, both ways.**
@@ -104,7 +105,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `web/` | React + Tailwind app: wall view, home, chat, apps, sign-in, approvals (design: [architecture](docs/architecture.md#the-screens)) |
 | `ha/custom_components/faith` | the Home Assistant integration (`cd ha && pytest`) |
 | `config/faith.example.yaml` | every setting, commented |
-| `docs/` | [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
+| `docs/` | [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
 
 ## API
 

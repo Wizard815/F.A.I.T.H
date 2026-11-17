@@ -26,10 +26,12 @@ people:
     allglance_owner_id: wizard   # from ALLGlance's allglance_list_users, if it differs
     ha_user_id: ""               # Home Assistant user id: Assist from this HA user acts as Wizard
     face_names: [Wizard]         # what a face-recognition sensor calls him
+    mattermost_username: wizard  # his DMs with FAITH in Mattermost act as him
   - id: partner
     name: Partner
     role: adult
     color: "#ff7a90"
+    mattermost_username: partner
 # Later:
 #  - { id: kid1, name: Kid, role: child, color: "#3fb68b" }
 
@@ -41,8 +43,9 @@ roles:
     allow_writes: [shopping_add, home_control, wiki_memory_capture, wiki_memory_log]   # home_control is limited by ha_domains
     ha_domains: [light, media_player, fan]
     deny_tools: [hermes_*, coinpile_*]
-  household:                     # nobody signed in (the wall screen's shared view)
+  household:                     # nobody signed in, and the family chat: changes wait for an adult's approval
     deny_tools: [hermes_*]
+  # parents:                     # the parents-only chat (writes: allow by default)
 
 # Where the information lives. Each source gets two kinds of token:
 #   household_token_env  the blanket family token: shared things only
@@ -55,6 +58,7 @@ connectors:
     url: http://192.168.1.5:27123/family-mcp
     description: "The family wiki (LLMWIKI): long-term memory, notes, profiles, today's notes"
     household_token_env: WIKI_TOKEN_HOUSEHOLD   # a shared_agents token: family-setup.mjs add-shared faith FAITH
+    # parents_token_env: WIKI_TOKEN_PARENTS     # optional: what the parents' Mattermost chat may see
     person_token_env: WIKI_TOKEN_{ID}           # member tokens: family-setup.mjs token <id>
     tools: [whoami, who_is, family_members, context_for, memory_log, memory_capture, notes_search, note_read, query_wiki, conversation_log]
 
@@ -103,6 +107,14 @@ connectors:
     model: hermes-agent
     roles: [admin, adult]
     # household_profile: household
+
+# Mattermost: a DM with each person, a family channel, a parents channel (docs/mattermost.md).
+mattermost:
+  url: http://192.168.1.5:8065
+  team: family                   # the team's URL name; the bot must be a member
+  token_env: MATTERMOST_BOT_TOKEN
+  answer_in_groups: mention      # in the two channels, only when @faith is mentioned (or "always")
+  manage_members: true           # add the family, remove anyone else (no children in the parents' chat)
 
 # The wall screens (paired with `faith pair <id>`).
 hub:

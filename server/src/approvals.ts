@@ -17,7 +17,15 @@ export type Request = {
  *  approve or deny; the admin can overrule a denial, or deny anything still
  *  waiting. Approved changes run with the household's own tokens, so an
  *  approval never lends the approver's private access to the request. */
+export type ApprovalEvent = { kind: "created" | "decided"; request: Request; channel: string; device_id: string | null; text?: string };
+
 export class Approvals {
+  private listeners: ((e: ApprovalEvent) => void)[] = [];
+  /** Tell other surfaces (the Mattermost parents chat) when a request is made or decided. */
+  on(fn: (e: ApprovalEvent) => void) { this.listeners.push(fn); }
+  private emit(e: ApprovalEvent) { for (const f of this.listeners) { try { f(e); } catch { /* a listener's problem isn't ours */ } } }
+  private row(id: string): Request | undefined { return this.list().find((r) => r.id === id); }
+
   constructor(private db: Db, private cfg: () => Config, private registry: Registry, private now: () => number = Date.now) {
     db.exec(`CREATE TABLE IF NOT EXISTS requests (
       id TEXT PRIMARY KEY, tool TEXT NOT NULL, args TEXT NOT NULL, summary TEXT NOT NULL,
@@ -34,7 +42,9 @@ export class Approvals {
   create(c: Caller, t: Tool, args: any, conversationId?: string) {
     const id = newId(), summary = this.explain(t, args);
     this.db.prepare("INSERT INTO requests (id, tool, args, summary, requested_by, channel, device_id, conversation_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
-      .run(id, t.name, JSON.stringify(args ?? {}), summary, c.label, c.channel, c.deviceId ?? null, conversationId ?? null, this.now());
+      .run(id, t.name, JSON.stringify(args ?? {}), summary, c.speaker ? `${c.speaker.name} in the ${c.audience} chat` : c.label, c.channel, c.deviceId ?? null, conversationId ?? null, this.now());
+    const r = this.row(id);
+    if (r) this.emit({ kind: "created", request: r, channel: c.channel, device_id: c.deviceId ?? null });
     return { id, summary };
   }
 
@@ -42,7 +52,7 @@ export class Approvals {
     this.db.prepare("UPDATE requests SET status = 'expired' WHERE status = 'pending' AND created_at < ?").run(this.now() - this.cfg().approvals.ttl_hours * 3600_000);
   }
   canApprove(c: Caller) {
-    return c.scope.kind === "person" && (c.channel === "hub" || c.channel === "personal") && this.cfg().approvals.approvers.includes(c.scope.person.role);
+    return c.scope.kind === "person" && (c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost") && this.cfg().approvals.approvers.includes(c.scope.person.role);
   }
   pendingCount() { this.expire(); return Number((this.db.prepare("SELECT COUNT(*) AS n FROM requests WHERE status = 'pending'").get() as any).n); }
 
@@ -53,6 +63,16 @@ export class Approvals {
     return (this.db.prepare("SELECT * FROM requests WHERE status = 'pending' OR created_at > ? ORDER BY created_at DESC LIMIT 50").all(this.now() - 86400_000) as any[])
       .map((r) => ({ id: r.id, summary: r.summary, tool: r.tool, requested_by: r.requested_by, requested_at: r.created_at, status: r.status, decided_by: r.decided_by, decided_at: r.decided_at, result: r.result, overruled: !!r.overruled }));
   }
+
+  /** A request by its full id or the short code shown in chats (the first 5 characters). */
+  resolveId(idOrCode: string) {
+    const all = this.list();
+    const exact = all.find((r) => r.id === idOrCode);
+    if (exact) return exact.id;
+    const hits = all.filter((r) => r.id.toLowerCase().startsWith(idOrCode.toLowerCase()));
+    return hits.length === 1 ? hits[0].id : undefined;
+  }
+  static code(id: string) { return id.slice(0, 5); }
 
   async decide(c: Caller, id: string, approve: boolean) {
     if (!this.canApprove(c) || c.scope.kind !== "person") throw new ApprovalError(403, "Only a signed-in family member can approve changes.");
@@ -73,6 +93,8 @@ export class Approvals {
     }
     if (!approve) {
       this.db.prepare("UPDATE requests SET status = 'denied', decided_by = ?, decided_at = ?, overruled = ? WHERE id = ?").run(me.id, this.now(), overrule ? 1 : 0, id);
+      const text = `Denied by ${me.name}: ${row.summary}.`;
+      const r = this.row(id); if (r) this.emit({ kind: "decided", request: r, channel: row.channel, device_id: row.device_id, text });
       return { ok: true, status: "denied" as const, text: `Denied: ${row.summary}.` };
     }
     // Run it as the household asked for it: the household's tools and tokens.
@@ -86,6 +108,8 @@ export class Approvals {
       catch (e: any) { result = e.message; }
     }
     this.db.prepare("UPDATE requests SET status = ?, decided_by = ?, decided_at = ?, result = ?, overruled = ? WHERE id = ?").run(ok ? "approved" : "failed", me.id, this.now(), result, overrule ? 1 : 0, id);
+    const r = this.row(id);
+    if (r) this.emit({ kind: "decided", request: r, channel: row.channel, device_id: row.device_id, text: ok ? `Approved by ${me.name}: ${row.summary}.` : `${me.name} approved "${row.summary}", but it didn't work: ${result}` });
     return { ok, status: ok ? ("approved" as const) : ("failed" as const), text: ok ? `Approved and done: ${row.summary}.` : `Approved, but it didn't work: ${result}` };
   }
 }
