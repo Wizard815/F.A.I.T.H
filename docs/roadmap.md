@@ -12,7 +12,15 @@
 - FAITH as an OpenAI-compatible model for other apps.
 - Mattermost: a personal DM for each person, a family channel and a parents' channel that FAITH makes and keeps tidy; approvals in the parents' chat (tested against a real Mattermost).
 
+- Skills (Markdown recipes FAITH loads when one fits; built-in ones plus your own) and routines (a skill on a schedule, sent to a chat or a phone).
+- Notifications: HA phone pushes with Approve / Deny buttons; `faith.send_message` from HA automations.
+- The family dashboard in Home Assistant: four FAITH cards, each person's own view; FAITH's page is the admin console.
+- Points and rewards: 0.5 / 1 / 2 point jobs, rewards, parent approval; money rewards recorded as owed (Firefly card payout is a placeholder in `server/src/rewards.ts`).
+- Voice ID: `voiceid/` service (local, resemblyzer); FAITH keeps voiceprints and names the speaker on a shared screen.
+
 ## Next
+
+0. **Check the cards on a live Home Assistant** (Docker HA, screenshots), and voice ID for HA satellites (a Wyoming wrapper).
 
 1. **Mattermost extras:** photos sent in a chat go to the vision model; voice messages through Argos's speech-to-text; a morning brief in each personal DM.
 2. **Knowing who's speaking.** HA hands conversation agents text, not audio, so this goes in front of speech-to-text:

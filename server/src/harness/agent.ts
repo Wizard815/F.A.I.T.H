@@ -56,7 +56,7 @@ export class Agent {
     } catch { return undefined; }
   }
 
-  private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost"; }
+  private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost" || c.channel === "ha"; }
 
   /** Tools wrapped with confirmation and the action log. */
   private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void) {
@@ -117,6 +117,19 @@ export class Agent {
     return { conversationId: conv.id, text: result.text, toolsUsed: result.toolsUsed, pending, requests };
   }
   private lastContext = new Map<string, string>();
+
+  /** Run one tool directly (a card's button), through the same approval,
+   *  confirmation and logging as a chat turn. */
+  async runTool(c: Caller, name: string, args: any) {
+    const set = await this.registry.toolsFor(c);
+    const t = set.tools.find((x) => x.name === name);
+    if (!t) throw new ModelError(403, "You can't do that from here.");
+    const conv = this.conversation(c);
+    const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
+    const [w] = this.wrap(c, [t], conv.id, pending, requests, () => {});
+    const out: any = await w.run(args ?? {});
+    return { out, pending, requests };
+  }
 
   /** Yes or No on a held action. Only the same person on the same kind of screen can answer. */
   async confirm(c: Caller, id: string, approve: boolean) {

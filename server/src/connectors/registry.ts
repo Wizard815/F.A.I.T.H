@@ -16,6 +16,9 @@ export type ToolSet = { tools: Tool[]; sources: string[]; problems: string[] };
 export class Registry {
   connectors: Connector[] = [];
   ha?: HomeAssistant;
+  /** Add a connector that isn't in the config (FAITH's own tools). */
+  add(c: Connector) { this.connectors.push(c); }
+
   constructor(private cfg: () => Config, env: NodeJS.ProcessEnv = process.env) {
     for (const c of cfg().connectors) {
       if (c.type === "mcp") this.connectors.push(new McpConnector(c, env));
@@ -28,8 +31,8 @@ export class Registry {
   allowedConnector(caller: Caller, id: string) {
     const cfg = this.cfg(), role = policyOf(caller);
     const c = cfg.connectors.find((x) => x.id === id);
-    if (!c) return false;
-    if (c.roles && !c.roles.includes(role)) return false;
+    if (!c && id !== "faith") return false; // "faith" is FAITH's own tools, always there
+    if (c?.roles && !c.roles.includes(role)) return false;
     const pol = cfg.roles[role];
     return !pol.connectors || pol.connectors.includes(id);
   }
@@ -59,7 +62,7 @@ export class Registry {
         for (const t of ts) {
           if (anyGlob(pol.deny_tools, t.name)) continue;
           if (t.write && !this.writeAllowed(caller, t.name)) continue;
-          out.push(t.write && this.needsApproval(caller, t.name) ? { ...t, approval: true } : t);
+          out.push(t.write && !t.selfApproves && this.needsApproval(caller, t.name) ? { ...t, approval: true } : t);
         }
       } catch (e: any) { problems.push(`${c.id}: ${e.message}`); }
     }));

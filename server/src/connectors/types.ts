@@ -13,6 +13,8 @@ export type Tool = {
   run: (args: any) => Promise<unknown>;
   /** Set by the registry: this change waits for a family member's approval. */
   approval?: boolean;
+  /** The tool makes its own approval request (with everything filled in), so the registry doesn't. */
+  selfApproves?: boolean;
   /** A plain sentence for what this call would do (approval cards); defaults to the tool name and arguments. */
   explain?: (args: any) => string;
 };

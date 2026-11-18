@@ -7,14 +7,16 @@ async function listen(s: Server) { await new Promise<void>((r) => s.listen(0, "1
 /** An OpenAI-compatible model that follows a script: each call gets the request and returns a message. */
 export async function fakeModel(script: (req: any, n: number) => { content?: string; tool_calls?: { name: string; args: any }[] }) {
   const calls: any[] = [];
+  const stt = { text: "hello" };
   const s = createServer(async (req, res) => {
+    if (req.url?.endsWith("/audio/transcriptions")) { req.resume(); res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ text: stt.text })); }
     const b = await body(req); calls.push(b);
     const m = script(b, calls.length - 1);
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: m.content ?? null, tool_calls: m.tool_calls?.map((t, i) => ({ id: `c${calls.length}_${i}`, type: "function", function: { name: t.name, arguments: JSON.stringify(t.args) } })) } }] }));
   });
   const url = await listen(s);
-  return { url: `${url}/v1`, calls, close: () => s.close() };
+  return { url: `${url}/v1`, calls, stt, close: () => s.close() };
 }
 
 export type FakeTool = { name: string; readOnly?: boolean; run: (args: any, token: string) => unknown };
@@ -99,4 +101,20 @@ export async function fakeMattermost(usernames: string[]) {
   });
   const url = await listen(s);
   return { url, bot, users, team, channels, posts, id: (name: string) => `u_${name}`, close: () => s.close() };
+}
+
+/** A stand-in for the voiceid service: the "audio" is text like "voice:wizard",
+ *  and each name always gives the same voiceprint. */
+export async function fakeVoiceId() {
+  const vec = (name: string) => Array.from({ length: 16 }, (_, i) => Math.sin((name.charCodeAt(i % name.length) + 1) * (i + 1)));
+  const s = createServer((req, res) => {
+    const parts: Buffer[] = []; req.on("data", (c) => parts.push(c)); req.on("end", () => {
+      const text = Buffer.concat(parts).toString(), m = text.match(/voice:(\w+)/);
+      res.setHeader("content-type", "application/json");
+      if (!m) { res.statusCode = 400; return res.end(JSON.stringify({ error: "no speech" })); }
+      res.end(JSON.stringify({ embedding: vec(m[1]), seconds: 3, speech_seconds: 2.5 }));
+    });
+  });
+  const url = await listen(s);
+  return { url, close: () => s.close() };
 }

@@ -102,8 +102,9 @@ export class Auth {
   hubExpiry(row: { device_id: string; last_activity: number; expires_at: number }): string | null {
     const c = this.cfg().hub, now = this.now(), idle = (now - row.last_activity) / 1000;
     if (now >= row.expires_at) return "time limit";
-    const dev = c.devices.find((d) => d.id === row.device_id);
-    const p = dev?.presence_entity ? this.presence?.state(row.device_id) : undefined;
+    const devId = row.device_id.replace(/^ha:/, ""); // a Home Assistant screen uses its hub device's sensors
+    const dev = c.devices.find((d) => d.id === devId);
+    const p = dev?.presence_entity ? this.presence?.state(devId) : undefined;
     if (p && p.present !== null) {
       // With a camera or presence sensor: sign out once nobody has been there,
       // and nobody has touched the screen, for away_seconds (or after a hard cap).
@@ -118,8 +119,9 @@ export class Auth {
   remaining(row: { device_id: string | null; kind: string; last_activity: number; expires_at: number }) {
     const now = this.now();
     if (row.kind !== "hub") return Math.round((Math.min(row.expires_at, row.last_activity + this.cfg().personal.idle_days * 86400_000) - now) / 1000);
-    const c = this.cfg().hub, dev = c.devices.find((d) => d.id === row.device_id);
-    const limit = dev?.presence_entity && this.presence?.state(row.device_id!)?.present ? c.max_idle_seconds : dev?.presence_entity ? Math.max(c.away_seconds, 0) : c.idle_seconds;
+    const devId = String(row.device_id).replace(/^ha:/, "");
+    const c = this.cfg().hub, dev = c.devices.find((d) => d.id === devId);
+    const limit = dev?.presence_entity && this.presence?.state(devId)?.present ? c.max_idle_seconds : dev?.presence_entity ? Math.max(c.away_seconds, 0) : c.idle_seconds;
     return Math.max(0, Math.round(limit - (now - row.last_activity) / 1000));
   }
 
@@ -153,6 +155,18 @@ export class Auth {
     }
     if (device) return { scope: { kind: "household" }, channel: "hub", deviceId: device.id, device, label: `household on ${device.id}` };
     return null;
+  }
+
+  /** A person signed in on a Home Assistant screen (the FAITH card's PIN pad).
+   *  The card keeps the session token; it only works for that screen. */
+  haHub(token: string | undefined, screen: string) {
+    if (!token) return undefined;
+    const hash = sha256(token);
+    const row = this.db.prepare("SELECT * FROM sessions WHERE token_hash = ? AND kind = 'hub'").get(hash) as any;
+    if (!row || row.device_id !== `ha:${screen}`) return undefined;
+    const person = personById(this.cfg(), row.person_id);
+    if (!person || this.hubExpiry(row)) { this.db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hash); return undefined; }
+    return { person, hash, row };
   }
 
   /** End hub sessions that have expired (run every few seconds so a screen locks

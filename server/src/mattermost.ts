@@ -110,6 +110,9 @@ export class MattermostBot {
     return ch.id as string;
   }
 
+  /** A person's DM channel with FAITH, if they're on Mattermost. */
+  dmOf(personId: string) { for (const [id, r] of this.rooms) if (r.kind === "personal" && r.person.id === personId) return id; return undefined; }
+
   async post(channelId: string, message: string, rootId?: string) {
     return this.api("POST", "/posts", { channel_id: channelId, message, ...(rootId ? { root_id: rootId } : {}) });
   }

@@ -7,7 +7,7 @@
         "data": {
           "url": "FAITH URL",
           "token": "Token",
-          "panel_url": "Address for the sidebar page (optional, e.g. https://faith.home.lan)"
+          "panel_url": "Address for the admin page (optional, e.g. https://faith.home.lan)"
         }
       }
     },
@@ -17,6 +17,40 @@
     },
     "abort": {
       "already_configured": "FAITH is already set up."
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send a message",
+      "description": "Send a message to the family chat, the parents' chat, or one person (their FAITH chat and phone).",
+      "fields": {
+        "to": {
+          "name": "To",
+          "description": "family, parents, or a person's id"
+        },
+        "message": {
+          "name": "Message",
+          "description": "What to say"
+        }
+      }
+    },
+    "award_points": {
+      "name": "Give points",
+      "description": "Give a child points. From an automation, it waits for a parent's approval.",
+      "fields": {
+        "person": {
+          "name": "Child",
+          "description": "Their FAITH id"
+        },
+        "points": {
+          "name": "Points",
+          "description": "0.5, 1 or 2"
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "What for"
+        }
+      }
     }
   }
 }

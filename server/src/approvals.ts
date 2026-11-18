@@ -52,7 +52,7 @@ export class Approvals {
     this.db.prepare("UPDATE requests SET status = 'expired' WHERE status = 'pending' AND created_at < ?").run(this.now() - this.cfg().approvals.ttl_hours * 3600_000);
   }
   canApprove(c: Caller) {
-    return c.scope.kind === "person" && (c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost") && this.cfg().approvals.approvers.includes(c.scope.person.role);
+    return c.scope.kind === "person" && (c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost" || c.channel === "ha") && this.cfg().approvals.approvers.includes(c.scope.person.role);
   }
   pendingCount() { this.expire(); return Number((this.db.prepare("SELECT COUNT(*) AS n FROM requests WHERE status = 'pending'").get() as any).n); }
 

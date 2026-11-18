@@ -15,6 +15,14 @@ import { dashboard, haSummary } from "./dashboard.js";
 import { Approvals, ApprovalError } from "./approvals.js";
 import { envValue } from "./config.js";
 import { personById, type Caller } from "./scope.js";
+import { Skills, SkillError } from "./skills.js";
+import { Rewards, RewardsError } from "./rewards.js";
+import { FaithTools } from "./connectors/faith.js";
+import { Notifier } from "./notifier.js";
+import { Routines, RoutineError } from "./routines.js";
+import { Voices, VoiceError } from "./voice.js";
+import { registerHaRoutes } from "./routes/ha.js";
+import { registerAdminRoutes } from "./routes/admin.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -29,8 +37,17 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const passkeys = new Passkeys(db, cfg);
   const approvals = new Approvals(db, cfg, registry);
   const agent = new Agent(db, cfg, registry, env, approvals);
+  const skills = new Skills(() => cfg().skills.dir);
+  const rewards = new Rewards(db, cfg);
+  const faithTools = new FaithTools(cfg, skills, rewards);
+  registry.add(faithTools);
+  const voices = new Voices(db, cfg, env);
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 12_000_000 }); // photos for the vision model
   await app.register(cookie);
+  const notifier = new Notifier(cfg, registry.ha, app.log);
+  faithTools.approvals = approvals; faithTools.notifier = notifier;
+  approvals.on((e) => { notifier.onApproval(e).catch((err) => app.log.warn({ err: err.message }, "approval push failed")); });
+  const routines = new Routines(db, cfg, agent, skills, notifier, app.log);
   // Audio for speech-to-text arrives as raw bytes.
   app.addContentTypeParser(/^audio\/|^application\/octet-stream/, { parseAs: "buffer", bodyLimit: 15_000_000 }, (_req, body, done) => done(null, body));
 
@@ -46,7 +63,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   });
 
   app.setErrorHandler((err: any, _req, reply) => {
-    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError ? err.status : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError || err instanceof RewardsError || err instanceof RoutineError || err instanceof VoiceError ? err.status : err instanceof SkillError ? 400 : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) app.log.error(err);
     reply.status(status).send({ error: status === 500 ? "Something went wrong on FAITH's side." : err.message });
   });
@@ -332,6 +349,10 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     return { ...s, hubs, pending_approvals: approvals.pendingCount() };
   });
 
+  const ctx = { cfg, db, env, auth, agent, approvals, registry, rewards, voices, presence, notifier, routines, skills, passkeys, apiCaller, needAdmin, person };
+  registerHaRoutes(app, ctx);
+  registerAdminRoutes(app, ctx);
+
   // ---------- the web app ----------
   if (opts.webDir && existsSync(opts.webDir)) {
     await app.register(fstatic, { root: opts.webDir, prefix: "/" });
@@ -344,7 +365,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   // Lock screens on time even when nobody polls.
   const sweeper = setInterval(() => { for (const d of auth.sweep()) app.log.info({ device: d }, "signed out (idle or nobody there)"); }, 5000);
   sweeper.unref();
-  app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); });
+  app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); });
 
-  return { app, auth, passkeys, presence, registry, agent, approvals, db };
+  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools };
 }

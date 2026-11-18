@@ -83,3 +83,25 @@ Recognising each family member's voice is on the [roadmap](roadmap.md). When it 
 ## Mealie
 
 FAITH reads and changes Mealie through HA's Mealie integration (shopping lists as to-do entities, the meal plan as calendars, plus Mealie's actions). That's two-way, unlike Mealie's own CalDAV. Setup is in [setup.md](setup.md#home-assistant-and-mealie-through-it).
+
+## The family dashboard (FAITH's cards)
+
+The family uses Home Assistant; FAITH's own page is the admin console. The integration serves four cards, loaded automatically:
+
+```yaml
+- type: custom:faith-who-card      # shared tablet: who's signed in, "Who's here?" PIN pad, sign out
+  screen: kitchen
+- type: custom:faith-card          # the day, meals, shopping, chores, the house, approvals
+  screen: kitchen                  # optional: cards: [today, meals, shopping]
+- type: custom:faith-chat-card     # talk or type to FAITH
+  screen: kitchen
+- type: custom:faith-rewards-card  # points, jobs to claim, rewards; parents give points
+  screen: kitchen
+```
+
+- **Each card asks FAITH as the HA user who's looking.** Map each person's HA user with `ha_user_id` in `faith.yaml`. A mapped user sees their own view.
+- **A tablet signed into HA as an unmapped "Family" user** sees the household view. Someone taps *Sign in* on the who card and enters their PIN. All FAITH cards on that tablet then show their view until they leave or sign out.
+- **Private things never go into HA sensors.** The cards fetch them live, for the person looking only.
+- **Phones:** give each person `ha_notify: [notify.mobile_app_<phone>]`. Approval requests arrive with Approve / Deny buttons. A tap decides as that person.
+- **Actions for automations:** `faith.send_message` (`to`: family, parents or a person) posts to Mattermost and/or their phone. `faith.award_points` gives points; from an automation, it waits for a parent's approval.
+- **Not yet checked in a live Home Assistant.** The cards build and the integration's tests pass against HA 2026.2. A run on a real dashboard (Docker HA) is next.
