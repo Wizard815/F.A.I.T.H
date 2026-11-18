@@ -1,6 +1,7 @@
 import { Activity, Bot, CalendarClock, KeyRound, ListChecks, LogOut, Moon, ShieldCheck, Star, Sun, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../ui";
+import { Emblem } from "../emblem/Emblem";
 
 export type Page = "overview" | "people" | "skills" | "routines" | "rewards" | "approvals" | "access";
 export const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
@@ -17,7 +18,7 @@ export function Shell({ page, onPage, name, who, dark, onTheme, onSignOut, child
   return (
     <div className="flex min-h-full flex-col md:flex-row">
       <aside className="border-b border-border bg-surface md:sticky md:top-0 md:h-screen md:w-64 md:border-b-0 md:border-r">
-        <div className="flex items-center gap-2 px-5 py-5"><span className="h-4 w-4 rounded-full bg-primary shadow-[0_0_14px_rgb(var(--primary))]" /><span className="font-serif text-[20px] font-semibold">{name}</span><span className="ml-1 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-semibold text-primary">Admin</span></div>
+        <div className="flex items-center gap-2 px-4 py-4"><Emblem size={44} tone={dark ? "dark" : "light"} /><span className="font-serif text-[20px] font-semibold">{name}</span><span className="ml-1 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-semibold text-primary">Admin</span></div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
           {PAGES.map((p) => (
             <button key={p.id} onClick={() => onPage(p.id)} className={cn("flex shrink-0 items-center gap-3 rounded-input px-3 py-2.5 text-left font-medium transition-colors", page === p.id ? "bg-primary-soft text-primary" : "text-muted hover:text-foreground")}>{p.icon}{p.label}</button>

@@ -28,6 +28,7 @@ const ha = await fakeHa({
   { cal: "calendar.mealie_breakfast", date: today, summary: "Pancakes & berries" }, { cal: "calendar.mealie_lunch", date: today, summary: "Tomato soup" },
   { cal: "calendar.mealie_dinner", date: today, summary: "Fish tacos" }] });
 const model = await fakeModel((req) => {
+  if (!req?.messages) return { content: "ok" }; // health checks (GET /models) have no body
   const last = req.messages.at(-1);
   if (last.role === "tool") {
     const out = (() => { try { return JSON.parse(last.content); } catch { return {}; } })();

@@ -111,7 +111,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `web/` | React + Tailwind app: wall view, home, chat, apps, sign-in, approvals (design: [architecture](docs/architecture.md#the-screens)) |
 | `ha/custom_components/faith` | the Home Assistant integration (`cd ha && pytest`) |
 | `config/faith.example.yaml` | every setting, commented |
-| `docs/` | [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
+| `docs/` | [brand](docs/brand.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
 
 ## API
 
@@ -124,6 +124,40 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `POST /api/voice/transcribe`, `/api/voice/speak` | screen / person | speech in and out through Argos |
 | `POST /v1/chat/completions`, `GET /v1/models` | `faith token` | FAITH as an OpenAI-compatible model called `faith`, as that token's view |
 | `POST /api/ha/conversation`, `GET /api/ha/summary` | `ha` token | for the HA integration |
+
+## Look and feel
+
+<img src="docs/brand/emblem.png" alt="FAITH emblem: a gold d20 holding low-poly bees joined by thread, inside two gold rings" width="320">
+
+FAITH's theme is **brass & honey**: espresso and walnut browns at night, parchment by day, gold as the one accent. The emblem is a turning d20 holding a hive of low-poly bees tied together by thread, inside two gold rings. It shows what the agent is doing (idle, listening, thinking, speaking) in the admin page and the chat card. See [docs/brand.md](docs/brand.md) and open [`docs/brand/emblem.html`](docs/brand/emblem.html) in a browser to see it move. [`ha/themes/faith.yaml`](ha/themes/faith.yaml) gives the whole Home Assistant dashboard the same look.
+
+## Sources
+
+FAITH ties these together. Each is its own repository:
+
+| Repository | What FAITH uses it for |
+|---|---|
+| [Wizard815/argos](https://github.com/Wizard815/argos) | the engine: local chat, embeddings, vision, speech-to-text and text-to-speech (llama-swap based) |
+| [Wizard815/LLM-will-remember-this](https://github.com/Wizard815/LLM-will-remember-this) | the family wiki: memory, notes, each person's context (household and personal tokens) |
+| [Wizard815/ALLGlance](https://github.com/Wizard815/ALLGlance) | the day: calendar, tasks, chores, life events (household and personal `alg_` tokens) |
+| [Wizard815/hermes-agent](https://github.com/Wizard815/hermes-agent) | big jobs, run in each person's own Hermes profile |
+| [Wizard815/hermes-studio](https://github.com/Wizard815/hermes-studio) | each person's Hermes chats and jobs |
+| [Wizard815/coinpile](https://github.com/Wizard815/coinpile) | money, only in a person's own view |
+| [Wizard815/pondering-orb](https://github.com/Wizard815/pondering-orb) | Wizard's own dashboard; FAITH's agent loop started from Orb's |
+| [Wizard815/omi-local](https://github.com/Wizard815/omi-local) | Omi memories, through ALLGlance |
+| [Wizard815/plaid-firefly-connector](https://github.com/Wizard815/plaid-firefly-connector) and [Wizard815/firefly-iii](https://github.com/Wizard815/firefly-iii) | later: paying approved rewards into a kid's card (a placeholder for now) |
+| [home-assistant/core](https://github.com/home-assistant/core) | the house, Assist voice, phones, and the family dashboard |
+| [mealie-recipes/mealie](https://github.com/mealie-recipes/mealie) | meals and shopping lists, through Home Assistant's Mealie integration |
+| [mattermost/mattermost](https://github.com/mattermost/mattermost) | the family's chats: a personal chat each, family, parents |
+
+Design references (not code FAITH uses):
+
+| Repository | What we looked at |
+|---|---|
+| [NexaFlowFrance/OpenFamily](https://github.com/NexaFlowFrance/OpenFamily) | the family-organizer look and features (AGPL: a reference only, no code copied) |
+| [tianhaoz95/family-agent](https://github.com/tianhaoz95/family-agent) | one agent for the whole family, per-person memory |
+| [adgapar/teya](https://github.com/adgapar/teya) | a home assistant agent's tools and voice |
+| [TencentCloud/Octop](https://github.com/TencentCloud/Octop) | agent orchestration ideas |
 
 ## License
 

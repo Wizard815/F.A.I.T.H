@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client";
 import css from "./cards.css?inline";
 import { makeApi, setHubSession, type Api, type CardConfig, type Hass } from "./bridge";
+import { Emblem } from "../emblem/Emblem";
 
 declare global {
   namespace JSX { interface IntrinsicElements { "ha-card": any; "ha-icon": any } }
@@ -156,11 +157,13 @@ const FRIENDLY: [RegExp, string][] = [[/get_day|tasks/, "Checked the calendar"],
 const friendly = (t: string) => FRIENDLY.find(([r]) => r.test(t))?.[1] ?? t.replace(/_/g, " ");
 
 function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
-  const [lines, setLines] = useState<Line[]>([]), [text, setText] = useState(""), [busy, setBusy] = useState(false), [rec, setRec] = useState<MediaRecorder | null>(null);
+  const [lines, setLines] = useState<Line[]>([]), [text, setText] = useState(""), [busy, setBusy] = useState(false), [rec, setRec] = useState<MediaRecorder | null>(null), [said, setSaid] = useState(0);
   const conv = useRef<string | null>(null), end = useRef<HTMLDivElement>(null);
   const reset = useCallback(() => { conv.current = null; api.call("/api/ha/chat/history").then((h: any) => { conv.current = h.conversation_id; setLines(h.messages.map((m: any) => ({ me: m.role === "user", text: m.content }))); }).catch(() => setLines([])); }, [api]);
   useEffect(() => { reset(); const on = (e: Event) => { if ((e as CustomEvent).detail?.screen === api.screen) reset(); }; window.addEventListener("faith-hub-changed", on); return () => window.removeEventListener("faith-hub-changed", on); }, [reset]);
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [lines]);
+  const [, tick] = useState(0);
+  useEffect(() => { if (!said) return; const t = setTimeout(() => tick((n) => n + 1), 3100); return () => clearTimeout(t); }, [said]);
 
   const send = async (body: Record<string, unknown>, shown: string) => {
     setBusy(true); setLines((l) => [...l, ...(shown ? [{ me: true, text: shown }] : []), { text: "…" }]);
@@ -169,6 +172,7 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
       conv.current = r.conversation_id;
       setLines((l) => [...l.slice(0, -1), ...(r.heard ? [{ me: true, text: r.heard + (r.speaker ? ` (${r.speaker.name})` : "") }] : []),
         ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools }]);
+      setSaid(Date.now());
     } catch (e: any) { setLines((l) => [...l.slice(0, -1), { text: `Sorry, that didn't work: ${e.message}` }]); }
     finally { setBusy(false); }
   };
@@ -189,7 +193,7 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
 
   return (
     <ha-card>
-      <div className="head"><ha-icon icon="mdi:creation-outline" /><h2>{config.title ?? "Ask FAITH"}</h2>{lines.length > 0 && <div className="right"><button className="ghost" onClick={() => { conv.current = null; setLines([]); }}>New</button></div>}</div>
+      <div className="head"><Emblem className="emblem" size={56} tone={api.dark ? "dark" : "light"} state={rec ? "listening" : busy ? "thinking" : Date.now() - said < 3000 ? "speaking" : "idle"} /><h2>{config.title ?? "Ask FAITH"}</h2>{lines.length > 0 && <div className="right"><button className="ghost" onClick={() => { conv.current = null; setLines([]); }}>New</button></div>}</div>
       <div className="chat">
         {!lines.length && <div className="empty">What's on today? What's for dinner? Add milk to the list. Turn off the lights.</div>}
         {lines.map((l, i) => l.confirm ? (

@@ -10,6 +10,7 @@ import { Routines } from "./admin/Routines";
 import { Shell, type Page } from "./admin/Shell";
 import { Skills } from "./admin/Skills";
 import { ErrorText } from "./ui";
+import { Emblem } from "./emblem/Emblem";
 
 // Per-browser niceties only (theme, last page).
 const store = { get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
@@ -55,7 +56,7 @@ function SignIn({ s, onDone }: { s: Session; onDone: () => void }) {
   };
   return (
     <div className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center gap-5 px-5">
-      <div className="grid h-14 w-14 place-items-center rounded-full bg-primary-soft"><span className="h-6 w-6 rounded-full bg-primary shadow-[0_0_22px_rgb(var(--primary))]" /></div>
+      <Emblem size={180} className="-mb-2 -ml-4" tone={document.documentElement.classList.contains("dark") ? "dark" : "light"} />
       <div><div className="eyebrow">{s.name} · admin</div><h1 className="mt-2 text-[34px] font-semibold leading-tight">Sign in to run FAITH</h1></div>
       <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); go(api("/api/auth/password", { body: { person: id.trim().toLowerCase(), password: pw } })); }}>
         <input className="field" placeholder="Your id in FAITH (e.g. wizard)" value={id} onChange={(e) => setId(e.target.value)} autoCapitalize="none" autoComplete="username" />

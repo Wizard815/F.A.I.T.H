@@ -4,7 +4,7 @@
  *  by every FAITH card on that tablet. */
 export type Hass = { callWS: <T>(msg: Record<string, unknown>) => Promise<T>; user?: { id: string; name: string; is_admin: boolean }; themes?: { darkMode?: boolean } };
 export type CardConfig = { screen?: string; title?: string; cards?: string[]; [k: string]: unknown };
-export type Api = { call: <T = any>(path: string, body?: Record<string, unknown>) => Promise<T>; screen?: string; user?: Hass["user"] };
+export type Api = { call: <T = any>(path: string, body?: Record<string, unknown>) => Promise<T>; screen?: string; user?: Hass["user"]; dark: boolean };
 
 const key = (screen: string) => `faith.hub.${screen}`;
 export const hubSession = (screen?: string) => { if (!screen) return undefined; try { return localStorage.getItem(key(screen)) || undefined; } catch { return undefined; } };
@@ -17,6 +17,7 @@ export function makeApi(getHass: () => Hass | undefined, config: CardConfig): Ap
   return {
     screen: config.screen,
     get user() { return getHass()?.user; },
+    get dark() { return !!getHass()?.themes?.darkMode; },
     call: async <T,>(path: string, body: Record<string, unknown> = {}) => {
       const hass = getHass();
       if (!hass) throw new Error("Home Assistant isn't ready yet.");
