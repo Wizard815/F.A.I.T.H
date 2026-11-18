@@ -23,6 +23,7 @@ COPY web/package.json web/
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/web/dist web/dist
+COPY server/skills server/skills
 COPY config/faith.example.yaml /app/faith.example.yaml
 RUN printf '#!/bin/sh\nexec node /app/server/dist/cli.js "$@"\n' > /usr/local/bin/faith && chmod +x /usr/local/bin/faith \
  && mkdir -p /data /config && chown -R node:node /data /config

@@ -18,6 +18,8 @@ export type Person = {
   face_names?: string[];       // names a camera face-recognition sensor reports for this person
   hermes_profile?: string;     // Hermes profile to use for this person (defaults to id)
   mattermost_username?: string; // their Mattermost account: their DMs with FAITH act as them
+  ha_notify?: string[];         // HA notify services for their phone, e.g. notify.mobile_app_wizard_phone
+  cards?: string[];             // their dashboard cards, in order (ids from dashboard.cards); default: all
 };
 
 export type McpConnector = {
@@ -97,6 +99,10 @@ export type Config = {
   approvals: { approvers: Role[]; ttl_hours: number };
   embed: { allow_from: string[]; cookie_samesite: "strict" | "lax" | "none" };
   mattermost?: MattermostConfig;
+  skills: { dir: string };                   // your own skills (Markdown); FAITH's built-in ones are always there
+  voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
+  rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
+  notifications: { approvals_push: boolean };
 };
 
 /** FAITH as a Mattermost bot: a DM with each person, a family channel, a parents channel. */
@@ -115,7 +121,7 @@ const DEFAULT_ROLES: Record<PolicyName, RolePolicy> = {
   adult: { writes: "allow", allow_writes: [], approve_skip: [] },
   child: {
     writes: "allowlist",
-    allow_writes: ["shopping_add", "home_control", "wiki_memory_capture", "wiki_memory_log"],
+    allow_writes: ["shopping_add", "home_control", "wiki_memory_capture", "wiki_memory_log", "points_claim", "reward_redeem", "message_send"],
     approve_skip: [],
     ha_domains: ["light", "media_player", "fan"],
     prompt: "You are talking with a child. Use short, kind, simple sentences. Don't discuss money, locks, alarms or other people's private things. If they ask for something you can't do, suggest they ask a parent.",
@@ -158,7 +164,8 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
       ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined,
-      mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined };
+      mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined,
+      ha_notify: list(p.ha_notify).map((n) => (n.includes(".") ? n : `notify.${n}`)), cards: p.cards ? list(p.cards) : undefined };
   });
   const dup = people.map((p) => p.id).find((id, i, a) => a.indexOf(id) !== i);
   if (dup) throw new ConfigError(`Two people have the id "${dup}".`);
@@ -263,6 +270,17 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     apps, approvals: { approvers, ttl_hours: num(ap.ttl_hours, 24) },
     embed: { allow_from: list(raw.embed?.allow_from), cookie_samesite: samesite as Config["embed"]["cookie_samesite"] },
     mattermost,
+    skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills") },
+    voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
+      threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true) } : undefined,
+    rewards: (() => {
+      const r = raw.rewards || {}, payout = str(r.payout, "manual");
+      if (!["manual", "firefly"].includes(payout)) throw new ConfigError("rewards.payout is manual or firefly.");
+      const allowed = r.allowed_points ? (r.allowed_points as any[]).map(Number).filter((n) => n > 0) : [0.5, 1, 2];
+      return { allowed_points: allowed, currency: str(r.currency, "$"), payout: payout as "manual" | "firefly",
+        firefly: r.firefly?.url ? { url: str(r.firefly.url), token_env: str(r.firefly.token_env, "FIREFLY_TOKEN"), from_account: str(r.firefly.from_account) } : undefined };
+    })(),
+    notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
   };
 }
 

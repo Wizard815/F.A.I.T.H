@@ -7,7 +7,7 @@ export type Scope = { kind: "household" } | { kind: "person"; person: Person };
 
 /** Where the request comes from. Confirmations need someone who can answer
  *  (a screen, or a Mattermost chat where they reply "yes"). */
-export type Channel = "hub" | "personal" | "api" | "voice" | "mattermost";
+export type Channel = "hub" | "personal" | "api" | "voice" | "mattermost" | "ha" | "routine";
 
 export type Caller = {
   scope: Scope;

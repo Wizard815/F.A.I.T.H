@@ -66,6 +66,12 @@ is its hands, and Argos (local models) is its brain.
 | ![Wall view](docs/screenshots/kiosk.png) | ![Home](docs/screenshots/home.png) |
 | ![Ask](docs/screenshots/ask.png) | ![Approvals](docs/screenshots/approvals.png) |
 
+## Where the family meets FAITH
+
+- **Home Assistant:** FAITH's cards on the family dashboard; Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
+- **Mattermost:** a personal chat each, a family channel, a parents' channel ([docs](docs/mattermost.md)).
+- **FAITH's own page** is the admin console: health, people and voices, skills, routines, points and rewards, approvals, tokens.
+
 ## Try it without your homelab
 
 ```bash

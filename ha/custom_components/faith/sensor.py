@@ -17,6 +17,7 @@ SENSORS: list[tuple[str, str, str, str | None, str]] = [
     ("shopping", "Shopping list", "shopping_count", "shopping", "mdi:cart"),
     ("next_meal", "Next meal", "next_meal", None, "mdi:silverware-fork-knife"),
     ("chores", "Chores", "chores_count", None, "mdi:broom"),
+    ("approvals", "Waiting for approval", "pending_approvals", None, "mdi:shield-check"),
 ]
 
 

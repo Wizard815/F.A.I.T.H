@@ -20,7 +20,7 @@ try { config = loadConfig(configPath); }
 catch (e) { if (e instanceof ConfigError) { console.error(e.message); process.exit(1); } throw e; }
 const cfg = () => config!;
 
-const { app, presence, agent, approvals, db } = await buildApp({ config: cfg, dataFile: resolve(dataDir, "faith.db"), webDir: process.env.FAITH_WEB || resolve(here, "../../web/dist"), logger: true });
+const { app, presence, agent, approvals, db, routines, rewards, notifier } = await buildApp({ config: cfg, dataFile: resolve(dataDir, "faith.db"), webDir: process.env.FAITH_WEB || resolve(here, "../../web/dist"), logger: true });
 
 // Say what's missing instead of failing quietly later.
 for (const c of cfg().connectors) {
@@ -34,9 +34,12 @@ if (!cfg().public_url.startsWith("https://")) app.log.warn("public_url isn't htt
 if (!cfg().people.length) app.log.warn("No people in the config yet. Add your family under people: in faith.yaml.");
 
 presence.start();
+rewards.seed();     // a starter list of jobs and rewards the first time; edit them in the admin page
+routines.start();   // scheduled skills (checked every 30 seconds)
 if (cfg().mattermost) {
   const { MattermostBot } = await import("./mattermost.js");
   const bot = new MattermostBot(cfg, db, agent, approvals, app.log);
+  notifier.bot = bot;
   bot.start();
   app.addHook("onClose", async () => bot.stop());
 }

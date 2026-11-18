@@ -37,6 +37,11 @@ export class HomeAssistant implements Connector {
     if (!r.ok) throw new ToolError(`Home Assistant answered ${r.status}: ${typeof r.body === "string" ? r.body.slice(0, 200) : JSON.stringify(r.body).slice(0, 200)}`);
     return r.body;
   }
+  /** Call an HA action as FAITH (pushes to phones, routines). */
+  async callService(domain: string, service: string, data: Record<string, unknown>) {
+    if (!/^[a-z_]+$/.test(domain) || !/^[a-z0-9_]+$/.test(service)) throw new ToolError(`Not an HA action: ${domain}.${service}`);
+    return this.api("POST", `/api/services/${domain}/${service}`, data);
+  }
   /** Read one entity (also used for hub presence and face sensors; not limited by `expose`). */
   async state(entityId: string, caller?: Caller): Promise<State | null> {
     try { return await this.api("GET", `/api/states/${encodeURIComponent(entityId)}`, undefined, caller); }
@@ -182,6 +187,15 @@ export class HomeAssistant implements Connector {
           const r = await this.api("POST", "/api/services/mealie/get_recipes?return_response", { config_entry_id: entry, search_terms: String(a?.query || ""), result_limit: Number(a?.limit) || 8 }, caller);
           const recipes = r?.service_response?.recipes?.items || r?.service_response?.recipes || [];
           return { recipes: (Array.isArray(recipes) ? recipes : []).map((x: any) => ({ recipe_id: x.recipe_id || x.id, name: x.name, ...(x.total_time ? { time: x.total_time } : {}) })) };
+        } });
+      add({ name: "recipe_get", write: false, description: "One Mealie recipe's ingredients and steps (recipe_id from recipes_search, or the recipe's slug).",
+        parameters: { type: "object", properties: { recipe_id: { type: "string" } }, required: ["recipe_id"], additionalProperties: false },
+        run: async (a) => {
+          const r = await this.api("POST", "/api/services/mealie/get_recipe?return_response", { config_entry_id: entry, recipe_id: String(a?.recipe_id || "") }, caller);
+          const x = r?.service_response?.recipe || {};
+          const ing = (x.ingredients || x.recipe_ingredient || []).map((i: any) => (typeof i === "string" ? i : i.display || i.original_text || i.note || [i.quantity, i.unit?.name || i.unit, i.food?.name || i.food].filter(Boolean).join(" "))).filter(Boolean);
+          const steps = (x.instructions || x.recipe_instructions || []).map((i: any) => (typeof i === "string" ? i : i.text)).filter(Boolean);
+          return { name: x.name, servings: x.recipe_yield || x.servings, ingredients: ing, steps: steps.slice(0, 20) };
         } });
       add({ name: "meal_plan", write: true, explain: (a) => `put ${a?.note_title || "a recipe"} on the meal plan for ${a?.entry_type} on ${a?.date}`, description: "Put a meal on Mealie's plan for a date: a recipe (recipe_id from recipes_search) or a plain note (note_title).",
         parameters: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD" }, entry_type: { type: "string", enum: ENTRY_TYPES }, recipe_id: { type: "string" }, note_title: { type: "string" }, note_text: { type: "string" } }, required: ["date", "entry_type"], additionalProperties: false },

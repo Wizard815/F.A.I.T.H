@@ -7,6 +7,8 @@ const CHANNEL: Record<Caller["channel"], string> = {
   api: "an app connected to FAITH",
   voice: "a voice assistant in the house; answers are spoken aloud, so use one or two plain sentences and no lists or markdown",
   mattermost: "the family's Mattermost chat; answer like a person in a chat: short, Markdown is fine",
+  ha: "the family's Home Assistant dashboard (a card on a wall tablet or a phone); keep answers short",
+  routine: "a scheduled routine: nobody is waiting for a reply. Do the job, then write the message that will be sent (short, friendly, Markdown is fine). Don't ask questions",
 };
 
 export function timeLine(now = new Date(), tz = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone) {
