@@ -8,39 +8,40 @@
 /* Fonts are bundled with the app, never fetched from the internet. */
 :root {
   color-scheme: light;
-  --background: 247 243 236;   /* warm paper */
-  --surface: 252 250 246;
-  --surface-2: 241 235 225;
-  --border: 230 222 210;
-  --border-strong: 212 201 186;
-  --foreground: 38 31 44;
-  --muted: 112 101 112;
-  --primary: 104 76 208;       /* FAITH violet */
-  --primary-hover: 90 63 190;
-  --primary-foreground: 255 255 255;
-  --primary-soft: 236 231 250;
-  --success: 72 136 92;
-  --warning: 190 145 60;
-  --danger: 196 67 78;
-  --shadow-surface: 0 1px 2px rgba(38, 31, 44, 0.04);
-  --shadow-lift: 0 10px 30px rgba(38, 31, 44, 0.12);
+  /* Brass & honey: parchment by day, espresso by night, gold the one accent. */
+  --background: 246 239 228;   /* parchment */
+  --surface: 252 248 241;
+  --surface-2: 239 229 213;
+  --border: 228 215 196;
+  --border-strong: 207 188 160;
+  --foreground: 43 30 21;      /* espresso */
+  --muted: 120 99 80;
+  --primary: 154 107 31;       /* bronze: gold that reads on paper */
+  --primary-hover: 133 91 24;
+  --primary-foreground: 255 250 240;
+  --primary-soft: 243 228 196;
+  --success: 92 132 72;
+  --warning: 196 128 36;
+  --danger: 184 72 56;
+  --shadow-surface: 0 1px 2px rgba(43, 30, 21, 0.05);
+  --shadow-lift: 0 10px 30px rgba(43, 30, 21, 0.14);
 }
 .dark {
   color-scheme: dark;
-  --background: 14 14 16;
-  --surface: 24 24 27;
-  --surface-2: 20 20 23;
-  --border: 40 39 44;
-  --border-strong: 58 56 63;
-  --foreground: 242 240 237;
-  --muted: 168 163 168;
-  --primary: 160 140 255;
-  --primary-hover: 176 158 255;
-  --primary-foreground: 20 12 38;
-  --primary-soft: 36 30 54;
-  --success: 98 170 116;
-  --warning: 214 180 96;
-  --danger: 236 110 120;
+  --background: 24 17 12;      /* espresso */
+  --surface: 36 26 19;         /* walnut */
+  --surface-2: 30 21 15;
+  --border: 58 43 31;
+  --border-strong: 82 62 44;
+  --foreground: 245 236 220;   /* cream */
+  --muted: 176 156 132;
+  --primary: 222 178 90;       /* gold */
+  --primary-hover: 236 196 112;
+  --primary-foreground: 34 22 12;
+  --primary-soft: 58 42 22;
+  --success: 132 178 104;
+  --warning: 232 168 70;
+  --danger: 226 116 94;
   --shadow-surface: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 12px 34px rgba(0, 0, 0, 0.55);
 }
