@@ -63,12 +63,12 @@ is its hands, and Argos (local models) is its brain.
 
 | | |
 |---|---|
-| ![Wall view](docs/screenshots/kiosk.png) | ![Home](docs/screenshots/home.png) |
-| ![Ask](docs/screenshots/ask.png) | ![Approvals](docs/screenshots/approvals.png) |
+| ![The hub card on a wall tablet, at night](docs/screenshots/ha-hub.png) | ![The hub card by day](docs/screenshots/ha-hub-light.png) |
+| ![Signing in on the tablet](docs/screenshots/ha-sign-in.png) | ![FAITH's admin page](docs/screenshots/admin.png) |
 
 ## Where the family meets FAITH
 
-- **Home Assistant:** FAITH's cards on the family dashboard; Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
+- **Home Assistant:** FAITH's cards on the family dashboard, with the hub card as the wall tablet's home (tap FAITH to talk, it answers out loud); Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
 - **Mattermost:** a personal chat each, a family channel, a parents' channel ([docs](docs/mattermost.md)).
 - **FAITH's own page** is the admin console: health, people and voices, skills, routines, points and rewards, approvals, tokens.
 

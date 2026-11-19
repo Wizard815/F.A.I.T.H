@@ -181,6 +181,16 @@ test("voice ID: enrolled voices are recognised on a shared screen; a parent's ch
   assert.equal(ha.states["light.kitchen"].state, "off");
 });
 
+// ---------------- the hub card's voice ----------------
+test("the hub card gets FAITH's reply spoken through Argos, and needs an HA token", async () => {
+  const r = (await H("/api/ha/speak", { user_id: "ha-family", screen: "kitchen", text: "Dinner is fish tacos." })).json();
+  assert.equal(r.mime, "audio/mpeg");
+  assert.equal(Buffer.from(r.audio, "base64").toString(), "mp3:Dinner is fish tacos.");
+  assert.equal((await H("/api/ha/speak", { text: "" })).statusCode, 400);
+  const res = await A.app.inject({ method: "POST", url: "/api/ha/speak", payload: { text: "hi" } });
+  assert.ok(res.statusCode === 401 || res.statusCode === 403, "no token, no voice");
+});
+
 // ---------------- HA → Mattermost / phones ----------------
 test("faith.send_message from HA reaches a person's phone", async () => {
   const before = ha.services.length;

@@ -13,8 +13,9 @@ export type EmblemState = "idle" | "listening" | "thinking" | "speaking";
 export type EmblemTone = "dark" | "light";
 export type EmblemOptions = {
   state?: EmblemState;
-  /** 0..1, the voice level while listening or speaking (a gentle made-up pulse if left out). */
-  level?: number;
+  /** 0..1, the voice level while listening or speaking, or a function read every
+   *  frame (a microphone or speaker meter). A gentle made-up pulse if left out. */
+  level?: number | (() => number | undefined);
   /** "dark" for a dark background (bright gold), "light" for paper (deeper gold and brown). */
   tone?: EmblemTone;
   /** Draw one frame and don't animate (reduced motion, thumbnails). */
@@ -92,7 +93,7 @@ const TARGETS: Record<EmblemState, { spin: number; bees: number; rings: number; 
 
 export class EmblemRenderer {
   private ctx: CanvasRenderingContext2D;
-  private opts: Required<Omit<EmblemOptions, "level">> & { level?: number };
+  private opts: Required<Omit<EmblemOptions, "level">> & Pick<EmblemOptions, "level">;
   private raf = 0;
   private last = 0;
   private t = 0;
@@ -154,7 +155,8 @@ export class EmblemRenderer {
   private level() {
     const s = this.opts.state;
     if (s !== "listening" && s !== "speaking") return 0;
-    if (typeof this.opts.level === "number") return Math.max(0, Math.min(1, this.opts.level));
+    const l = typeof this.opts.level === "function" ? this.opts.level() : this.opts.level;
+    if (typeof l === "number") return Math.max(0, Math.min(1, l));
     const t = this.t;
     return s === "speaking" ? 0.5 + 0.5 * Math.sin(t * 9) * Math.sin(t * 2.3) : 0.3 + 0.2 * Math.sin(t * 3);
   }

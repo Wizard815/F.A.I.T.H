@@ -2,7 +2,8 @@
    Set --faith-accent in an HA theme to change it; ha/themes/faith.yaml is the full brass-and-honey look. */
 :host { --fc-text: var(--primary-text-color, #2b1e15); --fc-muted: var(--secondary-text-color, #786350); --fc-accent: var(--faith-accent, #b8862f);
   --fc-line: var(--divider-color, rgba(0,0,0,.12)); --fc-bg2: var(--secondary-background-color, rgba(0,0,0,.04)); --fc-ok: var(--success-color, #43a047); --fc-err: var(--error-color, #db4437);
-  --fc-soft: color-mix(in srgb, var(--fc-accent) 14%, transparent); display: block; }
+  --fc-soft: color-mix(in srgb, var(--fc-accent) 14%, transparent); display: block;
+  --fc-hex: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); --fc-serif: var(--faith-serif, "Fraunces Variable", Georgia, "Iowan Old Style", serif); }
 * { box-sizing: border-box; }
 ha-card { padding: 16px; color: var(--fc-text); }
 .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -10,7 +11,7 @@ ha-card { padding: 16px; color: var(--fc-text); }
 .head .sub { color: var(--fc-muted); font-size: .85rem; }
 .head .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--fc-muted); }
-.hello { margin: 2px 0 14px; font-size: 1.6rem; font-weight: 600; line-height: 1.15; }
+.hello { font-family: var(--fc-serif); margin: 2px 0 14px; font-size: 1.6rem; font-weight: 600; line-height: 1.15; }
 .hello em { color: var(--fc-accent); font-style: italic; }
 .section { padding: 12px 0; border-top: 1px solid var(--fc-line); }
 .section:first-of-type { border-top: 0; padding-top: 0; }
@@ -38,7 +39,8 @@ button:disabled { opacity: .5; cursor: default; }
 .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 input { font: inherit; color: var(--fc-text); background: var(--fc-bg2); border: 1px solid var(--fc-line); border-radius: 10px; padding: 8px 12px; min-height: 40px; width: 100%; }
 input:focus { outline: 2px solid var(--fc-accent); outline-offset: -1px; }
-.avatar { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 600; flex: none; }
+.avatar { display: inline-grid; place-items: center; color: #fff; font-weight: 600; flex: none; clip-path: var(--fc-hex); }
+.hexring { display: inline-grid; place-items: center; padding: 3px; background: var(--fc-accent); clip-path: var(--fc-hex); flex: none; }
 .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .person { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border-radius: 14px; border: 1px solid var(--fc-line); background: transparent; font-weight: 600; }
 .person.suggested { border: 2px solid var(--fc-accent); }
@@ -61,3 +63,29 @@ input:focus { outline: 2px solid var(--fc-accent); outline-offset: -1px; }
 .apps { display: flex; gap: 8px; flex-wrap: wrap; }
 .apps a { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px; border: 1px solid var(--fc-line); border-radius: 12px; padding: 6px 12px 6px 8px; }
 .emblem { flex: none; margin: -6px -2px -6px -6px; }
+
+/* points in a honeycomb cell */
+.mine { display: flex; align-items: center; gap: 16px; }
+.honey { display: grid; place-items: center; align-content: center; width: 104px; height: 112px; flex: none; clip-path: var(--fc-hex);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--fc-accent) 70%, #fff), var(--fc-accent)); color: var(--faith-accent-text, #fffaf0); }
+.honey .label { color: inherit; opacity: .85; }
+
+/* the hub card: the wall screen */
+ha-card.hub { position: relative; overflow: hidden; padding: 22px 22px 18px;
+  background: radial-gradient(90% 60% at 50% 45%, color-mix(in srgb, var(--fc-accent) 14%, transparent), transparent 70%), var(--ha-card-background, var(--card-background-color, transparent)); }
+.hub-top { display: flex; align-items: flex-start; gap: 12px; }
+.hub-top .right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.clock { font-family: var(--fc-serif); font-size: 3.2rem; font-weight: 600; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.hub-mid { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin: 8px 0 10px; }
+.hub-mid .hello { margin: 0; }
+button.orb { background: none; border: 0; padding: 0; min-height: 0; border-radius: 50%; margin: -8px 0; }
+button.orb:focus-visible { outline: 2px solid var(--fc-accent); outline-offset: -12px; }
+button.orb:disabled { opacity: 1; }
+.hint { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--fc-accent); font-weight: 600; }
+.heard { color: var(--fc-muted); font-style: italic; }
+.reply { font-family: var(--fc-serif); font-size: 1.3rem; line-height: 1.4; max-width: 34em; white-space: pre-wrap; }
+.hub-mid .box { text-align: left; width: min(100%, 30em); }
+.faces { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--fc-line); }
+button.face { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 4px; min-height: 0; font-weight: 600; font-size: .9rem; }
+.overlay { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; padding: 16px;
+  background: var(--ha-card-background, var(--card-background-color, #241a13)); }

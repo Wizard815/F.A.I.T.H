@@ -3,13 +3,14 @@
  *    type: custom:faith-who-card      (a shared tablet: "Who's here?", sign in with a PIN, sign out)
  *    type: custom:faith-chat-card     (talk or type to FAITH)
  *    type: custom:faith-rewards-card  (points, jobs and rewards)
+ *    type: custom:faith-hub-card      (the wall screen: FAITH to talk to, the time, who's here)
  *  Every card asks FAITH as the HA user who's looking (or the person signed in
  *  on this screen with the who card), so each person sees their own things. */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import css from "./cards.css?inline";
-import { makeApi, setHubSession, type Api, type CardConfig, type Hass } from "./bridge";
-import { Emblem } from "../emblem/Emblem";
+import { hubSession, makeApi, setHubSession, type Api, type CardConfig, type Hass } from "./bridge";
+import { Emblem, type EmblemState } from "../emblem/Emblem";
 
 declare global {
   namespace JSX { interface IntrinsicElements { "ha-card": any; "ha-icon": any } }
@@ -23,7 +24,11 @@ type View = { name: string; person: Person | null; household: boolean; hub: { pe
 
 const ICON: Record<string, string> = { today: "mdi:calendar-today", meals: "mdi:silverware-fork-knife", shopping: "mdi:cart-outline", chores: "mdi:broom", home: "mdi:home-outline", approvals: "mdi:shield-check-outline" };
 const initials = (n: string) => n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-const Avatar = ({ p, size = 40 }: { p: Person; size?: number }) => <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38, background: p.color || "var(--fc-accent)" }}>{initials(p.name)}</span>;
+/** A person's face tile: a hexagon, one cell of the hive. */
+const Avatar = ({ p, size = 40, ring }: { p: Person; size?: number; ring?: boolean }) => {
+  const face = <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.36, background: p.color || "var(--fc-accent)" }}>{initials(p.name)}</span>;
+  return ring ? <span className="hexring">{face}</span> : face;
+};
 function niceTime(t?: string) {
   if (!t) return "";
   if (/^\d{2}:\d{2}$/.test(t)) { const [h, m] = t.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
@@ -96,75 +101,104 @@ function FaithCard({ api, config }: { api: Api; config: CardConfig }) {
   );
 }
 
-// ------------------------------------------------------------------ faith-who-card
-function WhoCard({ api, config }: { api: Api; config: CardConfig }) {
-  const { data, err, load } = useView<View>(api, "/api/ha/view", { cards: [] }, 10_000);
-  const [people, setPeople] = useState<{ people: (Person & { pin: boolean })[]; suggested: string | null; face_unlock: boolean } | null>(null);
-  const [pick, setPick] = useState<Person | null>(null), [pin, setPin] = useState(""), [msg, setMsg] = useState("");
+// ------------------------------------------------------------------ signing in on a shared tablet
+type People = { people: (Person & { pin: boolean })[]; suggested: string | null; face_unlock: boolean };
+const loadPeople = (api: Api) => api.call<People>("/api/ha/hub/people");
+
+/** The PIN pad (or "It's me" when the camera sees them) for one person. */
+function PinPad({ api, people, pick, onBack, onDone }: { api: Api; people: People | null; pick: Person; onBack: () => void; onDone: () => void }) {
+  const [pin, setPin] = useState(""), [msg, setMsg] = useState("");
+  const signIn = async (body: Record<string, unknown>) => {
+    setMsg("");
+    try { const r: any = await api.call("/api/ha/hub/signin", body); setHubSession(api.screen!, r.hub_session); onDone(); }
+    catch (e: any) { setMsg(e.message); setPin(""); }
+  };
+  const press = (d: string) => setPin((p) => (p + d).slice(0, 8));
+  return (
+    <div className="pin">
+      <div className="head" style={{ margin: 0 }}><Avatar p={pick} size={44} /><h2>Hi, {pick.name}</h2><button className="ghost" style={{ marginLeft: "auto" }} onClick={onBack}>Back</button></div>
+      {people?.face_unlock && people.suggested === pick.id && <button className="primary" onClick={() => signIn({ person: pick.id, face: true })}>It's me (camera)</button>}
+      <div className="dots">{Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? "on" : ""} />)}</div>
+      <div className="keys">{["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => <button key={d} onClick={() => press(d)}>{d}</button>)}
+        <button onClick={() => setPin(pin.slice(0, -1))} aria-label="Delete">⌫</button><button onClick={() => press("0")}>0</button>
+        <button className="primary" disabled={pin.length < 4} onClick={() => signIn({ person: pick.id, pin })}>OK</button></div>
+      {msg && <div className="err">{msg}</div>}
+    </div>
+  );
+}
+
+/** Keeps a tablet's sign-in alive while people touch it, and forgets it once the server signed them out. */
+function useHubKeepAlive(api: Api, data: View | null) {
   const last = useRef(0);
-  // Taps anywhere on the tablet keep the signed-in person signed in.
   useEffect(() => {
     if (!data?.hub) return;
     const ping = () => { if (Date.now() - last.current > 15_000) { last.current = Date.now(); api.call("/api/ha/hub/activity").catch(() => {}); } };
     window.addEventListener("pointerdown", ping, true); return () => window.removeEventListener("pointerdown", ping, true);
   }, [data?.hub?.person.id]);
-  // Signed out by the server (idle, nobody there): forget the session on this tablet.
-  useEffect(() => { if (data && !data.hub && data.household && api.screen && localStorage.getItem(`faith.hub.${api.screen}`)) setHubSession(api.screen, null); }, [data]);
+  useEffect(() => { if (data && !data.hub && data.household && api.screen && hubSession(api.screen)) setHubSession(api.screen, null); }, [data]);
+}
+const signOut = async (api: Api) => { await api.call("/api/ha/hub/signout").catch(() => {}); setHubSession(api.screen!, null); };
+
+// ------------------------------------------------------------------ faith-who-card
+function WhoCard({ api }: { api: Api; config: CardConfig }) {
+  const { data, err } = useView<View>(api, "/api/ha/view", { cards: [] }, 10_000);
+  const [people, setPeople] = useState<People | null>(null), [pick, setPick] = useState<Person | null>(null), [msg, setMsg] = useState("");
+  useHubKeepAlive(api, data);
   if (!api.screen) return <ha-card><div className="err">Give this card the screen it's on: <code>screen: kitchen</code></div></ha-card>;
   if (err) return <ha-card><div className="err">{err}</div></ha-card>;
   if (!data) return <ha-card><div className="empty">…</div></ha-card>;
 
-  const signIn = async (body: Record<string, unknown>) => {
-    setMsg("");
-    try { const r: any = await api.call("/api/ha/hub/signin", body); setHubSession(api.screen!, r.hub_session); setPick(null); setPin(""); setPeople(null); }
-    catch (e: any) { setMsg(e.message); setPin(""); }
-  };
-  const signOut = async () => { await api.call("/api/ha/hub/signout").catch(() => {}); setHubSession(api.screen!, null); load(); };
-
   if (data.hub) return (
     <ha-card><div className="head"><Avatar p={data.hub.person} size={44} /><div><h2>{data.hub.person.name}</h2><div className="sub">Signed in on this screen{data.hub.remaining_seconds < 60 ? ` · signing out in ${data.hub.remaining_seconds}s` : ""}</div></div>
-      <div className="right"><button onClick={signOut}>Sign out</button></div></div></ha-card>
+      <div className="right"><button onClick={() => signOut(api)}>Sign out</button></div></div></ha-card>
   );
   if (data.person) return <ha-card><div className="head"><Avatar p={data.person} size={44} /><div><h2>{data.person.name}</h2><div className="sub">Your own Home Assistant account</div></div></div></ha-card>;
-  if (!people && !pick) return (
+  if (pick) return <ha-card><PinPad api={api} people={people} pick={pick} onBack={() => setPick(null)} onDone={() => { setPick(null); setPeople(null); }} /></ha-card>;
+  if (!people) return (
     <ha-card><div className="head"><ha-icon icon="mdi:account-group-outline" /><div><h2>Shared view</h2><div className="sub">Everyone sees the family's things. Sign in for your own.</div></div>
-      <div className="right"><button className="primary" onClick={() => api.call("/api/ha/hub/people").then((p: any) => { setPeople(p); const s = p.people.find((x: any) => x.id === p.suggested); if (s) setPick(s); }).catch((e) => setMsg(e.message))}>Sign in</button></div></div>
+      <div className="right"><button className="primary" onClick={() => loadPeople(api).then((p) => { setPeople(p); const s = p.people.find((x) => x.id === p.suggested); if (s) setPick(s); }).catch((e) => setMsg(e.message))}>Sign in</button></div></div>
       {msg && <div className="err">{msg}</div>}</ha-card>
   );
-  if (!pick) return (
-    <ha-card><div className="head"><h2>Who's here?</h2><div className="right"><button className="ghost" onClick={() => setPeople(null)}>Cancel</button></div></div>
-      <div className="people">{people!.people.map((p) => <button key={p.id} className={`person ${people!.suggested === p.id ? "suggested" : ""}`} onClick={() => setPick(p)}><Avatar p={p} size={52} />{p.name}</button>)}</div>
-      {msg && <div className="err">{msg}</div>}</ha-card>
-  );
-  const press = (d: string) => setPin((p) => (p + d).slice(0, 8));
   return (
-    <ha-card><div className="head"><Avatar p={pick} size={44} /><h2>Hi, {pick.name}</h2><div className="right"><button className="ghost" onClick={() => { setPick(null); setPin(""); setMsg(""); }}>Back</button></div></div>
-      <div className="pin">
-        {people?.face_unlock && people.suggested === pick.id && <button className="primary" onClick={() => signIn({ person: pick.id, face: true })}>It's me (camera)</button>}
-        <div className="dots">{Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? "on" : ""} />)}</div>
-        <div className="keys">{["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => <button key={d} onClick={() => press(d)}>{d}</button>)}
-          <button onClick={() => setPin(pin.slice(0, -1))}>⌫</button><button onClick={() => press("0")}>0</button>
-          <button className="primary" disabled={pin.length < 4} onClick={() => signIn({ person: pick.id, pin })}>OK</button></div>
-        {msg && <div className="err">{msg}</div>}
-      </div></ha-card>
+    <ha-card><div className="head"><h2>Who's here?</h2><div className="right"><button className="ghost" onClick={() => setPeople(null)}>Cancel</button></div></div>
+      <div className="people">{people.people.map((p) => <button key={p.id} className={`person ${people.suggested === p.id ? "suggested" : ""}`} onClick={() => setPick(p)}><Avatar p={p} size={52} />{p.name}</button>)}</div></ha-card>
   );
 }
 
-// ------------------------------------------------------------------ faith-chat-card
+// ------------------------------------------------------------------ talking to FAITH (chat card and hub card)
 type Line = { me?: boolean; text: string; tools?: string[]; confirm?: { id: string; summary: string; done?: string }; waiting?: string };
 const FRIENDLY: [RegExp, string][] = [[/get_day|tasks/, "Checked the calendar"], [/chores/, "Looked at chores"], [/^meals$|meal_plan/, "Meal plan"], [/recipe/, "Recipes"], [/shopping/, "Shopping list"],
   [/home_/, "The house"], [/memory_|context_for|wiki|notes/, "The wiki"], [/points|reward/, "Points"], [/skill_load/, "Used a skill"], [/message_send/, "Sent a message"], [/hermes|studio/, "Hermes"], [/coinpile/, "Money"]];
 const friendly = (t: string) => FRIENDLY.find(([r]) => r.test(t))?.[1] ?? t.replace(/_/g, " ");
 
-function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
-  const [lines, setLines] = useState<Line[]>([]), [text, setText] = useState(""), [busy, setBusy] = useState(false), [rec, setRec] = useState<MediaRecorder | null>(null), [said, setSaid] = useState(0);
-  const conv = useRef<string | null>(null), end = useRef<HTMLDivElement>(null);
+let audioCtx: AudioContext | undefined;
+const ac = () => (audioCtx ??= new AudioContext());
+const meter = (an: AnalyserNode) => { const a = new Uint8Array(an.fftSize); an.getByteTimeDomainData(a); let s = 0; for (const v of a) s += ((v - 128) / 128) ** 2; return Math.min(1, Math.sqrt(s / a.length) * 4); };
+const toBase64 = (bytes: Uint8Array) => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
+
+/** One conversation with FAITH: text or a recording, Yes/No on held actions,
+ *  and (when `speak`) the reply read aloud by Argos. `level` feeds the emblem. */
+function useChat(api: Api, speak: boolean) {
+  const [lines, setLines] = useState<Line[]>([]), [busy, setBusy] = useState(false), [rec, setRec] = useState<MediaRecorder | null>(null), [talking, setTalking] = useState(false), [said, setSaid] = useState(0);
+  const conv = useRef<string | null>(null), an = useRef<AnalyserNode | null>(null), playing = useRef<HTMLAudioElement | null>(null);
   const reset = useCallback(() => { conv.current = null; api.call("/api/ha/chat/history").then((h: any) => { conv.current = h.conversation_id; setLines(h.messages.map((m: any) => ({ me: m.role === "user", text: m.content }))); }).catch(() => setLines([])); }, [api]);
   useEffect(() => { reset(); const on = (e: Event) => { if ((e as CustomEvent).detail?.screen === api.screen) reset(); }; window.addEventListener("faith-hub-changed", on); return () => window.removeEventListener("faith-hub-changed", on); }, [reset]);
-  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [lines]);
   const [, tick] = useState(0);
   useEffect(() => { if (!said) return; const t = setTimeout(() => tick((n) => n + 1), 3100); return () => clearTimeout(t); }, [said]);
+  useEffect(() => () => { playing.current?.pause(); }, []);
 
+  const say = async (text: string) => {
+    try {
+      const r: any = await api.call("/api/ha/speak", { text });
+      playing.current?.pause();
+      const audio = new Audio(`data:${r.mime};base64,${r.audio}`), node = ac().createAnalyser();
+      node.fftSize = 512; ac().createMediaElementSource(audio).connect(node); node.connect(ac().destination);
+      playing.current = audio; an.current = node; setTalking(true);
+      const done = () => { if (playing.current === audio) { an.current = null; setTalking(false); } };
+      audio.onended = done; audio.onerror = done;
+      await ac().resume(); await audio.play();
+    } catch { an.current = null; setTalking(false); /* no voice: the text is still there */ }
+  };
   const send = async (body: Record<string, unknown>, shown: string) => {
     setBusy(true); setLines((l) => [...l, ...(shown ? [{ me: true, text: shown }] : []), { text: "…" }]);
     try {
@@ -173,34 +207,58 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
       setLines((l) => [...l.slice(0, -1), ...(r.heard ? [{ me: true, text: r.heard + (r.speaker ? ` (${r.speaker.name})` : "") }] : []),
         ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools }]);
       setSaid(Date.now());
+      if (speak && r.text) say(r.text);
     } catch (e: any) { setLines((l) => [...l.slice(0, -1), { text: `Sorry, that didn't work: ${e.message}` }]); }
     finally { setBusy(false); }
   };
   const mic = async () => {
     if (rec) { rec.stop(); setRec(null); return; }
+    playing.current?.pause(); an.current = null; setTalking(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true }), r = new MediaRecorder(stream), parts: Blob[] = [];
+      try { const node = ac().createAnalyser(); node.fftSize = 512; ac().createMediaStreamSource(stream).connect(node); an.current = node; ac().resume(); } catch { /* no meter */ }
       r.ondataavailable = (e) => e.data.size && parts.push(e.data);
       r.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(parts, { type: r.mimeType || "audio/webm" }), b64 = btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));
-        send({ audio: b64, mime: blob.type.split(";")[0] }, "");
+        stream.getTracks().forEach((t) => t.stop()); an.current = null;
+        const blob = new Blob(parts, { type: r.mimeType || "audio/webm" });
+        send({ audio: toBase64(new Uint8Array(await blob.arrayBuffer())), mime: blob.type.split(";")[0] }, "");
       };
       r.start(); setRec(r);
     } catch { setLines((l) => [...l, { text: "The microphone isn't available (Home Assistant needs https for it)." }]); }
   };
   const answer = (id: string, approve: boolean) => api.call(`/api/ha/confirm/${id}`, { approve }).then((r: any) => setLines((l) => l.map((x) => (x.confirm?.id === id ? { ...x, confirm: { ...x.confirm, done: r.text } } : x)))).catch((e) => setLines((l) => [...l, { text: e.message }]));
+  const level = useCallback(() => (an.current ? meter(an.current) : undefined), []);
+  const state: EmblemState = rec ? "listening" : busy ? "thinking" : talking || (!speak && Date.now() - said < 3000) ? "speaking" : "idle";
+  const fresh = () => { conv.current = null; setLines([]); };
+  return { lines, busy, rec, state, level, send, mic, answer, fresh };
+}
 
+function Held({ l, answer }: { l: Line; answer: (id: string, ok: boolean) => void }) {
+  if (l.confirm) return <div className="box"><div>Do this? <b>{l.confirm.summary}</b></div>{l.confirm.done ? <div className="meta">{l.confirm.done}</div> : <div className="btns"><button className="primary" onClick={() => answer(l.confirm!.id, true)}>Yes</button><button onClick={() => answer(l.confirm!.id, false)}>No</button></div>}</div>;
+  return <div className="box wait"><div>Waiting for a grown-up: <b>{l.waiting}</b></div></div>;
+}
+
+function AskBar({ c, placeholder = "Ask FAITH" }: { c: ReturnType<typeof useChat>; placeholder?: string }) {
+  const [text, setText] = useState("");
+  return (
+    <form className="ask" onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (t && !c.busy) { setText(""); c.send({ text: t }, t); } }}>
+      <button type="button" className={c.rec ? "rec" : ""} title={c.rec ? "Stop and send" : "Talk"} disabled={c.busy} onClick={c.mic}><ha-icon icon={c.rec ? "mdi:stop" : "mdi:microphone"} /></button>
+      <input value={text} onChange={(e) => setText(e.target.value)} placeholder={c.rec ? "Listening… tap stop when done" : placeholder} />
+      <button className="primary" type="submit" disabled={c.busy || !text.trim()} title="Send"><ha-icon icon="mdi:send" /></button>
+    </form>
+  );
+}
+
+// ------------------------------------------------------------------ faith-chat-card
+function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
+  const c = useChat(api, config.speak === true), end = useRef<HTMLDivElement>(null);
+  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [c.lines]);
   return (
     <ha-card>
-      <div className="head"><Emblem className="emblem" size={56} tone={api.dark ? "dark" : "light"} state={rec ? "listening" : busy ? "thinking" : Date.now() - said < 3000 ? "speaking" : "idle"} /><h2>{config.title ?? "Ask FAITH"}</h2>{lines.length > 0 && <div className="right"><button className="ghost" onClick={() => { conv.current = null; setLines([]); }}>New</button></div>}</div>
+      <div className="head"><Emblem className="emblem" size={56} tone={api.dark ? "dark" : "light"} state={c.state} level={c.level} /><h2>{config.title ?? "Ask FAITH"}</h2>{c.lines.length > 0 && <div className="right"><button className="ghost" onClick={c.fresh}>New</button></div>}</div>
       <div className="chat">
-        {!lines.length && <div className="empty">What's on today? What's for dinner? Add milk to the list. Turn off the lights.</div>}
-        {lines.map((l, i) => l.confirm ? (
-          <div key={i} className="box"><div>Do this? <b>{l.confirm.summary}</b></div>{l.confirm.done ? <div className="meta">{l.confirm.done}</div> : <div className="btns"><button className="primary" onClick={() => answer(l.confirm!.id, true)}>Yes</button><button onClick={() => answer(l.confirm!.id, false)}>No</button></div>}</div>
-        ) : l.waiting ? (
-          <div key={i} className="box wait"><div>Waiting for a grown-up: <b>{l.waiting}</b></div></div>
-        ) : (
+        {!c.lines.length && <div className="empty">What's on today? What's for dinner? Add milk to the list. Turn off the lights.</div>}
+        {c.lines.map((l, i) => l.confirm || l.waiting ? <Held key={i} l={l} answer={c.answer} /> : (
           <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: l.me ? "flex-end" : "flex-start" }}>
             <div className={`msg ${l.me ? "me" : "faith"}`}>{l.text}</div>
             {!!l.tools?.length && <div className="chips">{[...new Set(l.tools.map(friendly))].map((t) => <span key={t} className="chip">{t}</span>)}</div>}
@@ -208,11 +266,65 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
         ))}
         <div ref={end} />
       </div>
-      <form className="ask" onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (t && !busy) { setText(""); send({ text: t }, t); } }}>
-        <button type="button" className={rec ? "rec" : ""} title={rec ? "Stop and send" : "Talk"} disabled={busy} onClick={mic}><ha-icon icon={rec ? "mdi:stop" : "mdi:microphone"} /></button>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={rec ? "Listening… tap stop when done" : "Ask FAITH"} />
-        <button className="primary" type="submit" disabled={busy || !text.trim()} title="Send"><ha-icon icon="mdi:send" /></button>
-      </form>
+      <AskBar c={c} />
+    </ha-card>
+  );
+}
+
+// ------------------------------------------------------------------ faith-hub-card (the wall screen)
+const greeting = (d: Date) => (d.getHours() < 5 ? "Good night" : d.getHours() < 12 ? "Good morning" : d.getHours() < 18 ? "Good afternoon" : "Good evening");
+
+/** The kitchen tablet's home: FAITH in the middle (tap to talk), the time, who's
+ *  here as hexagon faces, and FAITH's last answer, spoken aloud. */
+function HubCard({ api, config }: { api: Api; config: CardConfig }) {
+  const { data, err, load } = useView<View>(api, "/api/ha/view", { cards: (config.cards as string[] | undefined) ?? ["today"] }, 30_000);
+  const c = useChat(api, config.speak !== false);
+  const [now, setNow] = useState(new Date());
+  const [people, setPeople] = useState<People | null>(null), [pick, setPick] = useState<Person | null>(null);
+  useEffect(() => { const i = setInterval(() => setNow(new Date()), 10_000); return () => clearInterval(i); }, []);
+  useHubKeepAlive(api, data);
+  const shared = !!api.screen && !!data && !data.person;
+  useEffect(() => { if (shared && data?.can_sign_in) loadPeople(api).then(setPeople).catch(() => {}); }, [shared, data?.can_sign_in, data?.hub?.person.id]);
+  if (err) return <ha-card class="hub"><div className="err">{err}</div></ha-card>;
+
+  const me = data?.hub?.person ?? data?.person ?? null;
+  const last = [...c.lines].reverse().find((l) => !l.me && !l.confirm && !l.waiting);
+  const heard = [...c.lines].reverse().find((l) => l.me);
+  const held = c.lines.filter((l) => (l.confirm && !l.confirm.done) || l.waiting).slice(-2);
+  const next = data?.cards.flatMap((k) => (k.kind === "schedule" ? k.items ?? [] : [])).find((i) => !i.done);
+  const size = Number(config.size) || 300;
+  const hint = c.rec ? "Listening… tap FAITH to send" : c.busy ? "Thinking…" : c.state === "speaking" ? "" : "Tap FAITH to talk";
+
+  return (
+    <ha-card class="hub">
+      <div className="hub-top">
+        <div>
+          <div className="clock">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
+          <div className="eyebrow">{now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</div>
+        </div>
+        <div className="right">
+          {!!data?.pending_approvals && <span className="pill">{data.pending_approvals} waiting for approval</span>}
+          {data?.hub && <button onClick={() => signOut(api).then(load)}>Sign out {data.hub.person.name}</button>}
+        </div>
+      </div>
+      <div className="hub-mid">
+        <div className="hello">{greeting(now)}, <em>{me ? me.name : "everyone"}</em>.</div>
+        {next && <div className="meta">Next: {niceTime(next.time)} {next.title}</div>}
+        <button className="orb" onClick={c.mic} disabled={c.busy} aria-label={c.rec ? "Stop and send" : "Talk to FAITH"}>
+          <Emblem size={size} tone={api.dark ? "dark" : "light"} state={c.state} level={c.level} />
+        </button>
+        {hint && <div className="hint">{hint}</div>}
+        {heard && !c.rec && <div className="heard">“{heard.text}”</div>}
+        {last && last.text !== "…" && <div className="reply">{last.text}</div>}
+        {held.map((l, i) => <Held key={i} l={l} answer={c.answer} />)}
+      </div>
+      {config.show_input !== false && <AskBar c={c} placeholder="Or type to FAITH" />}
+      {shared && people && !data?.hub && (
+        <div className="faces">
+          {people.people.map((p) => <button key={p.id} className={`face ${people.suggested === p.id ? "on" : ""}`} onClick={() => setPick(p)}><Avatar p={p} size={56} ring={people.suggested === p.id} />{p.name}</button>)}
+        </div>
+      )}
+      {pick && <div className="overlay"><PinPad api={api} people={people} pick={pick} onBack={() => setPick(null)} onDone={() => { setPick(null); load(); }} /></div>}
     </ha-card>
   );
 }
@@ -231,7 +343,7 @@ function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
     <ha-card>
       <div className="head"><ha-icon icon="mdi:star-circle-outline" /><h2>{config.title ?? "Points & rewards"}</h2></div>
       {data.me ? (<>
-        <div className="section"><div className="eyebrow">{data.me.name}'s points</div><div className="big">{data.me.points}</div></div>
+        <div className="section mine"><div className="honey"><span className="big">{data.me.points}</span><span className="label">points</span></div><div><div className="eyebrow">{data.me.name}'s points</div><div className="meta">Do jobs, ask a grown-up, and spend them on rewards.</div></div></div>
         <div className="section"><h3>Jobs</h3><ul>{data.activities.filter((a) => a.kids_can_claim).map((a) => (
           <li key={a.id} className="row"><span className="grow">{a.name}</span><span className="pill">+{pts(a.points)}</span><button onClick={() => act("/api/ha/rewards/claim", { activity: a.id }, `Asked for ${pts(a.points)} for "${a.name}".`)}>I did it</button></li>))}</ul></div>
         <div className="section"><h3>Rewards</h3><ul>{data.rewards.map((r) => (
@@ -257,7 +369,7 @@ function define(tag: string, name: string, description: string, Comp: (p: { api:
     setConfig(config: CardConfig) { this._config = { ...config }; this._api = undefined; this.render(); }
     set hass(h: Hass) { const first = !this._hass; this._hass = h; if (first) this.render(); }
     getCardSize() { return size; }
-    static getStubConfig() { return tag === "faith-who-card" ? { screen: "kitchen" } : {}; }
+    static getStubConfig() { return tag === "faith-who-card" || tag === "faith-hub-card" ? { screen: "kitchen" } : {}; }
     connectedCallback() { this.render(); }
     private render() {
       if (!this._config || !this._hass) return;
@@ -277,4 +389,5 @@ function define(tag: string, name: string, description: string, Comp: (p: { api:
 define("faith-card", "FAITH", "The family's day from FAITH: today, meals, shopping, chores, the house and approvals, for whoever is looking.", FaithCard, 6);
 define("faith-who-card", "FAITH: who's here", "For a shared tablet: shows who is signed in, and lets a person sign in with their PIN.", WhoCard, 2);
 define("faith-chat-card", "FAITH: chat", "Talk or type to FAITH.", ChatCard, 6);
+define("faith-hub-card", "FAITH: hub", "The wall screen: FAITH in the middle (tap to talk, answers out loud), the time, and who's here.", HubCard, 9);
 define("faith-rewards-card", "FAITH: points & rewards", "Children's points, jobs to claim and rewards; parents give points.", RewardsCard, 4);
