@@ -39,6 +39,32 @@ function niceTime(t?: string) {
   return t;
 }
 
+/** FAITH's replies can carry a little Markdown (bold, italics, code, bullets).
+ *  Render just that, as React elements (never as HTML). */
+function Md({ text }: { text: string }) {
+  const inline = (line: string) => line.split(/(\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*|`[^`]+`)/g).map((t, i) =>
+    /^(\*\*|__).+\1$/.test(t) ? <b key={i}>{t.slice(2, -2)}</b> : /^\*.+\*$/.test(t) ? <i key={i}>{t.slice(1, -1)}</i> : /^`.+`$/.test(t) ? <code key={i}>{t.slice(1, -1)}</code> : t);
+  const out: ReactNode[] = [];
+  let list: ReactNode[] = [];
+  const flush = () => { if (list.length) out.push(<ul key={`l${out.length}`} className="md-list">{list}</ul>); list = []; };
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.replace(/^#{1,6}\s+/, "");
+    const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (m) { list.push(<li key={i}>{inline(m[1])}</li>); return; }
+    flush();
+    out.push(<span key={i} className="md-line">{inline(line)}{"\n"}</span>);
+  });
+  flush();
+  return <>{out}</>;
+}
+
+/** Times like "15:15" that have already passed today don't count as "next". */
+const upcoming = (time?: string, now = new Date()) => {
+  if (!time || !/^\d{2}:\d{2}$/.test(time)) return true;
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m >= now.getHours() * 60 + now.getMinutes();
+};
+
 /** Reload when this tablet's sign-in changes (any FAITH card on it can change it). */
 function useView<T>(api: Api, path: string, body: Record<string, unknown> = {}, everyMs = 60_000) {
   const [data, setData] = useState<T | null>(null), [err, setErr] = useState("");
@@ -260,7 +286,7 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
         {!c.lines.length && <div className="empty">What's on today? What's for dinner? Add milk to the list. Turn off the lights.</div>}
         {c.lines.map((l, i) => l.confirm || l.waiting ? <Held key={i} l={l} answer={c.answer} /> : (
           <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: l.me ? "flex-end" : "flex-start" }}>
-            <div className={`msg ${l.me ? "me" : "faith"}`}>{l.text}</div>
+            <div className={`msg ${l.me ? "me" : "faith"}`}>{l.me ? l.text : <Md text={l.text} />}</div>
             {!!l.tools?.length && <div className="chips">{[...new Set(l.tools.map(friendly))].map((t) => <span key={t} className="chip">{t}</span>)}</div>}
           </div>
         ))}
@@ -291,7 +317,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
   const last = [...c.lines].reverse().find((l) => !l.me && !l.confirm && !l.waiting);
   const heard = [...c.lines].reverse().find((l) => l.me);
   const held = c.lines.filter((l) => (l.confirm && !l.confirm.done) || l.waiting).slice(-2);
-  const next = data?.cards.flatMap((k) => (k.kind === "schedule" ? k.items ?? [] : [])).find((i) => !i.done);
+  const next = data?.cards.flatMap((k) => (k.kind === "schedule" ? k.items ?? [] : [])).find((i) => !i.done && upcoming(i.time, now));
   const size = Number(config.size) || 300;
   const hint = c.rec ? "Listening… tap FAITH to send" : c.busy ? "Thinking…" : c.state === "speaking" ? "" : "Tap FAITH to talk";
 
@@ -315,7 +341,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
         </button>
         {hint && <div className="hint">{hint}</div>}
         {heard && !c.rec && <div className="heard">“{heard.text}”</div>}
-        {last && last.text !== "…" && <div className="reply">{last.text}</div>}
+        {last && last.text !== "…" && <div className="reply"><Md text={last.text} /></div>}
         {held.map((l, i) => <Held key={i} l={l} answer={c.answer} />)}
       </div>
       {config.show_input !== false && <AskBar c={c} placeholder="Or type to FAITH" />}
@@ -386,8 +412,40 @@ function define(tag: string, name: string, description: string, Comp: (p: { api:
   (window.customCards ??= []).push({ type: tag, name, description, preview: false });
 }
 
-define("faith-card", "FAITH", "The family's day from FAITH: today, meals, shopping, chores, the house and approvals, for whoever is looking.", FaithCard, 6);
-define("faith-who-card", "FAITH: who's here", "For a shared tablet: shows who is signed in, and lets a person sign in with their PIN.", WhoCard, 2);
-define("faith-chat-card", "FAITH: chat", "Talk or type to FAITH.", ChatCard, 6);
-define("faith-hub-card", "FAITH: hub", "The wall screen: FAITH in the middle (tap to talk, answers out loud), the time, and who's here.", HubCard, 9);
-define("faith-rewards-card", "FAITH: points & rewards", "Children's points, jobs to claim and rewards; parents give points.", RewardsCard, 4);
+// Register only once Home Assistant's own frontend has started. Defined any
+// earlier (our file can run first), the cards end up where HA doesn't look and
+// the dashboard says "Custom element doesn't exist" until a reload (seen on HA
+// 2026.2 about one load in three).
+let registered = false;
+function register() {
+  if (registered) return;
+  registered = true;
+  define("faith-card", "FAITH", "The family's day from FAITH: today, meals, shopping, chores, the house and approvals, for whoever is looking.", FaithCard, 6);
+  define("faith-who-card", "FAITH: who's here", "For a shared tablet: shows who is signed in, and lets a person sign in with their PIN.", WhoCard, 2);
+  define("faith-chat-card", "FAITH: chat", "Talk or type to FAITH.", ChatCard, 6);
+  define("faith-hub-card", "FAITH: hub", "The wall screen: FAITH in the middle (tap to talk, answers out loud), the time, and who's here.", HubCard, 9);
+  define("faith-rewards-card", "FAITH: points & rewards", "Children's points, jobs to claim and rewards; parents give points.", RewardsCard, 4);
+  for (const ms of [0, 500, 2000, 6000]) setTimeout(rebuildMissing, ms);
+}
+const haReady = () => !!customElements.get("home-assistant");
+if (haReady()) register();
+else {
+  const poll = setInterval(() => { if (haReady()) { clearInterval(poll); register(); } }, 50);
+  setTimeout(() => { clearInterval(poll); register(); }, 20_000); // not inside HA (a test page): go anyway
+}
+
+// If HA built the dashboard before our cards were registered, it shows
+// "Custom element doesn't exist" for them. Ask HA to rebuild those cards.
+function rebuildMissing() {
+  const found: Element[] = [];
+  const walk = (root: Document | ShadowRoot) => root.querySelectorAll("*").forEach((el) => {
+    if (el.tagName === "HUI-ERROR-CARD") {
+      const c: any = (el as any)._config ?? (el as any).config ?? {};
+      if (/faith-[a-z-]*card/.test(`${c.origConfig?.type ?? ""} ${c.message ?? ""} ${c.error ?? ""}`)) found.push(el);
+    }
+    if (el.shadowRoot) walk(el.shadowRoot);
+  });
+  walk(document);
+  for (const el of found) el.dispatchEvent(new CustomEvent("ll-rebuild", { bubbles: true, composed: true }));
+  return found.length;
+}

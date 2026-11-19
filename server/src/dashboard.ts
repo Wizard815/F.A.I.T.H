@@ -102,17 +102,30 @@ export async function dashboard(cfg: Config, registry: Registry, caller: Caller,
   return { cards };
 }
 
+/** By this hour a meal of that kind is over, so "next meal" moves on. */
+const MEAL_ENDS: Record<string, number> = { breakfast: 10, brunch: 12, lunch: 14, snack: 17, dinner: 20, supper: 20 };
+/** The first meal that hasn't happened yet (meal-plan items carry a date and a label like "dinner"). */
+export function nextMeal<T extends { time?: string; label?: string }>(items: T[], now = new Date()): T | undefined {
+  const today = new Intl.DateTimeFormat("en-CA").format(now);
+  return items.find((i) => {
+    if (!i.time || !/^\d{4}-\d{2}-\d{2}$/.test(i.time) || i.time > today) return true;
+    if (i.time < today) return false;
+    const end = MEAL_ENDS[String(i.label || "").toLowerCase()];
+    return end === undefined || now.getHours() < end;
+  });
+}
+
 /** A small summary for Home Assistant sensors (household view only). */
 export async function haSummary(cfg: Config, registry: Registry, caller: Caller) {
   const d = await dashboard({ ...cfg, dashboard: { ...cfg.dashboard, cards: cfg.dashboard.cards.filter((c) => c.builtin) } }, registry, caller);
   const get = (id: string) => d.cards.find((c) => c.id === id);
-  const meals = (get("meals")?.items || []).map(line);
+  const next = nextMeal(get("meals")?.items || []);
   return {
     today_count: get("today")?.items?.length ?? 0,
     today: (get("today")?.items || []).slice(0, 5).map(line),
     shopping_count: get("shopping")?.items?.length ?? 0,
     shopping: (get("shopping")?.items || []).slice(0, 10).map((i) => i.title),
-    next_meal: meals[0] || null,
+    next_meal: next ? line(next) : null,
     chores_count: get("chores")?.items?.length ?? 0,
   };
 }

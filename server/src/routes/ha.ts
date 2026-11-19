@@ -99,7 +99,7 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   // ---- FAITH's voice for the hub card (Argos text-to-speech), as base64 over HA's websocket ----
   app.post("/api/ha/speak", async (req) => {
     who(req);
-    const text = String((req.body as any)?.text || "").slice(0, 2000).trim();
+    const text = speakable(String((req.body as any)?.text || "")).slice(0, 2000).trim();
     if (!text) throw new AuthError(400, "Nothing to say.");
     const m = x.cfg().model, v = x.cfg().voice, key = envValue(m.api_key_env, x.env);
     let r: Response;
@@ -179,6 +179,18 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     if (out?.error) throw new ModelError(400, out.error);
     return out;
   });
+}
+
+/** What a voice should read: the words, without Markdown's marks. */
+export function speakable(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, "")
+    .replace(/(\*\*|__|\*|_|`|~~)/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
 async function transcribe(x: HaCtx, audio: Buffer, mime: string) {

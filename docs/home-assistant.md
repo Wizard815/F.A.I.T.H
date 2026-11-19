@@ -108,12 +108,32 @@ The family uses Home Assistant; FAITH's own page is the admin console. The integ
   - Underneath are the family's faces as hexagons. Tap one for the PIN pad.
   - For a kiosk, put it alone on a panel view and pick the *FAITH* theme (`ha/themes/faith.yaml`).
   - Browsers only allow the microphone over https, so open HA on the tablet through https.
+  - Replies can use a little Markdown (bold, lists). The cards show it formatted, and the marks aren't read aloud.
 - **Each card asks FAITH as the HA user who's looking.** Map each person's HA user with `ha_user_id` in `faith.yaml`. A mapped user sees their own view.
 - **A tablet signed into HA as an unmapped "Family" user** sees the household view. Someone taps *Sign in* on the who card and enters their PIN. All FAITH cards on that tablet then show their view until they leave or sign out.
 - **Private things never go into HA sensors.** The cards fetch them live, for the person looking only.
 - **Phones:** give each person `ha_notify: [notify.mobile_app_<phone>]`. Approval requests arrive with Approve / Deny buttons. A tap decides as that person.
 - **Actions for automations:** `faith.send_message` (`to`: family, parents or a person) posts to Mattermost and/or their phone. `faith.award_points` gives points; from an automation, it waits for a parent's approval.
-- **Not yet checked in a live Home Assistant.**
-  - The cards build, and the integration's tests pass against HA 2026.2.
-  - The cards were screenshotted in a stand-in page that answers like HA's websocket.
-  - A run on a real dashboard (Docker HA) is next.
+- **Checked in a real Home Assistant (2026.2.3)** with the demo behind it:
+  - the integration set up through its config flow, and the sensors filled in;
+  - the theme applied;
+  - the hub card answered a question;
+  - a PIN sign-in on the hub switched every FAITH card on that tablet to that person's view;
+  - the *FAITH Admin* sidebar page opened and signed in.
+
+| | |
+|---|---|
+| ![The hub card in Home Assistant](screenshots/ha-live-hub.png) | ![Signed in on the hub](screenshots/ha-live-hub-signed-in.png) |
+| ![The day, chat, points and who cards, as Wizard](screenshots/ha-live-today.png) | ![FAITH Admin in HA's sidebar](screenshots/ha-live-admin.png) |
+
+### Try it against a test Home Assistant
+
+The demo prints a token for the integration:
+
+```bash
+DEMO_EMBED_FROM=http://<test HA>:8123 node --import tsx server/scripts/demo.ts
+```
+
+- Add the *FAITH* integration with the demo's address and that token.
+- `DEMO_EMBED_FROM` lets the sidebar page show FAITH.
+- `DEMO_HA_USER_WIZARD=<HA user id>` (also `_PARTNER`, `_KID`) maps an HA user to a demo person.

@@ -181,12 +181,26 @@ test("voice ID: enrolled voices are recognised on a shared screen; a parent's ch
   assert.equal(ha.states["light.kitchen"].state, "off");
 });
 
+// ---------------- the next-meal sensor ----------------
+test("next meal skips meals that are over for today", async () => {
+  const { nextMeal } = await import("../src/dashboard.js");
+  const day = (d: Date) => new Intl.DateTimeFormat("en-CA").format(d);
+  const at = (h: number) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d; };
+  const t = day(at(12)), tomorrow = day(new Date(at(12).getTime() + 86400000));
+  const items = [{ time: t, label: "breakfast", title: "Pancakes" }, { time: t, label: "dinner", title: "Fish tacos" }, { time: tomorrow, label: "breakfast", title: "Oats" }];
+  assert.equal(nextMeal(items, at(7))?.title, "Pancakes");
+  assert.equal(nextMeal(items, at(13))?.title, "Fish tacos");
+  assert.equal(nextMeal(items, at(21))?.title, "Oats");
+});
+
 // ---------------- the hub card's voice ----------------
 test("the hub card gets FAITH's reply spoken through Argos, and needs an HA token", async () => {
   const r = (await H("/api/ha/speak", { user_id: "ha-family", screen: "kitchen", text: "Dinner is fish tacos." })).json();
   assert.equal(r.mime, "audio/mpeg");
   assert.equal(Buffer.from(r.audio, "base64").toString(), "mp3:Dinner is fish tacos.");
   assert.equal((await H("/api/ha/speak", { text: "" })).statusCode, 400);
+  const md = (await H("/api/ha/speak", { text: "Tonight is **fish tacos**.\n- buy *limes*\n- `tortillas`" })).json();
+  assert.equal(Buffer.from(md.audio, "base64").toString(), "mp3:Tonight is fish tacos.\nbuy limes\ntortillas", "Markdown marks aren't read aloud");
   const res = await A.app.inject({ method: "POST", url: "/api/ha/speak", payload: { text: "hi" } });
   assert.ok(res.statusCode === 401 || res.statusCode === 403, "no token, no voice");
 });
