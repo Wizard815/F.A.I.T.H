@@ -111,7 +111,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `web/` | React + Tailwind app: wall view, home, chat, apps, sign-in, approvals (design: [architecture](docs/architecture.md#the-screens)) |
 | `ha/custom_components/faith` | the Home Assistant integration (`cd ha && pytest`) |
 | `config/faith.example.yaml` | every setting, commented |
-| `docs/` | [brand](docs/brand.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
+| `docs/` | [brand](docs/brand.md) · [rewards](docs/rewards.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
 
 ## API
 
@@ -145,7 +145,7 @@ FAITH ties these together. Each is its own repository:
 | [Wizard815/coinpile](https://github.com/Wizard815/coinpile) | money, only in a person's own view |
 | [Wizard815/pondering-orb](https://github.com/Wizard815/pondering-orb) | Wizard's own dashboard; FAITH's agent loop started from Orb's |
 | [Wizard815/omi-local](https://github.com/Wizard815/omi-local) | Omi memories, through ALLGlance |
-| [Wizard815/plaid-firefly-connector](https://github.com/Wizard815/plaid-firefly-connector) and [Wizard815/firefly-iii](https://github.com/Wizard815/firefly-iii) | later: paying approved rewards into a kid's card (a placeholder for now) |
+| [Wizard815/plaid-firefly-connector](https://github.com/Wizard815/plaid-firefly-connector) and [Wizard815/firefly-iii](https://github.com/Wizard815/firefly-iii) | the kid's card: approved money rewards are recorded as transfers to the child's account ([how](docs/rewards.md)) |
 | [home-assistant/core](https://github.com/home-assistant/core) | the house, Assist voice, phones, and the family dashboard |
 | [mealie-recipes/mealie](https://github.com/mealie-recipes/mealie) | meals and shopping lists, through Home Assistant's Mealie integration |
 | [mattermost/mattermost](https://github.com/mattermost/mattermost) | the family's chats: a personal chat each, family, parents |

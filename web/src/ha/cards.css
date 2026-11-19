@@ -93,3 +93,4 @@ button.face { display: flex; flex-direction: column; align-items: center; gap: 6
 .md-list li { margin: 1px 0; }
 .msg .md-line:last-child, .reply .md-line:last-child { white-space: normal; }
 code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--fc-bg2); border-radius: 5px; padding: 0 4px; }
+.cardbal { display: flex; align-items: center; gap: 6px; margin-top: 8px; } .cardbal ha-icon { --mdc-icon-size: 18px; color: var(--fc-accent); }

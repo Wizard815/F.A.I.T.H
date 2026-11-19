@@ -21,7 +21,8 @@
 - Mattermost: photos go to the vision model, voice messages through Argos's speech-to-text.
 - Routines that run for each person in their own view and go only to them (a morning brief in each personal chat).
 - Voice ID on HA's voice satellites: FAITH is the pipeline's speech-to-text (Wyoming), so it knows who said what; checked with HA's own Wyoming integration.
-- Points and rewards: 0.5 / 1 / 2 point jobs, rewards, parent approval; money rewards recorded as owed (Firefly card payout is a placeholder in `server/src/rewards.ts`).
+- Points and rewards: 0.5 / 1 / 2 point jobs, rewards, parent approval.
+- The kid's card: approved money rewards are recorded in Firefly III as transfers to the child's account, with retry and no double recording; the card balance shows on the points card ([rewards](rewards.md)).
 - Voice ID: `voiceid/` service (local, resemblyzer); FAITH keeps voiceprints and names the speaker on a shared screen.
 
 ## Next
@@ -29,6 +30,5 @@
 1. **A run on the real Unraid HA VM** with a real satellite and real voices. Synthetic voices are easier to tell apart than family members.
 2. **"Hey Faith" everywhere.** A custom openWakeWord model on the satellites, and FAITH's voice from Argos's text-to-speech (a Wyoming bridge, like FAITH's speech-to-text). Pass each satellite's room in, so "turn the lights off" means *this* room.
 3. **ALLGlance: a Mealie adapter**, so `allglance_get_day` includes tonight's dinner for agents that only use ALLGlance.
-4. **The kid's card.** Pay approved money rewards through the Firefly connector (the placeholder is `FireflyPayout` in `server/src/rewards.ts`).
-5. **Per-person dashboards in HA:** let each person arrange their own cards, saved in FAITH (today: `cards:` per person in `faith.yaml`).
-6. **Omi:** Omi already recognises its wearers, and their conversations reach the wiki per person. FAITH could use that as one more sign of who is home.
+4. **Per-person dashboards in HA:** let each person arrange their own cards, saved in FAITH (today: `cards:` per person in `faith.yaml`).
+5. **Omi:** Omi already recognises its wearers, and their conversations reach the wiki per person. FAITH could use that as one more sign of who is home.
