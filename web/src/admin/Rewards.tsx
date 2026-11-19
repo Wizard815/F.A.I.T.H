@@ -30,11 +30,11 @@ export function Rewards() {
       </Panel>
       <Panel title="Jobs that earn points">
         <Table head={["Job", "Points", "Kids can claim", "On"]}>{d.activities.map((a: any) => (
-          <tr key={a.id}><Td>{a.name}</Td><Td><select className="field min-h-[34px] w-20 py-0" value={a.points} onChange={(e) => go(api("/api/admin/rewards/activities", { body: { ...a, points: Number(e.target.value) } }), "Saved.")}>{d.allowed_points.map((n: number) => <option key={n}>{n}</option>)}</select></Td>
+          <tr key={a.id}><Td>{a.name}</Td><Td><select aria-label={`Points for ${a.name}`} className="field min-h-[34px] w-20 py-0" value={a.points} onChange={(e) => go(api("/api/admin/rewards/activities", { body: { ...a, points: Number(e.target.value) } }), "Saved.")}>{d.allowed_points.map((n: number) => <option key={n}>{n}</option>)}</select></Td>
             <Td><input type="checkbox" checked={a.kids_can_claim} onChange={(e) => go(api("/api/admin/rewards/activities", { body: { ...a, kids_can_claim: e.target.checked } }), "Saved.")} /></Td>
             <Td><input type="checkbox" checked={a.active} onChange={(e) => go(api("/api/admin/rewards/activities", { body: { ...a, active: e.target.checked } }), "Saved.")} /></Td></tr>))}</Table>
         <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const f = e.currentTarget; go(api("/api/admin/rewards/activities", { body: { name: (f.elements.namedItem("n") as HTMLInputElement).value, points: Number((f.elements.namedItem("p") as HTMLSelectElement).value) } }), "Added."); f.reset(); }}>
-          <input name="n" className="field flex-1" placeholder="New job, e.g. Walk the dog" /><select name="p" className="field w-20">{d.allowed_points.map((n: number) => <option key={n}>{n}</option>)}</select><button className="btn-soft">Add</button></form>
+          <input name="n" className="field flex-1" aria-label="New job" placeholder="New job, e.g. Walk the dog" /><select name="p" aria-label="Points it earns" className="field w-20">{d.allowed_points.map((n: number) => <option key={n}>{n}</option>)}</select><button className="btn-soft">Add</button></form>
       </Panel>
       <Panel title="Rewards">
         <Table head={["Reward", "Costs", "Kind", "On"]}>{d.rewards.map((r: any) => (
@@ -42,7 +42,7 @@ export function Rewards() {
             <Td><input type="checkbox" checked={r.active} onChange={(e) => go(api("/api/admin/rewards/catalog", { body: { ...r, active: e.target.checked } }), "Saved.")} /></Td></tr>))}</Table>
         <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); const f = e.currentTarget, money = Number((f.elements.namedItem("m") as HTMLInputElement).value);
           go(api("/api/admin/rewards/catalog", { body: { name: (f.elements.namedItem("n") as HTMLInputElement).value, cost: Number((f.elements.namedItem("c") as HTMLInputElement).value), ...(money ? { kind: "money", amount: money } : {}) } }), "Added."); f.reset(); }}>
-          <input name="n" className="field flex-1" placeholder="New reward" /><input name="c" className="field w-24" type="number" step="0.5" min="0.5" placeholder="points" /><input name="m" className="field w-28" type="number" step="0.01" min="0" placeholder={`${d.currency} (money)`} /><button className="btn-soft">Add</button></form>
+          <input name="n" className="field flex-1" aria-label="New reward" placeholder="New reward" /><input name="c" className="field w-24" type="number" step="0.5" min="0.5" aria-label="Points it costs" placeholder="points" /><input name="m" className="field w-28" type="number" step="0.01" min="0" placeholder={`${d.currency} (money)`} /><button className="btn-soft">Add</button></form>
       </Panel>
     </div>
     <div className="mt-5"><Panel title="Recent points">

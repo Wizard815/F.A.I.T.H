@@ -32,9 +32,9 @@ export function People({ me, passkeys }: { me: string; passkeys: boolean }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = (e.currentTarget.elements.namedItem("pin") as HTMLInputElement).value; go(api(`/api/admin/people/${p.id}/pin`, { method: "PUT", body: { pin: v } }), `PIN set for ${p.name}.`); e.currentTarget.reset(); }}>
-              <input name="pin" className="field w-32" type="password" inputMode="numeric" placeholder="New PIN" /><button className="btn-soft">Set</button></form>
+              <input name="pin" className="field w-32" type="password" inputMode="numeric" aria-label="New PIN (4 to 8 digits)" placeholder="New PIN" /><button className="btn-soft">Set</button></form>
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = (e.currentTarget.elements.namedItem("pw") as HTMLInputElement).value; go(api(`/api/admin/people/${p.id}/password`, { method: "PUT", body: { password: v } }), `Password set for ${p.name}.`); e.currentTarget.reset(); }}>
-              <input name="pw" className="field w-40" type="password" placeholder="New password" /><button className="btn-soft">Set</button></form>
+              <input name="pw" className="field w-40" type="password" aria-label="New password" placeholder="New password" /><button className="btn-soft">Set</button></form>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button className="btn-soft" onClick={() => voice(p.id)} disabled={!!rec && rec.who !== p.id}>{rec?.who === p.id ? <><Square size={16} />Stop and save</> : <><Mic size={16} />Add a voice sample</>}</button>

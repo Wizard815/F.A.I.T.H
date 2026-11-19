@@ -1,11 +1,12 @@
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; raw?: Blob } = {}): Promise<T> {
-  const r = await fetch(path, {
+  let r: Response;
+  try { r = await fetch(path, {
     method: opts.method || (opts.body || opts.raw ? "POST" : "GET"), credentials: "same-origin",
     headers: opts.raw ? { "Content-Type": opts.raw.type.split(";")[0] || "audio/webm" } : opts.body ? { "Content-Type": "application/json" } : undefined,
     body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  }); } catch { throw new ApiError(0, "FAITH isn't answering. Check that its container is running, then try again."); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new ApiError(r.status, data?.error || `Error ${r.status}`);
   return data as T;

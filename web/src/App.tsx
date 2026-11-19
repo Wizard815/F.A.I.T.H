@@ -23,7 +23,7 @@ export function App() {
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); }, [dark]);
   const refresh = useCallback(() => api<Session>("/api/session").then(setS).catch((e) => setErr(e.message)), []);
   useEffect(() => { refresh(); }, [refresh]);
-  if (!s) return <div className="grid h-full place-items-center text-muted">{err}</div>;
+  if (!s) return <div className="grid h-full place-items-center px-6 text-center text-muted" role="status">{err || "Loading…"}</div>;
   if (!s.person) return <SignIn s={s} onDone={refresh} />;
   const signOut = () => api("/api/auth/logout", { body: {} }).finally(refresh);
   if (s.person.role !== "admin") return (
@@ -59,12 +59,12 @@ function SignIn({ s, onDone }: { s: Session; onDone: () => void }) {
       <Emblem size={180} className="-mb-2 -ml-4" tone={document.documentElement.classList.contains("dark") ? "dark" : "light"} />
       <div><div className="eyebrow">{s.name} · admin</div><h1 className="mt-2 text-[34px] font-semibold leading-tight">Sign in to run FAITH</h1></div>
       <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); go(api("/api/auth/password", { body: { person: id.trim().toLowerCase(), password: pw } })); }}>
-        <input className="field" placeholder="Your id in FAITH (e.g. wizard)" value={id} onChange={(e) => setId(e.target.value)} autoCapitalize="none" autoComplete="username" />
-        <input className="field" type="password" placeholder="Password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />
+        <label className="label">Your id in FAITH<input className="field font-normal" placeholder="e.g. wizard" value={id} onChange={(e) => setId(e.target.value)} autoCapitalize="none" autoComplete="username" required /></label>
+        <label className="label">Password<input className="field font-normal" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
         <button className="btn-primary" type="submit">Sign in</button>
         {s.passkeys_possible && <button type="button" className="btn-soft" disabled={!id} onClick={() => go(faceId())}>Use Face ID</button>}
       </form>
-      {err && <ErrorText>{err}</ErrorText>}
+      <div role="alert" aria-live="assertive">{err && <ErrorText>{err}</ErrorText>}</div>
       <p className="text-[14px] text-muted">No password yet? On the server: <code>docker exec -it faith faith set-password &lt;id&gt;</code></p>
     </div>
   );
