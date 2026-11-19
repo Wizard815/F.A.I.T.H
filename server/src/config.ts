@@ -17,6 +17,7 @@ export type Person = {
   ha_user_id?: string;         // Home Assistant user id: Assist requests from this HA user act as this person
   face_names?: string[];       // names a camera face-recognition sensor reports for this person
   hermes_profile?: string;     // Hermes profile to use for this person (defaults to id)
+  firefly_account?: string;    // the kid's card: their Firefly III asset account (id or exact name)
   mattermost_username?: string; // their Mattermost account: their DMs with FAITH act as them
   ha_notify?: string[];         // HA notify services for their phone, e.g. notify.mobile_app_wizard_phone
   cards?: string[];             // their dashboard cards, in order (ids from dashboard.cards); default: all
@@ -165,7 +166,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const role = str(p.role, "adult") as Role;
     if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
-      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined,
+      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined,
       mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined,
       ha_notify: list(p.ha_notify).map((n) => (n.includes(".") ? n : `notify.${n}`)), cards: p.cards ? list(p.cards) : undefined };
   });
@@ -279,9 +280,10 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     rewards: (() => {
       const r = raw.rewards || {}, payout = str(r.payout, "manual");
       if (!["manual", "firefly"].includes(payout)) throw new ConfigError("rewards.payout is manual or firefly.");
+      if (payout === "firefly" && (!r.firefly?.url || !r.firefly?.from_account)) throw new ConfigError("rewards.payout: firefly needs rewards.firefly.url and rewards.firefly.from_account (the parents' account in Firefly).");
       const allowed = r.allowed_points ? (r.allowed_points as any[]).map(Number).filter((n) => n > 0) : [0.5, 1, 2];
       return { allowed_points: allowed, currency: str(r.currency, "$"), payout: payout as "manual" | "firefly",
-        firefly: r.firefly?.url ? { url: str(r.firefly.url), token_env: str(r.firefly.token_env, "FIREFLY_TOKEN"), from_account: str(r.firefly.from_account) } : undefined };
+        firefly: r.firefly?.url ? { url: str(r.firefly.url), token_env: str(r.firefly.token_env, "FIREFLY_TOKEN"), from_account: String(r.firefly.from_account) } : undefined };
     })(),
     notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
   };

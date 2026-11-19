@@ -38,7 +38,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const approvals = new Approvals(db, cfg, registry);
   const agent = new Agent(db, cfg, registry, env, approvals);
   const skills = new Skills(() => cfg().skills.dir);
-  const rewards = new Rewards(db, cfg);
+  const rewards = new Rewards(db, cfg, Date.now, env);
   const faithTools = new FaithTools(cfg, skills, rewards);
   registry.add(faithTools);
   const voices = new Voices(db, cfg, env);

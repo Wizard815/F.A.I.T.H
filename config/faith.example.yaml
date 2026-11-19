@@ -33,7 +33,7 @@ people:
     color: "#ff7a90"
     mattermost_username: partner
 # Later:
-#  - { id: kid1, name: Kid, role: child, color: "#3fb68b" }
+#  - { id: kid1, name: Kid, role: child, color: "#3fb68b", firefly_account: "Kid's card" }   # the kid's card (docs/rewards.md)
 
 # What each role may do. Defaults shown for child; admin/adult/household allow everything
 # their tokens can reach.
@@ -139,6 +139,16 @@ voice:
   confirm_on_voice: false        # locks etc. by voice need a screen unless this is true
   # stt_model: whisper           # Argos model names for speech-to-text and text-to-speech
   # tts_model: tts
+
+# Points and rewards. Money rewards: manual (recorded as owed) or firefly (a transfer to the kid's card account).
+# rewards:
+#   allowed_points: [0.5, 1, 2]
+#   currency: "$"
+#   payout: firefly
+#   firefly:
+#     url: http://firefly:8080
+#     token_env: FIREFLY_TOKEN
+#     from_account: Joint checking
 
 # Telling family voices apart (the voiceid service in voiceid/). Enrol voices in the admin page.
 # voice_id:

@@ -129,3 +129,32 @@ export async function fakeVoiceId() {
   const url = await listen(s);
   return { url, close: () => s.close() };
 }
+
+/** Enough of Firefly III's API for the kid's card: asset accounts, searching
+ *  transactions by external id, and recording a transfer (which moves balances). */
+export async function fakeFirefly(accounts: { id: string; name: string; balance: number }[], token = "ff-token") {
+  const txs: any[] = [], mode = { fail: "" as "" | "down" | "after-record" };
+  const s = createServer(async (req, res) => {
+    const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/vnd.api+json"); res.end(JSON.stringify(v)); };
+    if (req.headers.authorization !== `Bearer ${token}`) return json({ message: "Unauthenticated." }, 401);
+    if (mode.fail === "down") return json({ message: "Server Error" }, 500);
+    const u = new URL(req.url!, "http://x"), b = await body(req);
+    if (req.method === "GET" && u.pathname === "/api/v1/accounts")
+      return json({ data: accounts.map((a) => ({ type: "accounts", id: a.id, attributes: { name: a.name, type: "asset", current_balance: a.balance.toFixed(2), currency_code: "USD" } })), meta: { pagination: { total_pages: 1 } } });
+    if (req.method === "GET" && u.pathname === "/api/v1/search/transactions") {
+      const ext = (u.searchParams.get("query") || "").match(/external_id_is:"([^"]+)"/)?.[1];
+      return json({ data: txs.filter((t) => t.external_id === ext).map((t) => ({ type: "transactions", id: t.id })) });
+    }
+    if (req.method === "POST" && u.pathname === "/api/v1/transactions") {
+      const t = { id: String(txs.length + 100), ...b.transactions[0] };
+      txs.push(t);
+      const from = accounts.find((a) => a.id === t.source_id), to = accounts.find((a) => a.id === t.destination_id);
+      if (from && to) { from.balance -= Number(t.amount); to.balance += Number(t.amount); }
+      if (mode.fail === "after-record") return json({ message: "Gateway timeout" }, 504);
+      return json({ data: { type: "transactions", id: t.id } });
+    }
+    json({ message: "not found" }, 404);
+  });
+  const url = await listen(s);
+  return { url, txs, accounts, mode, close: () => s.close() };
+}

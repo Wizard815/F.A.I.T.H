@@ -86,12 +86,14 @@ export function registerAdminRoutes(app: FastifyInstance, x: AdminCtx) {
   // ---- points and rewards ----
   app.get("/api/admin/rewards", async (req) => {
     needAdmin(req);
-    return { activities: rewards.activities(true), rewards: rewards.rewards(true), balances: rewards.balances(), history: rewards.history(undefined, 40), payouts: rewards.payouts(), payout_provider: rewards.payout.name, allowed_points: cfg().rewards.allowed_points, currency: cfg().rewards.currency };
+    return { activities: rewards.activities(true), rewards: rewards.rewards(true), balances: rewards.balances(), history: rewards.history(undefined, 40), payouts: rewards.payouts(), payout_provider: rewards.payout.name,
+      cards: Object.fromEntries(await Promise.all(cfg().people.filter((p) => p.firefly_account).map(async (p) => [p.id, (await rewards.card(p.id)) ?? null] as const))), allowed_points: cfg().rewards.allowed_points, currency: cfg().rewards.currency };
   });
   app.post("/api/admin/rewards/activities", async (req) => { needAdmin(req); return rewards.saveActivity(req.body as any); });
   app.post("/api/admin/rewards/catalog", async (req) => { needAdmin(req); return rewards.saveReward(req.body as any); });
   app.post("/api/admin/rewards/award", async (req) => { const a = needAdmin(req), b: any = req.body || {}; return rewards.award(x.person(b.person).id, { points: Number(b.points), activity: b.activity, reason: b.reason }, a.scope.person.id); });
   app.post("/api/admin/rewards/payouts/:id/paid", async (req) => { needAdmin(req); rewards.markPaid((req.params as any).id); return { ok: true }; });
+  app.post("/api/admin/rewards/payouts/:id/retry", async (req) => { needAdmin(req); return rewards.pay((req.params as any).id); });
 
   // ---- the action log, and tokens ----
   app.get("/api/admin/audit", async (req) => { needAdmin(req); return x.db.prepare("SELECT * FROM audit ORDER BY id DESC LIMIT 200").all(); });

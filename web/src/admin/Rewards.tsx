@@ -17,15 +17,16 @@ export function Rewards() {
         {!kids.length && <p className="text-muted">No children in faith.yaml yet.</p>}
         <ul>{kids.map((k: any) => (
           <li key={k.person} className="flex flex-wrap items-center gap-3 border-b border-border py-3 last:border-0">
-            <span className="flex-1 font-medium">{k.name}</span><span className="font-serif text-[26px] font-semibold">{k.points}</span>
+            <span className="flex-1 font-medium">{k.name}{d.cards?.[k.person] && <span className="ml-2 text-[14px] font-normal text-muted">card {Number(d.cards[k.person].amount).toFixed(2)} {d.cards[k.person].currency}</span>}</span><span className="font-serif text-[26px] font-semibold">{k.points}</span>
             <div className="flex gap-1">{d.allowed_points.map((n: number) => <button key={n} className="btn-soft min-h-[36px] px-3" onClick={() => go(api("/api/admin/rewards/award", { body: { person: k.person, points: n, reason: "From the admin page" } }), `Gave ${k.name} ${n}.`)}>+{n}</button>)}</div>
           </li>))}</ul>
       </Panel>
       <Panel title="Money rewards" right={<Badge ok={null}>payout: {d.payout_provider}</Badge>}>
-        <p className="mb-3 text-[14px] text-muted">{d.payout_provider === "manual" ? "Money rewards are recorded as owed: pay them yourself, then tick them off. Paying straight into a kid's card (Firefly) is a placeholder for later (rewards.payout: firefly)." : "Firefly payouts are a placeholder: they're recorded as owed until the card is wired up."}</p>
+        <p className="mb-3 text-[14px] text-muted">{d.payout_provider === "manual" ? "Money rewards are recorded as owed: pay them yourself, then tick them off. To record them on a kid's card in Firefly III, set rewards.payout: firefly." : "Approved money rewards are recorded in Firefly III as a transfer from your account to the kid's card account (tagged faith). If one fails, fix the cause and retry it."}</p>
         {!d.payouts.length ? <p className="text-muted">Nothing owed.</p> : <ul>{d.payouts.map((p: any) => (
-          <li key={p.id} className="flex items-center gap-3 border-b border-border py-2 last:border-0"><span className="flex-1">{p.person_id}: {d.currency}{p.amount} for {p.reason}</span><Badge ok={p.status === "paid"}>{p.status}</Badge>
-            {p.status === "owed" && <button className="btn-soft min-h-[36px]" onClick={() => go(api(`/api/admin/rewards/payouts/${p.id}/paid`, { body: {} }), "Marked paid.")}>Paid</button>}</li>))}</ul>}
+          <li key={p.id} className="flex items-center gap-3 border-b border-border py-2 last:border-0"><span className="flex-1">{p.person_id}: {d.currency}{p.amount} for {p.reason}{p.note && <span className="block text-[13px] text-muted">{p.note}</span>}</span><Badge ok={p.status === "paid" ? true : p.status === "failed" ? false : null}>{p.status}</Badge>
+            {p.status !== "paid" && d.payout_provider === "firefly" && <button className="btn-soft min-h-[36px]" onClick={() => go(api(`/api/admin/rewards/payouts/${p.id}/retry`, { body: {} }), "Sent to Firefly again.")}>Retry</button>}
+            {p.status !== "paid" && <button className="btn-soft min-h-[36px]" onClick={() => go(api(`/api/admin/rewards/payouts/${p.id}/paid`, { body: {} }), "Marked paid.")}>Paid</button>}</li>))}</ul>}
       </Panel>
       <Panel title="Jobs that earn points">
         <Table head={["Job", "Points", "Kids can claim", "On"]}>{d.activities.map((a: any) => (

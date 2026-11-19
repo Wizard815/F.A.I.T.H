@@ -1,4 +1,4 @@
-import type { Config, Person } from "./config.js";
+import { envValue, type Config, type Person } from "./config.js";
 import type { Db } from "./db.js";
 import { newId } from "./secrets.js";
 
@@ -6,30 +6,92 @@ export class RewardsError extends Error { constructor(public status: number, mes
 
 export type Activity = { id: string; name: string; points: number; kids_can_claim: boolean; active: boolean };
 export type Reward = { id: string; name: string; cost: number; kind: "points" | "money"; amount: number | null; active: boolean };
-export type Payout = { id: string; person_id: string; amount: number; reason: string; status: "owed" | "paid" | "failed"; provider: string; note: string | null; at: number };
+export type Payout = { id: string; person_id: string; amount: number; reason: string; status: "owed" | "paid" | "failed"; provider: string; note: string | null; at: number; ref: string | null; by: string | null };
 
-/** Paying a money reward. Today: "manual" records what's owed, and a parent
- *  marks it paid. Later: "firefly" moves the money into the child's account
- *  (their debit card) through Firefly III / the Plaid-Firefly connector. */
-export interface PayoutProvider { name: string; pay(person: Person, amount: number, reason: string): Promise<{ status: "owed" | "paid" | "failed"; note: string }> }
+/** Paying a money reward. "manual" records what's owed, and a parent marks it
+ *  paid. "firefly" records a transfer in Firefly III from the parents' account
+ *  to the child's card account (people[].firefly_account). */
+export type PayResult = { status: "owed" | "paid" | "failed"; note: string; ref?: string };
+export interface PayoutProvider {
+  name: string;
+  pay(person: Person, amount: number, reason: string, payoutId: string, by: string): Promise<PayResult>;
+  /** The child's card balance, where the provider knows it. */
+  balance?(person: Person): Promise<{ amount: number; currency: string } | undefined>;
+}
 
 export class ManualPayout implements PayoutProvider {
   name = "manual";
   async pay() { return { status: "owed" as const, note: "Recorded. Pay it yourself, then mark it paid in FAITH's admin page." }; }
 }
 
-/** Placeholder for the kid's card: a transfer in Firefly III from the parents'
- *  account to the child's (people[].firefly_account). Not wired up yet: it
- *  records the payout as owed and says so, so nothing is lost meanwhile. */
+type FfAccount = { id: string; name: string; balance: number; currency: string };
+
+/** The kid's card, kept in Firefly III: each approved money reward becomes a
+ *  transfer from the parents' account (rewards.firefly.from_account) to the
+ *  child's (people[].firefly_account), tagged "faith". An id or an exact
+ *  account name works for both. A retry first looks for the transfer by its
+ *  external id, so a reward is never recorded twice. */
 export class FireflyPayout implements PayoutProvider {
   name = "firefly";
-  constructor(private cfg: NonNullable<Config["rewards"]["firefly"]> | undefined) {}
-  async pay(person: Person, amount: number, reason: string) {
-    // TODO(kid card): POST {url}/api/v1/transactions { type: "transfer", source_id: from_account,
-    //   destination_id: <the child's account>, amount, description: reason } with the token in token_env,
-    //   then return { status: "paid" }. Until then nothing moves.
-    void person; void amount; void reason;
-    return { status: "owed" as const, note: this.cfg ? "Paying into the card isn't switched on yet; recorded as owed." : "rewards.firefly isn't set up; recorded as owed." };
+  private cache?: { at: number; accounts: FfAccount[] };
+  constructor(private cfg: () => Config, private env: NodeJS.ProcessEnv = process.env) {}
+  private get ff() { return this.cfg().rewards.firefly; }
+
+  private async api(method: string, path: string, body?: unknown): Promise<any> {
+    const ff = this.ff!, token = envValue(ff.token_env, this.env);
+    if (!token) throw new RewardsError(503, `Firefly needs a personal access token in ${ff.token_env}.`);
+    let r: Response;
+    try {
+      r = await fetch(`${ff.url.replace(/\/+$/, "")}/api/v1${path}`, { method, signal: AbortSignal.timeout(20_000),
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.api+json", "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch (e: any) { throw new RewardsError(502, `Couldn't reach Firefly (${e?.cause?.code || e?.message}).`); }
+    const text = await r.text(); let data: any = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!r.ok) throw new RewardsError(502, `Firefly answered ${r.status}: ${data?.message || String(text).slice(0, 160)}`);
+    return data;
+  }
+  private async accounts(fresh = false): Promise<FfAccount[]> {
+    if (!fresh && this.cache && Date.now() - this.cache.at < 60_000) return this.cache.accounts;
+    const out: FfAccount[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const d = await this.api("GET", `/accounts?type=asset&limit=100&page=${page}`);
+      for (const a of d?.data ?? []) out.push({ id: String(a.id), name: String(a.attributes?.name ?? ""), balance: Number(a.attributes?.current_balance ?? 0), currency: String(a.attributes?.currency_code ?? "") });
+      if (page >= Number(d?.meta?.pagination?.total_pages ?? 1)) break;
+    }
+    this.cache = { at: Date.now(), accounts: out };
+    return out;
+  }
+  private async account(key: string, fresh = false) {
+    const k = key.trim(), list = await this.accounts(fresh);
+    return list.find((a) => a.id === k) ?? list.find((a) => a.name.toLowerCase() === k.toLowerCase());
+  }
+
+  async pay(person: Person, amount: number, reason: string, payoutId: string, by: string): Promise<PayResult> {
+    const ff = this.ff;
+    if (!ff) return { status: "owed", note: "rewards.firefly isn't set up in faith.yaml; recorded as owed." };
+    if (!person.firefly_account) return { status: "owed", note: `${person.name} has no firefly_account in faith.yaml; recorded as owed.` };
+    try {
+      const external = `faith-payout-${payoutId}`;
+      const found = await this.api("GET", `/search/transactions?query=${encodeURIComponent(`external_id_is:"${external}"`)}&limit=1`);
+      if (found?.data?.length) return { status: "paid", ref: String(found.data[0].id), note: `Already in Firefly (transaction ${found.data[0].id}).` };
+      const from = await this.account(ff.from_account), to = await this.account(person.firefly_account);
+      if (!from) return { status: "failed", note: `Firefly has no asset account "${ff.from_account}" (rewards.firefly.from_account).` };
+      if (!to) return { status: "failed", note: `Firefly has no asset account "${person.firefly_account}" (${person.id}'s firefly_account).` };
+      const d = await this.api("POST", "/transactions", {
+        error_if_duplicate_hash: false, apply_rules: true, fire_webhooks: true,
+        transactions: [{ type: "transfer", date: new Date().toISOString(), amount: amount.toFixed(2), description: reason,
+          source_id: from.id, destination_id: to.id, tags: ["faith", "kid-reward"], external_id: external, notes: `Approved in FAITH by ${by}.` }],
+      });
+      this.cache = undefined; // balances changed
+      return { status: "paid", ref: String(d?.data?.id ?? ""), note: `Recorded in Firefly: ${amount.toFixed(2)} from ${from.name} to ${to.name}${d?.data?.id ? ` (transaction ${d.data.id})` : ""}.` };
+    } catch (e: any) {
+      return { status: "failed", note: `${e.message} Nothing was recorded; retry from the admin page.` };
+    }
+  }
+
+  async balance(person: Person) {
+    if (!this.ff || !person.firefly_account) return undefined;
+    const a = await this.account(person.firefly_account).catch(() => undefined);
+    return a ? { amount: a.balance, currency: a.currency } : undefined;
   }
 }
 
@@ -38,14 +100,15 @@ export class FireflyPayout implements PayoutProvider {
  *  approvals queue). Parents can also give points directly. */
 export class Rewards {
   payout: PayoutProvider;
-  constructor(private db: Db, private cfg: () => Config, now: () => number = Date.now) {
+  constructor(private db: Db, private cfg: () => Config, now: () => number = Date.now, env: NodeJS.ProcessEnv = process.env) {
     this.now = now;
     db.exec(`
       CREATE TABLE IF NOT EXISTS reward_activities (id TEXT PRIMARY KEY, name TEXT NOT NULL, points REAL NOT NULL, kids_can_claim INTEGER NOT NULL DEFAULT 1, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE IF NOT EXISTS reward_catalog (id TEXT PRIMARY KEY, name TEXT NOT NULL, cost REAL NOT NULL, kind TEXT NOT NULL DEFAULT 'points', amount REAL, active INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE IF NOT EXISTS points_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, delta REAL NOT NULL, reason TEXT NOT NULL, by TEXT NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS payouts (id TEXT PRIMARY KEY, person_id TEXT NOT NULL, amount REAL NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL, provider TEXT NOT NULL, note TEXT, at INTEGER NOT NULL);`);
-    this.payout = cfg().rewards.payout === "firefly" ? new FireflyPayout(cfg().rewards.firefly) : new ManualPayout();
+    for (const col of ["ref TEXT", "by TEXT"]) { try { db.exec(`ALTER TABLE payouts ADD COLUMN ${col}`); } catch { /* already there */ } }
+    this.payout = cfg().rewards.payout === "firefly" ? new FireflyPayout(cfg, env) : new ManualPayout();
   }
   private now: () => number;
 
@@ -114,15 +177,26 @@ export class Rewards {
     this.db.prepare("INSERT INTO points_ledger (person_id, delta, reason, by, at) VALUES (?, ?, ?, ?, ?)").run(p.id, -r.cost, `Reward: ${r.name}`, by, this.now());
     let payout: Payout | undefined;
     if (r.kind === "money" && r.amount) {
-      const res = await this.payout.pay(p, r.amount, `FAITH reward: ${r.name}`);
+      // Write it down first, so a crash mid-payment still leaves it on the books as owed.
       const id = newId();
-      this.db.prepare("INSERT INTO payouts (id, person_id, amount, reason, status, provider, note, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(id, p.id, r.amount, r.name, res.status, this.payout.name, res.note, this.now());
-      payout = this.payouts().find((x) => x.id === id);
+      this.db.prepare("INSERT INTO payouts (id, person_id, amount, reason, status, provider, note, at, by) VALUES (?, ?, ?, ?, 'owed', ?, ?, ?, ?)").run(id, p.id, r.amount, r.name, this.payout.name, "Paying…", this.now(), by);
+      payout = await this.pay(id);
     }
     return { person: p.id, name: p.name, reward: r.name, cost: r.cost, balance: this.balance(p.id), payout };
   }
   payouts(status?: string): Payout[] { return (status ? this.db.prepare("SELECT * FROM payouts WHERE status = ? ORDER BY at DESC").all(status) : this.db.prepare("SELECT * FROM payouts ORDER BY at DESC LIMIT 100").all()) as any[]; }
-  markPaid(id: string) { if (!Number(this.db.prepare("UPDATE payouts SET status = 'paid' WHERE id = ? AND status = 'owed'").run(id).changes)) throw new RewardsError(404, "No payout owed with that id."); }
+  markPaid(id: string) { if (!Number(this.db.prepare("UPDATE payouts SET status = 'paid', note = 'Marked paid by hand.' WHERE id = ? AND status IN ('owed', 'failed')").run(id).changes)) throw new RewardsError(404, "No payout owed with that id."); }
+  /** Send a payout to the provider (again, after a failure or once Firefly is set up). */
+  async pay(id: string) {
+    const row = this.payouts().find((x) => x.id === id);
+    if (!row) throw new RewardsError(404, "No payout with that id.");
+    if (row.status === "paid") throw new RewardsError(409, "That one is already paid.");
+    const res = await this.payout.pay(this.person(row.person_id), row.amount, `FAITH reward: ${row.reason}`, id, row.by || "a parent");
+    this.db.prepare("UPDATE payouts SET status = ?, note = ?, ref = ?, provider = ? WHERE id = ?").run(res.status, res.note, res.ref ?? null, this.payout.name, id);
+    return this.payouts().find((x) => x.id === id)!;
+  }
+  /** The kid's card balance (Firefly), if there is one. */
+  async card(personId: string) { const p = this.cfg().people.find((x) => x.id === personId); return p && this.payout.balance ? this.payout.balance(p).catch(() => undefined) : undefined; }
 
   /** Seed a starter catalogue the first time (the admin page edits it after). */
   seed() {

@@ -356,7 +356,10 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
 }
 
 // ------------------------------------------------------------------ faith-rewards-card
-type RewardsView = { me: (Person & { points: number; history: any[] }) | null; kids: (Person & { points: number })[]; activities: { id: string; name: string; points: number; kids_can_claim: boolean }[]; rewards: { id: string; name: string; cost: number; kind: string; amount: number | null }[]; can_give: boolean; allowed_points: number[] };
+type Card = { amount: number; currency: string } | null;
+type RewardsView = { me: (Person & { points: number; history: any[]; card: Card }) | null; kids: (Person & { points: number; card: Card })[]; activities: { id: string; name: string; points: number; kids_can_claim: boolean }[]; rewards: { id: string; name: string; cost: number; kind: string; amount: number | null }[]; can_give: boolean; allowed_points: number[] };
+
+const money = (c: NonNullable<Card>) => { try { return new Intl.NumberFormat([], { style: "currency", currency: c.currency || "USD" }).format(c.amount); } catch { return `${c.amount.toFixed(2)} ${c.currency}`; } };
 
 function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
   const { data, err, load } = useView<RewardsView>(api, "/api/ha/rewards");
@@ -369,15 +372,15 @@ function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
     <ha-card>
       <div className="head"><ha-icon icon="mdi:star-circle-outline" /><h2>{config.title ?? "Points & rewards"}</h2></div>
       {data.me ? (<>
-        <div className="section mine"><div className="honey"><span className="big">{data.me.points}</span><span className="label">points</span></div><div><div className="eyebrow">{data.me.name}'s points</div><div className="meta">Do jobs, ask a grown-up, and spend them on rewards.</div></div></div>
+        <div className="section mine"><div className="honey"><span className="big">{data.me.points}</span><span className="label">points</span></div><div><div className="eyebrow">{data.me.name}'s points</div><div className="meta">Do jobs, ask a grown-up, and spend them on rewards.</div>{data.me.card && <div className="cardbal"><ha-icon icon="mdi:credit-card-outline" />My card: <b>{money(data.me.card)}</b></div>}</div></div>
         <div className="section"><h3>Jobs</h3><ul>{data.activities.filter((a) => a.kids_can_claim).map((a) => (
           <li key={a.id} className="row"><span className="grow">{a.name}</span><span className="pill">+{pts(a.points)}</span><button onClick={() => act("/api/ha/rewards/claim", { activity: a.id }, `Asked for ${pts(a.points)} for "${a.name}".`)}>I did it</button></li>))}</ul></div>
         <div className="section"><h3>Rewards</h3><ul>{data.rewards.map((r) => (
-          <li key={r.id} className="row"><span className="grow">{r.name}</span><span className="pill">{pts(r.cost)}</span><button className="primary" disabled={data.me!.points < r.cost} onClick={() => act("/api/ha/rewards/redeem", { reward: r.id }, `Asked for "${r.name}".`)}>Get it</button></li>))}</ul></div>
+          <li key={r.id} className="row"><span className="grow">{r.name}{r.kind === "money" && r.amount && data.me!.card && !/card/i.test(r.name) ? <span className="meta"> · onto your card</span> : null}</span><span className="pill">{pts(r.cost)}</span><button className="primary" disabled={data.me!.points < r.cost} onClick={() => act("/api/ha/rewards/redeem", { reward: r.id }, `Asked for "${r.name}".`)}>Get it</button></li>))}</ul></div>
       </>) : (<>
         {!data.kids.length && <div className="empty">No children in FAITH's family list yet.</div>}
         <ul>{data.kids.map((k) => (
-          <li key={k.id} className="row"><Avatar p={k} size={34} /><span className="grow">{k.name}</span><span className="pill">{pts(k.points)}</span>
+          <li key={k.id} className="row"><Avatar p={k} size={34} /><span className="grow">{k.name}{k.card && <span className="meta"> · card {money(k.card)}</span>}</span><span className="pill">{pts(k.points)}</span>
             {data.can_give && <div className="btns">{data.allowed_points.map((n) => <button key={n} onClick={() => act("/api/ha/rewards/award", { person: k.id, points: n, reason: "Well done (from the dashboard)" }, `Gave ${k.name} ${pts(n)}.`)}>+{n}</button>)}</div>}
           </li>))}</ul>
         {!data.can_give && data.kids.length > 0 && <div className="meta">Sign in to give points.</div>}
