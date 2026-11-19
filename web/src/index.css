@@ -49,6 +49,10 @@ html, body, #root { height: 100%; }
 body { @apply bg-background text-foreground font-sans antialiased; -webkit-tap-highlight-color: transparent; }
 h1, h2, h3 { @apply font-serif; }
 ::selection { background: rgb(var(--primary) / 0.25); }
+/* Keyboard focus is always visible (a gold ring), never only a colour change. */
+:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; border-radius: 6px; }
+.skip { position: absolute; left: 12px; top: -48px; z-index: 60; padding: 10px 14px; border-radius: 10px; background: rgb(var(--primary)); color: rgb(var(--primary-foreground)); font-weight: 600; }
+.skip:focus { top: 12px; }
 
 @layer components {
   .card { @apply rounded-card border border-border bg-surface shadow-surface; }
@@ -58,5 +62,6 @@ h1, h2, h3 { @apply font-serif; }
   .btn-soft { @apply btn border border-border bg-surface text-foreground hover:bg-surface-2; }
   .btn-ghost { @apply btn text-muted hover:text-foreground; }
   .icon-btn { @apply inline-flex h-11 w-11 items-center justify-center rounded-input border border-border bg-surface text-foreground transition-colors hover:bg-surface-2; }
-  .field { @apply min-h-[44px] w-full rounded-input border border-border bg-background px-3.5 text-foreground placeholder:text-muted focus:border-primary focus:outline-none; }
+  .field { @apply min-h-[44px] w-full rounded-input border border-border bg-background px-3.5 text-foreground placeholder:text-muted focus:border-primary; }
+  .label { @apply flex flex-col gap-1.5 text-[14px] font-medium text-muted; }
 }

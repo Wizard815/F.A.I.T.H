@@ -17,19 +17,20 @@ export const PAGES: { id: Page; label: string; icon: ReactNode }[] = [
 export function Shell({ page, onPage, name, who, dark, onTheme, onSignOut, children }: { page: Page; onPage: (p: Page) => void; name: string; who: string; dark: boolean; onTheme: () => void; onSignOut: () => void; children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col md:flex-row">
+      <a href="#main" className="skip">Skip to the page</a>
       <aside className="border-b border-border bg-surface md:sticky md:top-0 md:h-screen md:w-64 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 px-4 py-4"><Emblem size={44} tone={dark ? "dark" : "light"} /><span className="font-serif text-[20px] font-semibold">{name}</span><span className="ml-1 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-semibold text-primary">Admin</span></div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
+        <nav aria-label="Admin pages" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
           {PAGES.map((p) => (
-            <button key={p.id} onClick={() => onPage(p.id)} className={cn("flex shrink-0 items-center gap-3 rounded-input px-3 py-2.5 text-left font-medium transition-colors", page === p.id ? "bg-primary-soft text-primary" : "text-muted hover:text-foreground")}>{p.icon}{p.label}</button>
+            <button key={p.id} onClick={() => onPage(p.id)} aria-current={page === p.id ? "page" : undefined} className={cn("flex shrink-0 items-center gap-3 rounded-input px-3 py-2.5 text-left font-medium transition-colors", page === p.id ? "bg-primary-soft text-primary" : "text-muted hover:text-foreground")}>{p.icon}{p.label}</button>
           ))}
         </nav>
         <div className="hidden px-5 py-4 text-[14px] text-muted md:block">
           <div className="flex items-center gap-2"><ShieldCheck size={16} />{who}</div>
-          <div className="mt-3 flex gap-2"><button className="icon-btn h-9 w-9" onClick={onTheme} title="Light / dark">{dark ? <Sun size={16} /> : <Moon size={16} />}</button><button className="icon-btn h-9 w-9" onClick={onSignOut} title="Sign out"><LogOut size={16} /></button></div>
+          <div className="mt-3 flex gap-2"><button className="icon-btn h-9 w-9" onClick={onTheme} title={dark ? "Light mode" : "Dark mode"} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button><button className="icon-btn h-9 w-9" onClick={onSignOut} title="Sign out" aria-label="Sign out"><LogOut size={16} /></button></div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8">{children}</main>
+      <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 focus:outline-none sm:px-8">{children}</main>
     </div>
   );
 }

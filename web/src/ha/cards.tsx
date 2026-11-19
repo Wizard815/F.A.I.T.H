@@ -86,11 +86,11 @@ function Approvals({ api, items, can, onDone }: { api: Api; items: NonNullable<C
     <ul>{items.map((a) => (
       <li key={a.id} className="row">
         <div className="grow"><div>{a.summary}</div><div className="meta">Asked by {a.requested_by.replace(/^household on /, "the ")}</div></div>
-        {can && <div className="btns"><button className="primary" onClick={() => decide(a.id, true)}>Approve</button><button onClick={() => decide(a.id, false)}>Deny</button></div>}
+        {can && <div className="btns"><button className="primary" aria-label={`Approve: ${a.summary}`} onClick={() => decide(a.id, true)}>Approve</button><button aria-label={`Deny: ${a.summary}`} onClick={() => decide(a.id, false)}>Deny</button></div>}
       </li>))}
     </ul>
     {!can && <div className="meta">A grown-up approves these (signed in here, or on their phone).</div>}
-    {msg && <div className="toast">{msg}</div>}
+    <div className="toast" role="status">{msg}</div>
   </>);
 }
 
@@ -140,15 +140,29 @@ function PinPad({ api, people, pick, onBack, onDone }: { api: Api; people: Peopl
     catch (e: any) { setMsg(e.message); setPin(""); }
   };
   const press = (d: string) => setPin((p) => (p + d).slice(0, 8));
+  // A keyboard works too: digits, Backspace, Enter, Escape.
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const el = e.composedPath()[0] as HTMLElement | undefined;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return; // typing somewhere else
+      if (/^[0-9]$/.test(e.key)) press(e.key);
+      else if (e.key === "Backspace") setPin((p) => p.slice(0, -1));
+      else if (e.key === "Enter") { if (pin.length >= 4) signIn({ person: pick.id, pin }); }
+      else if (e.key === "Escape") onBack();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [pin, pick.id]);
   return (
-    <div className="pin">
+    <div className="pin" role="group" aria-label={`PIN for ${pick.name}`}>
       <div className="head" style={{ margin: 0 }}><Avatar p={pick} size={44} /><h2>Hi, {pick.name}</h2><button className="ghost" style={{ marginLeft: "auto" }} onClick={onBack}>Back</button></div>
       {people?.face_unlock && people.suggested === pick.id && <button className="primary" onClick={() => signIn({ person: pick.id, face: true })}>It's me (camera)</button>}
-      <div className="dots">{Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? "on" : ""} />)}</div>
+      <div className="dots" role="status" aria-label={`${pin.length} digit${pin.length === 1 ? "" : "s"} entered`}>{Array.from({ length: Math.max(4, pin.length) }, (_, i) => <span key={i} className={i < pin.length ? "on" : ""} />)}</div>
       <div className="keys">{["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => <button key={d} onClick={() => press(d)}>{d}</button>)}
         <button onClick={() => setPin(pin.slice(0, -1))} aria-label="Delete">⌫</button><button onClick={() => press("0")}>0</button>
         <button className="primary" disabled={pin.length < 4} onClick={() => signIn({ person: pick.id, pin })}>OK</button></div>
-      {msg && <div className="err">{msg}</div>}
+      <div className="err" role="alert">{msg}</div>
     </div>
   );
 }
@@ -268,9 +282,9 @@ function AskBar({ c, placeholder = "Ask FAITH" }: { c: ReturnType<typeof useChat
   const [text, setText] = useState("");
   return (
     <form className="ask" onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (t && !c.busy) { setText(""); c.send({ text: t }, t); } }}>
-      <button type="button" className={c.rec ? "rec" : ""} title={c.rec ? "Stop and send" : "Talk"} disabled={c.busy} onClick={c.mic}><ha-icon icon={c.rec ? "mdi:stop" : "mdi:microphone"} /></button>
-      <input value={text} onChange={(e) => setText(e.target.value)} placeholder={c.rec ? "Listening… tap stop when done" : placeholder} />
-      <button className="primary" type="submit" disabled={c.busy || !text.trim()} title="Send"><ha-icon icon="mdi:send" /></button>
+      <button type="button" className={c.rec ? "rec" : ""} title={c.rec ? "Stop and send" : "Talk"} aria-label={c.rec ? "Stop recording and send" : "Talk to FAITH"} aria-pressed={!!c.rec} disabled={c.busy} onClick={c.mic}><ha-icon icon={c.rec ? "mdi:stop" : "mdi:microphone"} /></button>
+      <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Message to FAITH" placeholder={c.rec ? "Listening… tap stop when done" : placeholder} />
+      <button className="primary" type="submit" disabled={c.busy || !text.trim()} title="Send" aria-label="Send"><ha-icon icon="mdi:send" /></button>
     </form>
   );
 }
@@ -282,7 +296,7 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
   return (
     <ha-card>
       <div className="head"><Emblem className="emblem" size={56} tone={api.dark ? "dark" : "light"} state={c.state} level={c.level} /><h2>{config.title ?? "Ask FAITH"}</h2>{c.lines.length > 0 && <div className="right"><button className="ghost" onClick={c.fresh}>New</button></div>}</div>
-      <div className="chat">
+      <div className="chat" role="log" aria-live="polite" aria-label="Conversation with FAITH">
         {!c.lines.length && <div className="empty">What's on today? What's for dinner? Add milk to the list. Turn off the lights.</div>}
         {c.lines.map((l, i) => l.confirm || l.waiting ? <Held key={i} l={l} answer={c.answer} /> : (
           <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: l.me ? "flex-end" : "flex-start" }}>
@@ -341,7 +355,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
         </button>
         {hint && <div className="hint">{hint}</div>}
         {heard && !c.rec && <div className="heard">“{heard.text}”</div>}
-        {last && last.text !== "…" && <div className="reply"><Md text={last.text} /></div>}
+        <div aria-live="polite">{last && last.text !== "…" && <div className="reply"><Md text={last.text} /></div>}</div>
         {held.map((l, i) => <Held key={i} l={l} answer={c.answer} />)}
       </div>
       {config.show_input !== false && <AskBar c={c} placeholder="Or type to FAITH" />}
@@ -381,11 +395,11 @@ function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
         {!data.kids.length && <div className="empty">No children in FAITH's family list yet.</div>}
         <ul>{data.kids.map((k) => (
           <li key={k.id} className="row"><Avatar p={k} size={34} /><span className="grow">{k.name}{k.card && <span className="meta"> · card {money(k.card)}</span>}</span><span className="pill">{pts(k.points)}</span>
-            {data.can_give && <div className="btns">{data.allowed_points.map((n) => <button key={n} onClick={() => act("/api/ha/rewards/award", { person: k.id, points: n, reason: "Well done (from the dashboard)" }, `Gave ${k.name} ${pts(n)}.`)}>+{n}</button>)}</div>}
+            {data.can_give && <div className="btns">{data.allowed_points.map((n) => <button key={n} aria-label={`Give ${k.name} ${pts(n)}`} onClick={() => act("/api/ha/rewards/award", { person: k.id, points: n, reason: "Well done (from the dashboard)" }, `Gave ${k.name} ${pts(n)}.`)}>+{n}</button>)}</div>}
           </li>))}</ul>
         {!data.can_give && data.kids.length > 0 && <div className="meta">Sign in to give points.</div>}
       </>)}
-      {msg && <div className="toast">{msg}</div>}
+      <div className="toast" role="status">{msg}</div>
     </ha-card>
   );
 }
