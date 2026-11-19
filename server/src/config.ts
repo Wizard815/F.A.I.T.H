@@ -25,6 +25,8 @@ export type Person = {
 
 export type McpConnector = {
   id: string; type: "mcp"; url: string;
+  url_env?: string;              // the address from an env var instead (servers whose URL is the secret, like ha-mcp's)
+  auth?: "token" | "none";       // "none": the server needs no token (then limit it with roles:)
   household_token_env?: string;  // the blanket family token: shared things only
   person_token_env?: string;     // per-person token, e.g. WIKI_TOKEN_{ID}: that person's private things too
   parents_token_env?: string;    // optional: what the parents-only chat may see (defaults to the household token)
@@ -88,7 +90,9 @@ export type Config = {
   family_name: string;
   port: number;
   public_url: string;        // https://faith.example.lan, needed for passkeys (Face ID)
-  model: { base_url: string; model: string; vision_model?: string; api_key_env?: string; max_rounds: number; temperature?: number; history_messages: number; context_chars: number; timeout_s: number };
+  /** More tools than max: offer only the most relevant per question (harness/router.ts). */
+  tools: { max: number; always: string[] };
+  model: { base_url: string; model: string; vision_model?: string; embed_model?: string; api_key_env?: string; max_rounds: number; temperature?: number; history_messages: number; context_chars: number; timeout_s: number };
   people: Person[];
   roles: Record<PolicyName, RolePolicy>;
   connectors: Connector[];
@@ -100,7 +104,7 @@ export type Config = {
   approvals: { approvers: Role[]; ttl_hours: number };
   embed: { allow_from: string[]; cookie_samesite: "strict" | "lax" | "none" };
   mattermost?: MattermostConfig;
-  skills: { dir: string };                   // your own skills (Markdown); FAITH's built-in ones are always there
+  skills: { dir: string; packs: { dir: string; who?: PolicyName[] }[] }; // your own skills (Markdown); packs: SKILL.md folders (e.g. homeassistant-ai/skills)
   voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
   /** FAITH as a Wyoming speech-to-text service for HA's voice pipeline (and voice ID on satellites). */
   wyoming?: { port: number; host: string; languages: string[] };
@@ -189,10 +193,11 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   const connectors: Connector[] = (raw.connectors || []).map((c: any, i: number) => {
     const id = str(c?.id).trim(), type = str(c?.type, "mcp");
     if (!ID.test(id)) throw new ConfigError(`connectors[${i}].id "${id}" must be lowercase letters, digits, - or _.`);
-    const url = str(c.url).replace(/\/+$/, "");
+    const url = str(c.url ?? (c.url_env ? "http://from-env.invalid" : "")).replace(/\/+$/, "");
     if (!/^https?:\/\//.test(url)) throw new ConfigError(`connectors.${id}.url must start with http:// or https://.`);
     const roles = c.roles ? (list(c.roles) as PolicyName[]) : undefined;
-    if (type === "mcp") return { id, type, url, household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description } as McpConnector;
+    if (type === "mcp" && c.auth === "none" && !c.roles) throw new ConfigError(`connectors.${id}: with auth: none, say who may use it (roles: [admin] or [admin, parents]); a token-less source would otherwise reach the shared view too.`);
+    if (type === "mcp") return { id, type, url, url_env: c.url_env ? str(c.url_env) : undefined, auth: c.auth === "none" ? "none" : "token", household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description } as McpConnector;
     if (type === "homeassistant") {
       const ex = c.expose || {};
       return { id, type, url, token_env: str(c.token_env, "HA_TOKEN"), person_token_env: c.person_token_env, roles,
@@ -259,8 +264,9 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   return {
     name: str(raw.name, "Faith"), family_name: str(raw.family_name, "the family"),
     port: num(env.PORT || raw.port, 8097), public_url: publicUrl,
+    tools: { max: num(raw.tools?.max, 32), always: list(raw.tools?.always) },
     model: {
-      base_url: str(env.FAITH_MODEL_URL || m.base_url, "http://argos:8080/v1").replace(/\/+$/, ""), model: str(env.FAITH_MODEL || m.model, ""), vision_model: m.vision_model ? str(m.vision_model) : undefined,
+      base_url: str(env.FAITH_MODEL_URL || m.base_url, "http://argos:8080/v1").replace(/\/+$/, ""), model: str(env.FAITH_MODEL || m.model, ""), vision_model: m.vision_model ? str(m.vision_model) : undefined, embed_model: m.embed_model ? str(m.embed_model) : undefined,
       api_key_env: m.api_key_env ? str(m.api_key_env) : "ARGOS_API_KEY", max_rounds: num(m.max_rounds, 6), temperature: m.temperature != null ? num(m.temperature, 0.4) : undefined,
       history_messages: num(m.history_messages, 16), context_chars: num(m.context_chars, 4000), timeout_s: num(m.timeout_s, 180),
     },
@@ -273,7 +279,8 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     apps, approvals: { approvers, ttl_hours: num(ap.ttl_hours, 24) },
     embed: { allow_from: list(raw.embed?.allow_from), cookie_samesite: samesite as Config["embed"]["cookie_samesite"] },
     mattermost,
-    skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills") },
+    skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills"),
+      packs: (raw.skills?.packs || []).map((p: any) => (typeof p === "string" ? { dir: p } : { dir: str(p.dir), who: p.who ? (list(p.who) as PolicyName[]) : undefined })) },
     voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
       threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true) } : undefined,
     wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"] } : undefined,

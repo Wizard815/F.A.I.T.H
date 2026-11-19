@@ -11,6 +11,8 @@ public_url: https://faith.home.lan   # https is needed for Face ID (passkeys); s
 model:
   base_url: http://argos:8080/v1
   model: faith                   # an Argos model id or alias (a good tool-calling model, e.g. Qwen3)
+  # vision_model: qwen2.5-vl     # for photos (the hub camera, Mattermost photos)
+  # embed_model: nomic-embed     # lets FAITH pick the right tools when there are many (ha-mcp)
   api_key_env: ARGOS_API_KEY     # leave the variable empty if Argos has no keys
   max_rounds: 6                  # tool rounds per answer
   temperature: 0.4
@@ -139,6 +141,12 @@ voice:
   confirm_on_voice: false        # locks etc. by voice need a screen unless this is true
   # stt_model: whisper           # Argos model names for speech-to-text and text-to-speech
   # tts_model: tts
+
+# More tools than this: FAITH offers the model only the ones that fit the question
+# (ranked by model.embed_model embeddings when set, else by shared words).
+# tools:
+#   max: 32
+#   always: [home_control]
 
 # Points and rewards. Money rewards: manual (recorded as owed) or firefly (a transfer to the kid's card account).
 # rewards:

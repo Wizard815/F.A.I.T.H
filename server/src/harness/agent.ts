@@ -7,6 +7,7 @@ import { newId } from "../secrets.js";
 import { scopeKey, speakerLabel, who, type Caller } from "../scope.js";
 import { ModelError, runLoop, type LoopEvent, type Msg } from "./llm.js";
 import { systemPrompt } from "./prompt.js";
+import { ToolRouter } from "./router.js";
 
 export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
 export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[] };
@@ -16,7 +17,10 @@ const PENDING_TTL = 10 * 60_000;
 /** One family turn: pick the caller's tools, build the prompt, run the loop,
  *  keep the conversation, and hold risky actions for an on-screen Yes. */
 export class Agent {
-  constructor(private db: Db, private cfg: () => Config, private registry: Registry, private env: NodeJS.ProcessEnv = process.env, private approvals?: Approvals) {}
+  router: ToolRouter;
+  constructor(private db: Db, private cfg: () => Config, private registry: Registry, private env: NodeJS.ProcessEnv = process.env, private approvals?: Approvals) {
+    this.router = new ToolRouter(cfg, env, (m) => console.warn(m));
+  }
 
   ownerKey(c: Caller) { return `${scopeKey(c.scope)}${c.audience ? ":" + c.audience : ""}|${c.channel}|${c.deviceId || ""}`; }
 
@@ -104,13 +108,16 @@ export class Agent {
     const system = systemPrompt(cfg, c, sources, { context, extra: o.extraSystem });
     const past = o.history ?? this.history(conv.id);
     const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
+    // Many tools (ha-mcp alone has 86): offer the ones this question needs. The previous question counts too.
+    const before = [...past].reverse().find((m) => m.role === "user");
+    const offered = await this.router.pick(set.tools, `${typeof before?.content === "string" ? before.content : ""}\n${text}`);
     // A photo goes to the vision model (Argos serves it) as an image part.
     const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 4);
     const userMsg: Msg = images.length ? { role: "user", content: [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] } : { role: "user", content: text };
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
       messages: [{ role: "system", content: system }, ...past, userMsg],
-      tools: this.wrap(c, set.tools, conv.id, pending, requests, emit), maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      tools: this.wrap(c, offered, conv.id, pending, requests, emit), maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);
