@@ -78,6 +78,5 @@ The fonts ship with the app, so nothing is fetched from the internet.
 
 | | |
 |---|---|
-| ![Wall view](screenshots/kiosk.png) | ![Home](screenshots/home.png) |
-| ![Ask](screenshots/ask.png) | ![Approvals](screenshots/approvals.png) |
-| ![Sign in](screenshots/sign-in.png) | ![Dark](screenshots/home-dark.png) |
+| ![The hub card on a wall tablet](screenshots/ha-hub.png) | ![The hub card by day](screenshots/ha-hub-light.png) |
+| ![Signing in on the tablet](screenshots/ha-sign-in.png) | ![FAITH's admin page](screenshots/admin.png) |

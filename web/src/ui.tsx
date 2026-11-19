@@ -10,11 +10,12 @@ export function useNow(everyMs = 15000) {
   return t;
 }
 
-/** A person's round face tile. */
+/** A person's face tile: a hexagon, one cell of the hive. */
+export const HEX = "polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%)";
 export function Avatar({ name, color, size = 36 }: { name: string; color?: string; size?: number }) {
   return (
-    <span className="inline-grid shrink-0 place-items-center rounded-full font-semibold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: color || "rgb(var(--primary))" }}>{initials(name)}</span>
+    <span className="inline-grid shrink-0 place-items-center font-semibold text-white"
+      style={{ width: size, height: size, fontSize: size * 0.36, background: color || "rgb(var(--primary))", clipPath: HEX }}>{initials(name)}</span>
   );
 }
 

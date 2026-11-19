@@ -14,7 +14,9 @@
 
 - Skills (Markdown recipes FAITH loads when one fits; built-in ones plus your own) and routines (a skill on a schedule, sent to a chat or a phone).
 - Notifications: HA phone pushes with Approve / Deny buttons; `faith.send_message` from HA automations.
-- The family dashboard in Home Assistant: four FAITH cards, each person's own view; FAITH's page is the admin console.
+- The family dashboard in Home Assistant: five FAITH cards, each person's own view; FAITH's page is the admin console.
+- The look: brass & honey (brown and gold), the d20-and-bees emblem that shows listening / thinking / speaking, hexagon faces, an HA theme.
+- The hub card: the wall tablet's home. Tap FAITH to talk; answers are read aloud through Argos.
 - Points and rewards: 0.5 / 1 / 2 point jobs, rewards, parent approval; money rewards recorded as owed (Firefly card payout is a placeholder in `server/src/rewards.ts`).
 - Voice ID: `voiceid/` service (local, resemblyzer); FAITH keeps voiceprints and names the speaker on a shared screen.
 

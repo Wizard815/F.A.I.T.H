@@ -37,12 +37,12 @@ from .const import CONF_PANEL_URL, CONF_TOKEN, CONF_URL, DOMAIN, PANEL_PATH, SCA
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CONVERSATION, Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 CARDS_URL = "/faith_static"
 
 # What the cards may ask FAITH. Every call gets the logged-in HA user added here.
 CARD_PATHS = {
-    "/api/ha/view", "/api/ha/chat", "/api/ha/chat/history", "/api/ha/approvals", "/api/ha/rewards",
+    "/api/ha/view", "/api/ha/chat", "/api/ha/chat/history", "/api/ha/speak", "/api/ha/approvals", "/api/ha/rewards",
     "/api/ha/rewards/claim", "/api/ha/rewards/redeem", "/api/ha/rewards/award",
     "/api/ha/hub/people", "/api/ha/hub/signin", "/api/ha/hub/signout", "/api/ha/hub/activity",
 }
@@ -152,7 +152,7 @@ async def ws_call(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
         return
     body = {**msg["body"], "user_id": connection.user.id}  # never trust a user id from the browser
     try:
-        result = await _client(hass).request("POST", path, body, timeout=180 if path == "/api/ha/chat" else 30)
+        result = await _client(hass).request("POST", path, body, timeout=180 if path in ("/api/ha/chat", "/api/ha/speak") else 30)
     except FaithError as err:
         connection.send_error(msg["id"], "faith_error", str(err))
         return

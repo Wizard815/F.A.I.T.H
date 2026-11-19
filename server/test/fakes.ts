@@ -9,6 +9,7 @@ export async function fakeModel(script: (req: any, n: number) => { content?: str
   const calls: any[] = [];
   const stt = { text: "hello" };
   const s = createServer(async (req, res) => {
+    if (req.url?.endsWith("/audio/speech")) { const b = await body(req); res.setHeader("content-type", "audio/mpeg"); return res.end(Buffer.from(`mp3:${b?.input}`)); }
     if (req.url?.endsWith("/audio/transcriptions")) { req.resume(); res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ text: stt.text })); }
     const b = await body(req); calls.push(b);
     const m = script(b, calls.length - 1);

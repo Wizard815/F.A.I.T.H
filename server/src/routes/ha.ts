@@ -96,6 +96,22 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     return agent.confirm(c, (req.params as any).id, !!(req.body as any)?.approve);
   });
 
+  // ---- FAITH's voice for the hub card (Argos text-to-speech), as base64 over HA's websocket ----
+  app.post("/api/ha/speak", async (req) => {
+    who(req);
+    const text = String((req.body as any)?.text || "").slice(0, 2000).trim();
+    if (!text) throw new AuthError(400, "Nothing to say.");
+    const m = x.cfg().model, v = x.cfg().voice, key = envValue(m.api_key_env, x.env);
+    let r: Response;
+    try {
+      r = await fetch(`${m.base_url}/audio/speech`, { method: "POST", signal: AbortSignal.timeout(120_000),
+        headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+        body: JSON.stringify({ model: v.tts_model, input: text, ...(v.tts_voice ? { voice: v.tts_voice } : {}), response_format: "mp3" }) });
+    } catch (e: any) { throw new ModelError(502, `Couldn't reach text-to-speech (${e?.cause?.code || e?.message}).`); }
+    if (!r.ok) throw new ModelError(502, `Text-to-speech answered ${r.status}.`);
+    return { audio: Buffer.from(await r.arrayBuffer()).toString("base64"), mime: r.headers.get("content-type") || "audio/mpeg" };
+  });
+
   // ---- approvals (cards, and the Approve / Deny buttons on a phone notification) ----
   app.post("/api/ha/approvals", async (req) => { const c = who(req).caller; return { can_approve: approvals.canApprove(c), requests: approvals.list() }; });
   app.post("/api/ha/approvals/:id", async (req) => {
