@@ -43,10 +43,16 @@ export class FaithTools implements Connector {
     const T: Tool[] = [];
     const add = (t: Omit<Tool, "connector">) => T.push({ ...t, connector: this.id });
 
+    const short = (d: string) => (d.length > 220 ? `${d.slice(0, 217).replace(/\s+\S*$/, "")}…` : d);
     if (skills.length) add({ name: "skill_load", write: false,
-      description: `Load a skill: step-by-step instructions for a bigger family job. Load it first, then follow it. Skills: ${skills.map((s) => `${s.name} (${s.description})`).join("; ")}`,
-      parameters: { type: "object", properties: { name: { type: "string", enum: skills.map((s) => s.name) } }, required: ["name"], additionalProperties: false },
-      run: async (a) => { const s = skills.find((x) => x.name === a?.name); return s ? { skill: s.name, title: s.title, instructions: s.body } : { error: `No skill called ${a?.name}.` }; } });
+      description: `Load a skill: step-by-step instructions for a bigger job. Load it first, then follow it. Some skills point to extra files: load one by passing file. Skills: ${skills.map((s) => `${s.name} (${short(s.description)})`).join("; ")}`,
+      parameters: { type: "object", properties: { name: { type: "string", enum: skills.map((s) => s.name) }, file: { type: "string", description: "One of the skill's files (references), e.g. references/triggers-and-conditions.md" } }, required: ["name"], additionalProperties: false },
+      run: async (a) => {
+        const s = skills.find((x) => x.name === a?.name);
+        if (!s) return { error: `No skill called ${a?.name}.` };
+        if (a?.file) { try { return { skill: s.name, file: a.file, text: this.skills.reference(s.name, String(a.file)).slice(0, 30_000) }; } catch (e: any) { return { error: e.message }; } }
+        return { skill: s.name, title: s.title, instructions: s.body.slice(0, 30_000), ...(s.references?.length ? { files: s.references } : {}) };
+      } });
 
     add({ name: "points_balance", write: false, description: "How many points each child (or one person) has.",
       parameters: { type: "object", properties: { person: { type: "string" } }, additionalProperties: false },

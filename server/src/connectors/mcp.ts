@@ -48,6 +48,8 @@ export class McpClient {
   }
 }
 
+const NO_TOKEN = "\u0000no-token";
+
 const READ_NAME = /(^|_)(get|list|search|read|query|find|who|whoami|who_is|context|context_for|notes|lookup|status|summary|health|ping|day|filter_syntax)(_|$)/;
 
 /** Is a tool read-only? The server's annotation wins; otherwise guess from the name. */
@@ -68,15 +70,20 @@ export class McpConnector implements Connector {
 
   describe() { return this.cfg.description || `${this.id} (MCP)`; }
 
+  /** The server's address (from url_env when the address itself is the secret). */
+  url() { return (this.cfg.url_env && envValue(this.cfg.url_env, this.env)) || this.cfg.url; }
+
   tokenFor(caller: Caller) {
+    if (this.cfg.auth === "none") return NO_TOKEN;
     if (caller.scope.kind === "person") return envValue(personEnv(this.cfg.person_token_env, caller.scope.person.id), this.env);
     if (caller.audience === "parents") return envValue(this.cfg.parents_token_env, this.env) ?? envValue(this.cfg.household_token_env, this.env);
     return envValue(this.cfg.household_token_env, this.env);
   }
   private client(token: string) {
-    const k = sha256(token);
+    const url = this.url(), k = sha256(`${url}\n${token}`);
+    if (/from-env\.invalid/.test(url)) throw new ToolError(`${this.id}: ${this.cfg.url_env} is empty.`);
     let c = this.clients.get(k);
-    if (!c) { c = new McpClient(this.cfg.url, token); this.clients.set(k, c); }
+    if (!c) { c = new McpClient(url, token === NO_TOKEN ? undefined : token); this.clients.set(k, c); }
     return { c, k };
   }
   publicName(name: string) {
@@ -98,6 +105,8 @@ export class McpConnector implements Connector {
         description: (t.description || t.name).slice(0, 1024),
         parameters: t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema : { type: "object", properties: {} },
         write: !isReadOnly(t),
+        // Destructive tools (delete, restart, remove...) always wait for a Yes from the person asking.
+        confirm: t.annotations?.destructiveHint ? (args: any) => `${(t.description || t.name).split(/[.\n]/)[0].slice(0, 120)} (${t.name}${args && Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 160)}` : ""})` : undefined,
         run: async (args: any) => {
           const r = await c.call(t.name, args && typeof args === "object" ? args : {});
           if (r.isError) return { error: r.text || "the tool failed" };

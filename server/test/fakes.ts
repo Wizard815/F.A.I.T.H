@@ -6,9 +6,16 @@ async function listen(s: Server) { await new Promise<void>((r) => s.listen(0, "1
 
 /** An OpenAI-compatible model that follows a script: each call gets the request and returns a message. */
 export async function fakeModel(script: (req: any, n: number) => { content?: string; tool_calls?: { name: string; args: any }[] }) {
-  const calls: any[] = [];
+  const calls: any[] = [], embeds: string[] = [];
   const stt = { text: "hello" };
   const s = createServer(async (req, res) => {
+    if (req.url?.endsWith("/embeddings")) {
+      // Bag-of-words vectors: texts sharing words point the same way.
+      const stop = new Set(["the", "and", "for", "with", "show", "over", "that", "this", "from", "your", "item", "number"]);
+      const b = await body(req), vec = (t: string) => { const v = new Array(512).fill(0); for (const w of String(t).toLowerCase().split(/[^a-z]+/).filter((x) => x.length > 2 && !stop.has(x))) { let h = 7; for (const ch of w) h = (h * 131 + ch.charCodeAt(0)) % 512; v[h] += 1; } return v; };
+      embeds.push(...b.input); res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify({ data: b.input.map((t: string, index: number) => ({ index, embedding: vec(t) })) }));
+    }
     if (req.url?.endsWith("/audio/speech")) { const b = await body(req); res.setHeader("content-type", "audio/mpeg"); return res.end(Buffer.from(`mp3:${b?.input}`)); }
     if (req.url?.endsWith("/audio/transcriptions")) { req.resume(); res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ text: stt.text })); }
     const b = await body(req); calls.push(b);
@@ -17,20 +24,20 @@ export async function fakeModel(script: (req: any, n: number) => { content?: str
     res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: m.content ?? null, tool_calls: m.tool_calls?.map((t, i) => ({ id: `c${calls.length}_${i}`, type: "function", function: { name: t.name, arguments: JSON.stringify(t.args) } })) } }] }));
   });
   const url = await listen(s);
-  return { url: `${url}/v1`, calls, stt, close: () => s.close() };
+  return { url: `${url}/v1`, calls, stt, embeds, close: () => s.close() };
 }
 
-export type FakeTool = { name: string; readOnly?: boolean; run: (args: any, token: string) => unknown };
+export type FakeTool = { name: string; readOnly?: boolean; destructive?: boolean; description?: string; run: (args: any, token: string) => unknown };
 /** A stateless MCP server; records which bearer token each call used. */
 export async function fakeMcp(tools: FakeTool[]) {
-  const seen: { method: string; token: string; tool?: string; args?: any }[] = [];
+  const seen: { path?: string; method: string; token: string; tool?: string; args?: any }[] = [];
   const s = createServer(async (req, res) => {
     const msg = await body(req), token = String(req.headers.authorization || "").replace(/^Bearer /, "");
-    seen.push({ method: msg?.method, token, tool: msg?.params?.name, args: msg?.params?.arguments });
+    seen.push({ path: req.url, method: msg?.method, token, tool: msg?.params?.name, args: msg?.params?.arguments });
     if (msg?.id === undefined) { res.statusCode = 202; return res.end(); }
     let result: any;
     if (msg.method === "initialize") result = { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fake", version: "1" } };
-    else if (msg.method === "tools/list") result = { tools: tools.map((t) => ({ name: t.name, description: `${t.name} tool`, inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: !!t.readOnly } })) };
+    else if (msg.method === "tools/list") result = { tools: tools.map((t) => ({ name: t.name, description: t.description ?? `${t.name} tool`, inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: !!t.readOnly, ...(t.destructive ? { destructiveHint: true } : {}) } })) };
     else if (msg.method === "tools/call") {
       const t = tools.find((x) => x.name === msg.params.name);
       result = t ? { content: [{ type: "text", text: JSON.stringify(await t.run(msg.params.arguments, token)) }] } : { isError: true, content: [{ type: "text", text: "no such tool" }] };

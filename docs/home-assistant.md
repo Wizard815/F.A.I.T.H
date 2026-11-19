@@ -108,6 +108,34 @@ Other ways FAITH knows who's talking:
 - Recognition scores were 0.94 (Wizard) and 0.95 (Sam) on new sentences, with the real voiceid service and synthetic voices.
 - Port 10300 has no password in the Wyoming protocol, so keep it on your LAN or the docker network HA uses.
 
+## Full control for the parents: ha-mcp
+
+FAITH's own Home Assistant connector does everyday things for everyone: lights, the shopping list, the meal plan.
+[ha-mcp](https://github.com/homeassistant-ai/ha-mcp) adds 86 tools that run Home Assistant itself: automations, scripts, scenes, dashboards, helpers, history, logs, backups. Give them to the admin (and, if you like, the parents' chat), so you can ask "make an automation that turns the porch light off at 11".
+
+1. Install the **HA-MCP** integration in HA. Make a separate admin account for it, as its README says.
+2. Copy its local connect URL (`http://<ha-ip>:9584/private_…`) into `.env` as `HA_MCP_URL`. The URL is the password, so it lives in `.env`, not in `faith.yaml`.
+3. Add it to `faith.yaml`:
+
+```yaml
+connectors:
+  - id: hamcp
+    type: mcp
+    url_env: HA_MCP_URL
+    auth: none                  # the secret URL is the credential; no token
+    roles: [admin]              # required with auth: none; add parents for the parents' chat
+    prefix: ""                  # its tools are already called ha_*
+    description: "ha-mcp: Home Assistant's configuration (automations, scripts, dashboards, history)"
+
+skills:
+  packs:
+    - { dir: /config/skill-packs/ha-skills, who: [admin] }   # git clone https://github.com/homeassistant-ai/skills
+```
+
+- **Destructive tools wait for a Yes.** Restart, delete, remove: anything ha-mcp marks as destructive waits for an on-screen (or chat) Yes from the person asking.
+- **Only the relevant tools.** Above `tools.max` (32) tools, FAITH offers the model the ones that fit the question. It ranks them with Argos embeddings when `model.embed_model` is set, else by shared words. FAITH's own tools are always offered, as is anything in `tools.always`.
+- **The best-practices skill.** homeassistant-ai's pack teaches the model how to write good automations: native triggers before templates, entity ids not device ids, the right mode. FAITH loads it, and its reference files, only when an HA job needs it.
+
 ## Mealie
 
 FAITH reads and changes Mealie through HA's Mealie integration (shopping lists as to-do entities, the meal plan as calendars, plus Mealie's actions). That's two-way, unlike Mealie's own CalDAV. Setup is in [setup.md](setup.md#home-assistant-and-mealie-through-it).
