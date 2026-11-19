@@ -92,6 +92,13 @@ export class McpConnector implements Connector {
     return n.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
   }
 
+  async ping(caller: Caller) {
+    const token = this.tokenFor(caller);
+    if (!token) throw new ToolError("no token for this view");
+    const { c, k } = this.client(token);
+    this.cache.set(k, { at: Date.now(), tools: await c.tools() });
+  }
+
   async tools(caller: Caller): Promise<Tool[]> {
     const token = this.tokenFor(caller);
     if (!token) return [];

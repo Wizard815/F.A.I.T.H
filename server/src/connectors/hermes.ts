@@ -15,6 +15,12 @@ export class Hermes implements Connector {
     return caller.scope.kind === "person" ? caller.scope.person.hermes_profile || caller.scope.person.id : this.cfg.household_profile;
   }
 
+  async ping(caller: Caller) {
+    const profile = this.profileFor(caller) || "default", key = envValue(this.cfg.key_env, this.env);
+    const r = await call(`${this.cfg.url}/p/${encodeURIComponent(profile)}/v1/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, timeoutMs: 10_000 });
+    if (r.status >= 500 || r.status === 0) throw new ToolError(`Hermes answered ${r.status}.`);
+  }
+
   async tools(caller: Caller): Promise<Tool[]> {
     const profile = this.profileFor(caller);
     if (!profile) return [];

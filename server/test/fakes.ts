@@ -59,6 +59,7 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     if (opts.token && token !== opts.token) return json({ message: "401: Unauthorized" }, 401);
     const u = new URL(req.url!, "http://x"), b = await body(req);
     const all = () => Object.entries(states).map(([entity_id, v]) => ({ entity_id, state: v.state, attributes: v.attributes || {} }));
+    if (req.method === "GET" && u.pathname === "/api/") return json({ message: "API running." });
     if (req.method === "GET" && u.pathname === "/api/states") return json(all());
     let m = u.pathname.match(/^\/api\/states\/(.+)$/);
     if (m) { const id = decodeURIComponent(m[1]); return states[id] ? json({ entity_id: id, ...states[id], attributes: states[id].attributes || {} }) : json({ message: "Entity not found." }, 404); }

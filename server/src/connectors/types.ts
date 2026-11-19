@@ -25,6 +25,8 @@ export interface Connector {
   tools(caller: Caller): Promise<Tool[]>;
   /** A short line for the system prompt saying what this source is. */
   describe(): string;
+  /** Is it up? Throws with a plain reason when it isn't (no caches). Defaults to listing tools. */
+  ping?(caller: Caller): Promise<void>;
 }
 
 export class ToolError extends Error {}

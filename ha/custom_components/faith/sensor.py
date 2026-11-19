@@ -25,6 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FaithConfigEntry, async_
     coord = entry.runtime_data.coordinator
     entities: list[SensorEntity] = [FaithSensor(entry, *s) for s in SENSORS]
     entities += [FaithHubSensor(entry, h["device"]) for h in (coord.data or {}).get("hubs", [])]
+    entities.append(FaithIntegrationsSensor(entry))
     async_add_entities(entities)
 
 
@@ -71,3 +72,27 @@ class FaithHubSensor(_Base):
             if h.get("device") == self._device:
                 return h.get("signed_in") or "Household"
         return "Household"
+
+
+class FaithIntegrationsSensor(_Base):
+    """How many of FAITH's integrations are down (0 = all fine), and which. For your own alerts."""
+
+    _attr_icon = "mdi:lan-check"
+    _attr_name = "Integrations down"
+
+    def __init__(self, entry: FaithConfigEntry) -> None:
+        super().__init__(entry, "integrations_down")
+
+    @property
+    def native_value(self) -> int | None:
+        i = (self.coordinator.data or {}).get("integrations")
+        return len(i.get("down", [])) if i else None
+
+    @property
+    def icon(self) -> str:
+        return "mdi:lan-disconnect" if self.native_value else "mdi:lan-check"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        i = (self.coordinator.data or {}).get("integrations") or {}
+        return {"down": i.get("down", []), "checked": i.get("checked", 0)}

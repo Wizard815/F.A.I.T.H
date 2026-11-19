@@ -23,6 +23,7 @@ import { Routines, RoutineError } from "./routines.js";
 import { Voices, VoiceError } from "./voice.js";
 import { registerHaRoutes } from "./routes/ha.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { Health } from "./health.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -45,6 +46,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 12_000_000 }); // photos for the vision model
   await app.register(cookie);
   const notifier = new Notifier(cfg, registry.ha, app.log);
+  const health = new Health(cfg, registry, notifier, env);
   faithTools.approvals = approvals; faithTools.notifier = notifier;
   approvals.on((e) => { notifier.onApproval(e).catch((err) => app.log.warn({ err: err.message }, "approval push failed")); });
   const routines = new Routines(db, cfg, agent, skills, notifier, app.log);
@@ -349,10 +351,12 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
       const row = db.prepare("SELECT person_id FROM sessions WHERE device_id = ? AND kind = 'hub'").get(d.id) as any;
       return { device: d.id, signed_in: row ? personById(cfg(), row.person_id)?.name ?? null : null };
     });
-    return { ...s, hubs, pending_approvals: approvals.pendingCount() };
+    // Which integrations are down (names only: nothing private).
+    const checked = health.list().filter((x) => x.ok !== null);
+    return { ...s, hubs, pending_approvals: approvals.pendingCount(), integrations: { checked: checked.length, down: health.down().map((x) => x.label) } };
   });
 
-  const ctx = { cfg, db, env, auth, agent, approvals, registry, rewards, voices, presence, notifier, routines, skills, passkeys, apiCaller, needAdmin, person };
+  const ctx = { cfg, db, env, auth, agent, approvals, registry, rewards, voices, presence, notifier, routines, skills, passkeys, apiCaller, needAdmin, person, health };
   registerHaRoutes(app, ctx);
   registerAdminRoutes(app, ctx);
 
@@ -370,5 +374,5 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   sweeper.unref();
   app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); });
 
-  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools };
+  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health };
 }

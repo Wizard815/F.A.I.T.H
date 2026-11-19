@@ -37,6 +37,7 @@ export class HomeAssistant implements Connector {
     if (!r.ok) throw new ToolError(`Home Assistant answered ${r.status}: ${typeof r.body === "string" ? r.body.slice(0, 200) : JSON.stringify(r.body).slice(0, 200)}`);
     return r.body;
   }
+  async ping() { await this.api("GET", "/api/"); }
   /** Call an HA action as FAITH (pushes to phones, routines). */
   async callService(domain: string, service: string, data: Record<string, unknown>) {
     if (!/^[a-z_]+$/.test(domain) || !/^[a-z0-9_]+$/.test(service)) throw new ToolError(`Not an HA action: ${domain}.${service}`);

@@ -12,9 +12,11 @@ import type { Voices } from "../voice.js";
 import type { Notifier } from "../notifier.js";
 import type { Caller } from "../scope.js";
 
+import type { Health } from "../health.js";
+
 export type AdminCtx = {
   cfg: () => Config; db: Db; env: NodeJS.ProcessEnv; auth: Auth; approvals: Approvals; registry: Registry; rewards: Rewards; routines: Routines;
-  skills: Skills; voices: Voices; notifier: Notifier; needAdmin: (req: FastifyRequest) => Caller & { scope: { kind: "person"; person: Person } }; person: (id: unknown) => Person;
+  skills: Skills; voices: Voices; notifier: Notifier; health: Health; needAdmin: (req: FastifyRequest) => Caller & { scope: { kind: "person"; person: Person } }; person: (id: unknown) => Person;
 };
 
 /** FAITH's own page is the admin console: the family uses Home Assistant
@@ -46,6 +48,10 @@ export function registerAdminRoutes(app: FastifyInstance, x: AdminCtx) {
       payouts_owed: rewards.payouts("owed").length,
     };
   });
+
+  // ---- integrations watch (health.ts) ----
+  app.get("/api/admin/health", async (req) => { needAdmin(req); return { sources: x.health.list(), events: x.health.events(), interval_s: cfg().health.interval_s }; });
+  app.post("/api/admin/health/check", async (req) => { needAdmin(req); return { sources: await x.health.check(), events: x.health.events() }; });
 
   // ---- people ----
   app.get("/api/admin/people", async (req) => {
