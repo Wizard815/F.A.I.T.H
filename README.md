@@ -123,7 +123,16 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `GET /api/approvals`, `POST /api/approvals/:id` | adults | approve or deny household changes |
 | `POST /api/voice/transcribe`, `/api/voice/speak` | screen / person | speech in and out through Argos |
 | `POST /v1/chat/completions`, `GET /v1/models` | `faith token` | FAITH as an OpenAI-compatible model called `faith`, as that token's view |
+| `POST /mcp` | `faith token` | FAITH as an MCP server: its tools plus `faith_ask`, in that token's view (Hermes, Open WebUI, Claude Desktop) |
 | `POST /api/ha/conversation`, `GET /api/ha/summary` | `ha` token | for the HA integration |
+
+## Using FAITH from other agents
+
+FAITH is also an MCP server at `http://faith:8097/mcp`. Hermes, Open WebUI, Claude Desktop or any MCP client can use it with a FAITH token:
+- `faith token add household open-webui`: shared things only. Changes go to the parents for approval.
+- `faith token add person wizard hermes`: Wizard's view, private things included.
+
+It offers FAITH's tools, plus `faith_ask`, which hands a whole question to FAITH. Actions that need a Yes on a screen (locks, alarm, garage, anything destructive) are refused, because nobody is there to tap it.
 
 ## Look and feel
 
