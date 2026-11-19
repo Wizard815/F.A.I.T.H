@@ -162,6 +162,22 @@ test("routines: days and times, catch-up after downtime, and delivery to a perso
   assert.equal(A.routines.due().some((x) => x.id === r.id), false, "once a day");
 });
 
+test("a routine for each person runs in their own view and goes only to them", async () => {
+  const before = ha.services.length, seenBefore = allg.seen.length;
+  script = (req) => (req.messages.at(-1).role === "tool" ? { content: "Your day: " + req.messages.at(-1).content } : { tool_calls: [{ name: "allglance_get_day", args: {} }] });
+  const r = A.routines.save({ name: "Morning brief", days: "daily", time: "07:00", prompt: "Brief me on today.", run_as: "each", deliver: ["family"] });
+  assert.deepEqual(r.deliver, ["each"], "never the family chat: each brief is private");
+  const out = await A.routines.run(r.id);
+  assert.ok(out.ok, out.status);
+  const tokens = allg.seen.slice(seenBefore).filter((x) => x.tool === "allglance_get_day").map((x) => x.token);
+  assert.ok(tokens.includes("a-wiz"), "Wizard's brief used Wizard's own token");
+  assert.ok(!tokens.includes("a-house") || tokens.filter((t) => t === "a-house").length < tokens.length, "not only the household token");
+  const pushes = ha.services.slice(before).filter((x) => x.domain === "notify");
+  assert.ok(pushes.some((x) => x.service === "mobile_app_wiz" && /Dentist \(private\)/.test(x.data.message)), "Wizard gets his private day");
+  assert.ok(!pushes.some((x) => x.service === "mobile_app_sam" && /Dentist \(private\)/.test(x.data.message)), "Sam doesn't get Wizard's");
+  A.routines.remove(r.id);
+});
+
 // ---------------- voice ID ----------------
 test("voice ID: enrolled voices are recognised on a shared screen; a parent's change then goes through, an unknown voice's waits", async () => {
   for (let i = 0; i < 3; i++) await A.voices.enroll(A.registry["cfg"]().people[0], Buffer.from("voice:wizard"), "audio/webm");

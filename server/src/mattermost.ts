@@ -3,10 +3,13 @@ import type { Db } from "./db.js";
 import type { Agent } from "./harness/agent.js";
 import { Approvals, type ApprovalEvent } from "./approvals.js";
 import type { Caller } from "./scope.js";
+import { transcribe } from "./speech.js";
+
+const MAX_FILE = 15_000_000;
 
 /** Where a Mattermost message was written, and so who reads the answer. */
 export type Room = { kind: "personal"; person: Person } | { kind: "family" } | { kind: "parents" };
-type Post = { id: string; user_id: string; channel_id: string; message: string; root_id?: string; type?: string };
+type Post = { id: string; user_id: string; channel_id: string; message: string; root_id?: string; type?: string; file_ids?: string[] };
 type Log = { info: (o: any, m?: string) => void; warn: (o: any, m?: string) => void };
 
 export class MattermostError extends Error {}
@@ -47,6 +50,37 @@ export class MattermostBot {
     if (!r.ok) { const err = new MattermostError(`Mattermost ${method} ${path} answered ${r.status}: ${data?.message || text.slice(0, 160)}`); (err as any).status = r.status; throw err; }
     return data;
   }
+  /** A file someone attached (a photo, a voice message), as bytes. */
+  async file(id: string): Promise<{ mime: string; name: string; bytes: Buffer } | undefined> {
+    const info = await this.api("GET", `/files/${encodeURIComponent(id)}/info`);
+    if (!info || Number(info.size) > MAX_FILE) return undefined;
+    let r: Response;
+    try { r = await fetch(`${this.mm.url}/api/v4/files/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${this.token()}`, "X-Requested-With": "XMLHttpRequest" }, signal: AbortSignal.timeout(30000) }); }
+    catch (e: any) { throw new MattermostError(`Couldn't fetch a file from Mattermost (${e?.cause?.code || e?.message}).`); }
+    if (!r.ok) throw new MattermostError(`Mattermost answered ${r.status} for a file.`);
+    const bytes = Buffer.from(await r.arrayBuffer());
+    if (bytes.length > MAX_FILE) return undefined;
+    return { mime: String(info.mime_type || "application/octet-stream").toLowerCase(), name: String(info.name || "file"), bytes };
+  }
+
+  /** Photos go to the vision model; voice messages are turned into words (Argos). */
+  private async attachments(post: Post, photos: boolean) {
+    const images: string[] = [], heard: string[] = [], skipped: string[] = [];
+    for (const id of (post.file_ids || []).slice(0, 4)) {
+      try {
+        if (!photos) { const info = await this.api("GET", `/files/${encodeURIComponent(id)}/info`); if (String(info?.mime_type || "").startsWith("image/")) continue; }
+        const f = await this.file(id);
+        if (!f) { skipped.push("a file that's too big"); continue; }
+        if (/^image\/(png|jpe?g|webp|gif)$/.test(f.mime)) images.push(`data:${f.mime.replace("jpg", "jpeg")};base64,${f.bytes.toString("base64")}`);
+        else if (f.mime.startsWith("audio/") || (f.mime === "video/mp4" && /\.m4a$/i.test(f.name))) {
+          const t = await transcribe(this.cfg(), this.env, f.bytes, f.mime.startsWith("audio/") ? f.mime : "audio/mp4");
+          if (t) heard.push(t);
+        } else skipped.push(f.name);
+      } catch (e: any) { this.log.warn({ err: e.message }, "mattermost: couldn't read an attachment"); skipped.push("an attachment I couldn't open"); }
+    }
+    return { images, heard, skipped };
+  }
+
   private kv(key: string) { return (this.db.prepare("SELECT value FROM mm_state WHERE key = ?").get(key) as any)?.value as string | undefined; }
   private setKv(key: string, value: string) { this.db.prepare("INSERT OR REPLACE INTO mm_state (key, value) VALUES (?, ?)").run(key, value); }
 
@@ -138,6 +172,15 @@ export class MattermostBot {
     if (room.kind === "personal" && room.person.id !== person.id) return;
     if (room.kind === "parents" && person.role === "child") return;
     let text = String(post.message || "").trim();
+    // A voice message counts as what was said; photos go along with the question.
+    // In a group chat where FAITH answers only when named, don't fetch every photo people share.
+    const named = (t: string) => new RegExp(`@${this.me!.username}\\b`, "i").test(t) || new RegExp(`^(hey\\s+)?${this.cfg().name}\\b`, "i").test(t);
+    const photos = room.kind === "personal" || this.mm.answer_in_groups !== "mention" || named(text);
+    const att = post.file_ids?.length ? await this.attachments(post, photos) : { images: [] as string[], heard: [] as string[], skipped: [] as string[] };
+    if (att.heard.length) text = [text, ...att.heard].filter(Boolean).join("\n");
+    const heardNote = att.heard.length ? `_Heard: “${att.heard.join(" ")}”_\n\n` : "";
+    if (!text && att.images.length) text = "What's in this photo?";
+    if (!text) return att.skipped.length ? this.say(post, `I can read photos and voice messages, not ${att.skipped.join(", ")}.`) : undefined;
 
     // "yes" / "no" to something waiting for a confirmation in this chat.
     const wait = this.pending.get(post.channel_id);
@@ -169,8 +212,8 @@ export class MattermostBot {
 
     const typing = setInterval(() => this.typing(post.channel_id, post.root_id), 4000); this.typing(post.channel_id, post.root_id);
     try {
-      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text, extId: `mm:${post.channel_id}` });
-      let reply = r.text || "Done.";
+      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text, images: att.images, extId: `mm:${post.channel_id}` });
+      let reply = heardNote + (r.text || "Done.");
       if (r.pending.length) {
         this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
         if (!/\byes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
