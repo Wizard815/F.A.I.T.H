@@ -80,8 +80,18 @@ export async function fakeMattermost(usernames: string[]) {
   const team = { id: "team1", name: "family" };
   const channels = new Map<string, { id: string; name: string; type: string; members: Set<string>; delete_at: number }>();
   const posts: { channel_id: string; message: string; root_id?: string }[] = [];
+  const files = new Map<string, { mime: string; name: string; bytes: Buffer }>(), downloads: string[] = [];
   const s = createServer(async (req, res) => {
-    const u = new URL(req.url!, "http://x"), p = u.pathname.replace(/^\/api\/v4/, ""), b = await body(req);
+    const u = new URL(req.url!, "http://x"), p = u.pathname.replace(/^\/api\/v4/, "");
+    let m0;
+    if (req.headers.authorization === "Bearer mm-token" && (m0 = p.match(/^\/files\/([^/]+)(\/info)?$/))) {
+      const f = files.get(decodeURIComponent(m0[1]));
+      res.setHeader("content-type", m0[2] || !f ? "application/json" : f.mime);
+      if (!f) { res.statusCode = 404; return res.end(JSON.stringify({ message: "no file" })); }
+      if (m0[2]) return res.end(JSON.stringify({ id: m0[1], name: f.name, mime_type: f.mime, size: f.bytes.length }));
+      downloads.push(m0[1]); return res.end(f.bytes);
+    }
+    const b = await body(req);
     const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(v)); };
     if (req.headers.authorization !== "Bearer mm-token") return json({ message: "Invalid token" }, 401);
     let m;
@@ -101,7 +111,7 @@ export async function fakeMattermost(usernames: string[]) {
     json({ message: `fake mattermost has no ${req.method} ${p}` }, 404);
   });
   const url = await listen(s);
-  return { url, bot, users, team, channels, posts, id: (name: string) => `u_${name}`, close: () => s.close() };
+  return { url, bot, users, team, channels, posts, files, downloads, id: (name: string) => `u_${name}`, close: () => s.close() };
 }
 
 /** A stand-in for the voiceid service: the "audio" is text like "voice:wizard",

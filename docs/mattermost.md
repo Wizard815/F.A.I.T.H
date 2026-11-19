@@ -12,6 +12,17 @@ FAITH makes the two channels (private) and opens a DM with each person.
 - It keeps the members right: it adds the family, and removes anyone else. A child added to the parents' channel is taken out again within seconds.
 - In the two group channels it answers only when called: `@faith ...`, or a message starting with its name ("Faith, what's for dinner?"). Set `answer_in_groups: always` to have it answer everything.
 
+**Photos and voice messages.**
+- **A photo** goes to the vision model (`model.vision_model`) with the question, or "What's in this photo?" if there isn't one.
+  - In the group chats, FAITH only downloads a photo when it's asked (`@faith` or its name), not every picture people share.
+- **A voice message** (any audio file) is turned into words by Argos and counts as what was said. FAITH shows what it heard (_Heard: "…"_) above its answer.
+  - A voice message in a group chat that starts with "Faith, …" counts as calling it.
+- Up to four attachments per message, and up to 15 MB each.
+
+**A morning brief in each personal chat.** In the admin page, make a routine with *Runs as: each person, in their own chat* (for example the `morning-brief` skill, weekdays at 7:00).
+- It runs once per person, with that person's own tokens.
+- Each brief goes only to that person: their DM, and their phone if `ha_notify` is set. Their private things never reach anyone else.
+
 | | | |
 |---|---|---|
 | ![Family](screenshots/mattermost-family.png) | ![Parents](screenshots/mattermost-parents.png) | ![Personal](screenshots/mattermost-personal.png) |

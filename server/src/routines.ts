@@ -16,8 +16,8 @@ export type Routine = {
   id: string; name: string; skill: string | null; prompt: string;
   days: string;            // daily | weekdays | weekends | mon,tue,...
   time: string;            // HH:MM, local time (TZ)
-  run_as: "household" | "parents" | "person"; person_id: string | null;
-  deliver: string[];       // family | parents | a person id
+  run_as: "household" | "parents" | "person" | "each"; person_id: string | null;
+  deliver: string[];       // family | parents | a person id ("each": every person, in their own chat)
   enabled: boolean; last_day: string | null; last_status: string | null; last_text: string | null; last_at: number | null;
 };
 
@@ -57,10 +57,11 @@ export class Routines {
     if (input.skill && !this.skills.get(input.skill)) throw new RoutineError(400, `No skill called ${input.skill}.`);
     if (!input.skill && !input.prompt?.trim()) throw new RoutineError(400, "Pick a skill or write what to do.");
     const run_as = input.run_as || "household";
-    if (!["household", "parents", "person"].includes(run_as)) throw new RoutineError(400, "run_as is household, parents or person.");
+    if (!["household", "parents", "person", "each"].includes(run_as)) throw new RoutineError(400, "run_as is household, parents, person or each.");
     if (run_as === "person" && !cfg.people.some((p) => p.id === input.person_id)) throw new RoutineError(400, "Pick whose routine it is (person_id).");
-    const deliver = (input.deliver?.length ? input.deliver : ["family"]).map(String);
-    for (const t of deliver) if (!["family", "parents"].includes(t) && !cfg.people.some((p) => p.id === t)) throw new RoutineError(400, `Can't deliver to "${t}": use family, parents or a person's id.`);
+    // "each": once per person, in their own view, sent only to them.
+    const deliver = run_as === "each" ? ["each"] : (input.deliver?.length ? input.deliver : ["family"]).map(String);
+    if (run_as !== "each") for (const t of deliver) if (!["family", "parents"].includes(t) && !cfg.people.some((p) => p.id === t)) throw new RoutineError(400, `Can't deliver to "${t}": use family, parents or a person's id.`);
     if (run_as === "person" && deliver.some((t) => t === "family" || t === "parents" || t !== input.person_id)) throw new RoutineError(400, "A person's routine can see their private things, so it only goes to them.");
     const id = input.id || newId();
     const old = input.id ? this.list().find((x) => x.id === input.id) : undefined;
@@ -85,13 +86,26 @@ export class Routines {
     const day = localNow(this.now()).day;
     try {
       const ask = [r.skill ? `Do the "${r.skill}" skill now: load it with skill_load and follow it.` : "", r.prompt].filter(Boolean).join("\n");
-      const out = await this.agent.turn({ caller: this.caller(r), text: ask, extId: `routine:${r.id}:${day}` });
-      const sent: string[] = [];
-      for (const to of r.deliver) sent.push(...(await this.notifier.send(to, out.text, { title: r.name, from: "routine" })));
-      const status = sent.length ? `sent to ${sent.join(", ")}` : "ran, but there was nowhere to send it (no Mattermost or phone set up)";
-      this.db.prepare("UPDATE routines SET last_day = ?, last_status = ?, last_text = ?, last_at = ? WHERE id = ?").run(day, status, out.text.slice(0, 4000), Date.now(), id);
+      const sent: string[] = [], failed: string[] = [];
+      let text = "";
+      if (r.run_as === "each") {
+        for (const p of this.cfg().people) {
+          try {
+            const out = await this.agent.turn({ caller: { scope: { kind: "person", person: p }, channel: "routine", label: `routine: ${r.name} (${p.id})` }, text: ask, extId: `routine:${r.id}:${p.id}:${day}` });
+            sent.push(...(await this.notifier.send(p.id, out.text, { title: r.name, from: "routine" })));
+            text += `${p.name}:\n${out.text}\n\n`;
+          } catch (e: any) { failed.push(`${p.id}: ${e.message}`); }
+        }
+        if (!sent.length && failed.length) throw new RoutineError(502, failed.join("; "));
+      } else {
+        const out = await this.agent.turn({ caller: this.caller(r), text: ask, extId: `routine:${r.id}:${day}` });
+        for (const to of r.deliver) sent.push(...(await this.notifier.send(to, out.text, { title: r.name, from: "routine" })));
+        text = out.text;
+      }
+      const status = (sent.length ? `sent to ${sent.join(", ")}` : "ran, but there was nowhere to send it (no Mattermost or phone set up)") + (failed.length ? `; failed for ${failed.join("; ")}` : "");
+      this.db.prepare("UPDATE routines SET last_day = ?, last_status = ?, last_text = ?, last_at = ? WHERE id = ?").run(day, status, text.trim().slice(0, 4000), Date.now(), id);
       this.log.info({ routine: r.name, status }, "routine ran");
-      return { ok: true, text: out.text, status };
+      return { ok: true, text: text.trim(), status };
     } catch (e: any) {
       this.db.prepare("UPDATE routines SET last_day = ?, last_status = ?, last_at = ? WHERE id = ?").run(day, `failed: ${e.message}`, Date.now(), id);
       this.log.warn({ routine: r.name, err: e.message }, "routine failed");

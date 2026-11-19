@@ -118,6 +118,35 @@ test("a lock waits for yes from the same person; a child's lock request goes to 
   assert.equal(ha.states["lock.front_door"].state, "unlocked");
 });
 
+test("photos go to the vision model; voice messages are heard through speech-to-text", async () => {
+  mm.files.set("ph1", { mime: "image/jpeg", name: "fridge.jpg", bytes: Buffer.from("jpeg-bytes") });
+  mm.files.set("vm1", { mime: "audio/mp4", name: "voice.m4a", bytes: Buffer.from("m4a-bytes") });
+  const user = (req: any) => req.messages.filter((m: any) => m.role === "user").at(-1);
+  let seen: any;
+  script = (req) => { seen = user(req); return { content: "Looks like eggs and milk." }; };
+  await bot.handle({ id: "f1", user_id: mm.id("wizard"), channel_id: dmOf("wizard"), message: "", file_ids: ["ph1"] });
+  assert.ok(Array.isArray(seen.content), "sent as a picture, not text");
+  assert.equal(seen.content[1].image_url.url, `data:image/jpeg;base64,${Buffer.from("jpeg-bytes").toString("base64")}`);
+  assert.equal(seen.content[0].text, "What's in this photo?");
+
+  model.stt.text = "what's for dinner tonight";
+  script = (req) => { seen = user(req); return { content: "Fish tacos." }; };
+  const r = await bot.handle({ id: "f2", user_id: mm.id("wizard"), channel_id: dmOf("wizard"), message: "", file_ids: ["vm1"] });
+  assert.equal(seen.content, "what's for dinner tonight");
+  assert.match(r!, /^_Heard: “what's for dinner tonight”_/);
+  assert.match(r!, /Fish tacos/);
+});
+
+test("in the family chat, photos are only fetched when FAITH is asked", async () => {
+  mm.files.set("ph2", { mime: "image/png", name: "beach.png", bytes: Buffer.from("png") });
+  mm.downloads.length = 0;
+  assert.equal(await bot.handle({ id: "f3", user_id: mm.id("sam"), channel_id: family(), message: "look at this", file_ids: ["ph2"] }), undefined);
+  assert.deepEqual(mm.downloads, [], "a photo shared between people isn't downloaded");
+  script = () => ({ content: "A beach." });
+  assert.match((await bot.handle({ id: "f4", user_id: mm.id("sam"), channel_id: family(), message: "@faith what is this?", file_ids: ["ph2"] }))!, /A beach/);
+  assert.deepEqual(mm.downloads, ["ph2"]);
+});
+
 test("strangers are turned away; other people's DMs are ignored", async () => {
   assert.match((await bot.handle({ id: "s1", user_id: mm.id("stranger"), channel_id: "dm_somewhere", message: "hi" }, "D"))!, /only talk with the family/);
   assert.equal(await send("sam", dmOf("wizard"), "hi"), undefined);
