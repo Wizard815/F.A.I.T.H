@@ -24,6 +24,7 @@ import { Voices, VoiceError } from "./voice.js";
 import { registerHaRoutes } from "./routes/ha.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { Health } from "./health.js";
+import { registerMcpRoutes } from "./routes/mcp.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -359,6 +360,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const ctx = { cfg, db, env, auth, agent, approvals, registry, rewards, voices, presence, notifier, routines, skills, passkeys, apiCaller, needAdmin, person, health };
   registerHaRoutes(app, ctx);
   registerAdminRoutes(app, ctx);
+  registerMcpRoutes(app, { agent, registry, apiCaller, name: () => cfg().name });
 
   // ---------- the web app ----------
   if (opts.webDir && existsSync(opts.webDir)) {
