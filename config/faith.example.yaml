@@ -142,6 +142,11 @@ voice:
   # stt_model: whisper           # Argos model names for speech-to-text and text-to-speech
   # tts_model: tts
 
+# Every source is checked on a schedule; the parents get one message when one goes down
+# (two failed checks in a row) and one when it's back. HA gets sensor.faith_integrations_down.
+# health:
+#   interval_s: 120              # 0 turns it off
+
 # More tools than this: FAITH offers the model only the ones that fit the question
 # (ranked by model.embed_model embeddings when set, else by shared words).
 # tools:

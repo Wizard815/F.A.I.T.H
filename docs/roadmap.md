@@ -18,6 +18,8 @@
 - The look: brass & honey (brown and gold), the d20-and-bees emblem that shows listening / thinking / speaking, hexagon faces, an HA theme.
 - The hub card: the wall tablet's home. Tap FAITH to talk; answers are read aloud through Argos.
 - Checked in a real Home Assistant 2026.2.3: config flow, sensors, theme, every card, hub sign-in and the admin sidebar page.
+- ha-mcp for the admin (86 Home Assistant tools), with a tool router that offers a local model only the tools a question needs, and SKILL.md skill packs (homeassistant-ai/skills).
+- An integrations watch: every source checked on a schedule; the parents hear once when one goes down and when it's back; `sensor.faith_integrations_down` in HA.
 - Mattermost: photos go to the vision model, voice messages through Argos's speech-to-text.
 - Routines that run for each person in their own view and go only to them (a morning brief in each personal chat).
 - Voice ID on HA's voice satellites: FAITH is the pipeline's speech-to-text (Wyoming), so it knows who said what; checked with HA's own Wyoming integration.

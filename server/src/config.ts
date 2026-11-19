@@ -110,6 +110,8 @@ export type Config = {
   wyoming?: { port: number; host: string; languages: string[] };
   rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
   notifications: { approvals_push: boolean };
+  /** Checking every source on a schedule and telling the parents when one goes down (health.ts). 0 = off. */
+  health: { interval_s: number };
 };
 
 /** FAITH as a Mattermost bot: a DM with each person, a family channel, a parents channel. */
@@ -293,6 +295,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
         firefly: r.firefly?.url ? { url: str(r.firefly.url), token_env: str(r.firefly.token_env, "FIREFLY_TOKEN"), from_account: String(r.firefly.from_account) } : undefined };
     })(),
     notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
+    health: { interval_s: num(raw.health?.interval_s, 120) },
   };
 }
 

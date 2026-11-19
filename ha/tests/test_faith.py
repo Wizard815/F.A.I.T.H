@@ -10,7 +10,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 from custom_components.faith.const import DOMAIN
 
 URL = "http://faith.test:8097"
-SUMMARY = {"today_count": 2, "today": ["18:00 · Family dinner"], "shopping_count": 1, "shopping": ["milk"], "next_meal": "2026-11-17 · dinner: Tacos", "chores_count": 0,
+SUMMARY = {"integrations": {"checked": 4, "down": ["wiki"]}, "today_count": 2, "today": ["18:00 · Family dinner"], "shopping_count": 1, "shopping": ["milk"], "next_meal": "2026-11-17 · dinner: Tacos", "chores_count": 0,
            "hubs": [{"device": "kitchen", "signed_in": None}], "pending_approvals": 0}
 
 
@@ -45,6 +45,8 @@ async def test_sensors_and_panel(hass: HomeAssistant, aioclient_mock: AiohttpCli
     assert hass.states.get("sensor.faith_shopping_list").attributes["items"] == ["milk"]
     assert hass.states.get("sensor.faith_next_meal").state == "2026-11-17 · dinner: Tacos"
     assert hass.states.get("sensor.faith_kitchen_screen").state == "Household"
+    assert hass.states.get("sensor.faith_integrations_down").state == "1"
+    assert hass.states.get("sensor.faith_integrations_down").attributes["down"] == ["wiki"]
     panels = hass.data["frontend_panels"]
     assert panels["faith"].config == {"url": "https://faith.home.lan"}
     assert panels["faith"].require_admin is True

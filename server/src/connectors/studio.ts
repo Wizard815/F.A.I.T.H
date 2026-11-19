@@ -35,6 +35,11 @@ export class Studio implements Connector {
     return r.body;
   }
 
+  async ping() {
+    const r = await call(`${this.cfg.url}/`, { timeoutMs: 10_000 });
+    if (r.status >= 500) throw new ToolError(`Hermes Studio answered ${r.status}.`);
+  }
+
   async tools(caller: Caller): Promise<Tool[]> {
     if (!this.creds(caller)) return [];
     const text = (c: any): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => (typeof p === "string" ? p : p?.text || "")).join(" ") : c?.text || "");
