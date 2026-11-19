@@ -58,4 +58,23 @@ export class Voices {
     return best;
   }
   async identify(audio: Buffer, mime: string) { return this.match(await this.embed(audio, mime)); }
+
+  // ---- voice satellites: HA sends FAITH only the words, so remember who said them ----
+  private heard: { key: string; person: Person; at: number }[] = [];
+  private static key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  /** Speech-to-text (the Wyoming server) heard this person say this. */
+  remember(text: string, person: Person) {
+    const now = Date.now();
+    this.heard = this.heard.filter((h) => now - h.at < 60_000).slice(-20);
+    this.heard.push({ key: Voices.key(text), person, at: now });
+  }
+  /** Who said exactly this in the last minute (once: the record is used up). */
+  recall(text: string): Person | undefined {
+    const k = Voices.key(text), now = Date.now();
+    for (let i = this.heard.length - 1; i >= 0; i--) {
+      const h = this.heard[i];
+      if (now - h.at < 60_000 && h.key === k && k) { this.heard.splice(i, 1); return h.person; }
+    }
+    return undefined;
+  }
 }

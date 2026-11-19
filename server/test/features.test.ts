@@ -7,6 +7,8 @@ import { parseConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/app.js";
 import { localNow, onDay } from "../src/routines.js";
 import { fakeHa, fakeMcp, fakeModel, fakeVoiceId } from "./fakes.js";
+import { connect } from "node:net";
+import { Decoder, encode, WyomingStt } from "../src/wyoming.js";
 
 // Skills, routines, notifications, the HA cards' API, points and rewards, voice ID, the admin API.
 let ha: Awaited<ReturnType<typeof fakeHa>>, allg: Awaited<ReturnType<typeof fakeMcp>>, model: Awaited<ReturnType<typeof fakeModel>>, vid: Awaited<ReturnType<typeof fakeVoiceId>>;
@@ -203,6 +205,62 @@ test("the hub card gets FAITH's reply spoken through Argos, and needs an HA toke
   assert.equal(Buffer.from(md.audio, "base64").toString(), "mp3:Tonight is fish tacos.\nbuy limes\ntortillas", "Markdown marks aren't read aloud");
   const res = await A.app.inject({ method: "POST", url: "/api/ha/speak", payload: { text: "hi" } });
   assert.ok(res.statusCode === 401 || res.statusCode === 403, "no token, no voice");
+});
+
+// ---------------- voice satellites: FAITH as HA's speech-to-text (Wyoming) ----------------
+/** Talks to the Wyoming server the way HA does, and returns the transcript. */
+async function satellite(port: number, audio: string) {
+  const sock = connect(port, "127.0.0.1"), dec = new Decoder(), got: any[] = [];
+  await new Promise<void>((r) => sock.once("connect", () => r()));
+  const next = (type: string) => new Promise<any>((res, rej) => {
+    const t = setTimeout(() => rej(new Error(`no ${type}`)), 5000);
+    const look = () => { const i = got.findIndex((e) => e.type === type); if (i >= 0) { clearTimeout(t); sock.off("data", on); res(got.splice(i, 1)[0]); return true; } return false; };
+    const on = (c: Buffer) => { got.push(...dec.push(c)); look(); };
+    if (!look()) sock.on("data", on);
+  });
+  sock.on("data", () => {});
+  sock.write(encode("describe"));
+  const info = await next("info");
+  const pcm = Buffer.concat([Buffer.from(audio), Buffer.alloc(3200)]);
+  sock.write(Buffer.concat([encode("transcribe", { language: "en" }), encode("audio-start", { rate: 16000, width: 2, channels: 1 }),
+    encode("audio-chunk", { rate: 16000, width: 2, channels: 1 }, pcm.subarray(0, 10)), encode("audio-chunk", { rate: 16000, width: 2, channels: 1 }, pcm.subarray(10)), encode("audio-stop")]));
+  const tr = await next("transcript");
+  sock.end();
+  return { info: info.data, text: tr.data.text as string };
+}
+
+test("voice satellites: FAITH's speech-to-text knows who spoke, and HA's conversation then counts it as them", async () => {
+  for (let i = 0; i < 3; i++) await A.voices.enroll(A.registry["cfg"]().people[0], Buffer.from("voice:wizard"), "audio/webm");
+  const cfg = () => ({ ...A.registry["cfg"](), wyoming: { port: 0, host: "127.0.0.1", languages: ["en"] } });
+  const stt = new WyomingStt({ cfg, env, voices: A.voices, log: { info: () => {}, warn: () => {} } });
+  const port = (await stt.listen())!;
+  try {
+    model.stt.text = "Turn on the kitchen light.";
+    const heard = await satellite(port, "voice:wizard");
+    assert.equal(heard.text, "Turn on the kitchen light.");
+    assert.equal(heard.info.asr[0].name, "faith");
+    assert.deepEqual(heard.info.asr[0].models[0].languages, ["en"]);
+
+    let k = 0;
+    script = () => (k++ % 2 === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "light.kitchen", service: "turn_on" } }] } : { content: "Done." });
+    ha.states["light.kitchen"].state = "off";
+    const r = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat1" })).json();
+    assert.equal(r.speaker, "wizard", "matched the words heard a moment ago (case and punctuation aside)");
+    assert.equal(ha.states["light.kitchen"].state, "on", "a parent's voice: the change goes through");
+    assert.equal(r.person, null, "still the household view: a voice never unlocks private things");
+
+    // The record is used once; an unknown voice gets no speaker, so the change waits.
+    ha.states["light.kitchen"].state = "off";
+    const again = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat2" })).json();
+    assert.equal(again.speaker, null);
+    const before = A.approvals.pendingCount();
+    await satellite(port, "voice:stranger");
+    const u = (await H("/api/ha/conversation", { text: "Turn on the kitchen light.", conversation_id: "sat3" })).json();
+    assert.equal(u.speaker, null);
+    assert.equal(ha.states["light.kitchen"].state, "off");
+    assert.ok(A.approvals.pendingCount() > before, "an unknown voice's change waits for approval");
+    assert.equal(A.approvals.list()[0].requested_by, "someone talking to Home Assistant", "newest first: the unknown voice's request");
+  } finally { await stt.close(); }
 });
 
 // ---------------- HA → Mattermost / phones ----------------

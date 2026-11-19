@@ -68,7 +68,7 @@ is its hands, and Argos (local models) is its brain.
 
 ## Where the family meets FAITH
 
-- **Home Assistant:** FAITH's cards on the family dashboard, with the hub card as the wall tablet's home (tap FAITH to talk, it answers out loud); Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
+- **Home Assistant:** FAITH's cards on the family dashboard, with the hub card as the wall tablet's home (tap FAITH to talk, it answers out loud); voice satellites that know who's talking ([how](docs/home-assistant.md#voice-a-jarvis-for-the-house)); Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
 - **Mattermost:** a personal chat each, a family channel, a parents' channel ([docs](docs/mattermost.md)).
 - **FAITH's own page** is the admin console: health, people and voices, skills, routines, points and rewards, approvals, tokens.
 

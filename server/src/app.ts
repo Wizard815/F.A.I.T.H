@@ -330,14 +330,17 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     if ((c as any).apiKind !== "ha") throw new AuthError(403, "Use a Home Assistant token (`faith token add ha <name>`).");
     const ha = cfg().connectors.find((x) => x.type === "homeassistant");
     const p = haUser && (ha as any)?.trust_ha_users !== false ? cfg().people.find((x) => x.ha_user_id === haUser) : undefined;
-    return p ? { ...c, scope: { kind: "person", person: p }, label: `${p.id} via HA` } : c;
+    return p ? { ...c, scope: { kind: "person", person: p }, label: `${p.id} via HA` } : { ...c, label: "someone talking to Home Assistant" };
   };
   app.post("/api/ha/conversation", async (req) => {
     const b = req.body as any;
-    const c = haCaller(req, b?.user_id ? String(b.user_id) : undefined);
+    let c = haCaller(req, b?.user_id ? String(b.user_id) : undefined);
+    // Said to a voice satellite: FAITH's own speech-to-text (wyoming.ts) may have heard who it was.
+    const speaker = c.scope.kind === "household" ? voices.recall(String(b?.text || "")) : undefined;
+    if (speaker && cfg().voice_id?.trust_for_changes !== false) c = { ...c, speaker, audience: "family", label: `${speaker.id} (voice) via HA` };
     const r = await agent.turn({ caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined,
       extraSystem: b?.language && !String(b.language).startsWith("en") ? `Answer in the language with code ${b.language}.` : undefined });
-    return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null };
+    return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null, speaker: speaker?.id ?? null };
   });
   app.get("/api/ha/summary", async (req) => {
     const c = haCaller(req);

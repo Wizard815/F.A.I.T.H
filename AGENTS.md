@@ -10,6 +10,7 @@ FAITH is the family's front-end agent: one container (server + web app) and a Ho
 | `web/` | React + Tailwind | `npm run build -w web` |
 | `ha/custom_components/faith` | HA integration | `cd ha && pytest` (needs `pytest-homeassistant-custom-component`) |
 | `server/scripts/demo.ts` | the whole thing with fakes | `node --import tsx server/scripts/demo.ts` |
+| `server/src/wyoming.ts` | speech-to-text for HA's voice pipeline (Wyoming), which also notes who spoke | `npm test`; HA's own client: see `docs/home-assistant.md` |
 | `server/src/mattermost.ts` | the Mattermost bot (personal, family, parents chats) | `npm test`; real Mattermost: `server/scripts/mattermost/` (see `docs/mattermost.md`) |
 
 ## Rules

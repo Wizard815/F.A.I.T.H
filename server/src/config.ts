@@ -101,6 +101,8 @@ export type Config = {
   mattermost?: MattermostConfig;
   skills: { dir: string };                   // your own skills (Markdown); FAITH's built-in ones are always there
   voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
+  /** FAITH as a Wyoming speech-to-text service for HA's voice pipeline (and voice ID on satellites). */
+  wyoming?: { port: number; host: string; languages: string[] };
   rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
   notifications: { approvals_push: boolean };
 };
@@ -273,6 +275,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills") },
     voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
       threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true) } : undefined,
+    wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"] } : undefined,
     rewards: (() => {
       const r = raw.rewards || {}, payout = str(r.payout, "manual");
       if (!["manual", "firefly"].includes(payout)) throw new ConfigError("rewards.payout is manual or firefly.");

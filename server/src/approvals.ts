@@ -3,7 +3,7 @@ import type { Db } from "./db.js";
 import type { Registry } from "./connectors/registry.js";
 import type { Tool } from "./connectors/types.js";
 import { newId } from "./secrets.js";
-import type { Caller, Channel } from "./scope.js";
+import { speakerLabel, type Caller, type Channel } from "./scope.js";
 
 export class ApprovalError extends Error { constructor(public status: number, message: string) { super(message); } }
 
@@ -42,7 +42,7 @@ export class Approvals {
   create(c: Caller, t: Tool, args: any, conversationId?: string) {
     const id = newId(), summary = this.explain(t, args);
     this.db.prepare("INSERT INTO requests (id, tool, args, summary, requested_by, channel, device_id, conversation_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
-      .run(id, t.name, JSON.stringify(args ?? {}), summary, c.speaker ? `${c.speaker.name} in the ${c.audience} chat` : c.label, c.channel, c.deviceId ?? null, conversationId ?? null, this.now());
+      .run(id, t.name, JSON.stringify(args ?? {}), summary, speakerLabel(c) ?? c.label, c.channel, c.deviceId ?? null, conversationId ?? null, this.now());
     const r = this.row(id);
     if (r) this.emit({ kind: "created", request: r, channel: c.channel, device_id: c.deviceId ?? null });
     return { id, summary };

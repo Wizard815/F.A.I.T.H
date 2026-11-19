@@ -137,6 +137,21 @@ personal:
 
 voice:
   confirm_on_voice: false        # locks etc. by voice need a screen unless this is true
+  # stt_model: whisper           # Argos model names for speech-to-text and text-to-speech
+  # tts_model: tts
+
+# Telling family voices apart (the voiceid service in voiceid/). Enrol voices in the admin page.
+# voice_id:
+#   url: http://voiceid:8099
+#   token_env: VOICEID_TOKEN     # if the service has VOICEID_TOKEN set
+#   threshold: 0.78              # how sure before naming someone
+#   trust_for_changes: true      # a recognised parent's changes skip approval (false: only logged)
+
+# FAITH as speech-to-text for HA's voice pipeline (Wyoming), so satellites know who's talking.
+# Publish the port in docker compose; in HA add the Wyoming Protocol integration (FAITH's host, this port).
+# wyoming:
+#   port: 10300
+#   languages: [en]
 
 dashboard:
   entities: [climate.house, lock.front_door, sensor.outside_temperature]

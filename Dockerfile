@@ -29,6 +29,6 @@ RUN printf '#!/bin/sh\nexec node /app/server/dist/cli.js "$@"\n' > /usr/local/bi
  && mkdir -p /data /config && chown -R node:node /data /config
 USER node
 VOLUME ["/data", "/config"]
-EXPOSE 8097
+EXPOSE 8097 10300
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8097)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server/dist/index.js"]
