@@ -50,7 +50,9 @@ const model = await fakeModel((req) => {
 const env = { ...process.env, WIKI_TOKEN_HOUSEHOLD: "w-house", WIKI_TOKEN_WIZARD: "w-wiz", WIKI_TOKEN_PARTNER: "w-par", ALLG_HOUSEHOLD: "a-house", ALLG_WIZARD: "a-wiz", ALLG_PARTNER: "a-par", HA_TOKEN: "ha" };
 const cfg = parseConfig({
   name: "Faith", family_name: "the demo family", model: { base_url: model.url, model: "demo" },
-  people: [{ id: "wizard", name: "Wizard", role: "admin", color: "#7c5cff", mattermost_username: "wizard" }, { id: "partner", name: "Sam", role: "adult", color: "#ff7a90", mattermost_username: "sam" }, { id: "kid", name: "Robin", role: "child", color: "#3fb68b", mattermost_username: "robin" }],
+  // DEMO_HA_USER_WIZARD=<HA user id> (etc.) maps a test Home Assistant's users to the demo family.
+  people: [{ id: "wizard", name: "Wizard", role: "admin", color: "#7A4E2D", mattermost_username: "wizard" }, { id: "partner", name: "Sam", role: "adult", color: "#A0522D", mattermost_username: "sam" }, { id: "kid", name: "Robin", role: "child", color: "#C08A2E", mattermost_username: "robin" }]
+    .map((p) => ({ ...p, ...(process.env[`DEMO_HA_USER_${p.id.toUpperCase()}`] ? { ha_user_id: process.env[`DEMO_HA_USER_${p.id.toUpperCase()}`] } : {}) })),
   // With MATTERMOST_URL (and MATTERMOST_BOT_TOKEN) set, FAITH also runs as a Mattermost bot.
   ...(process.env.MATTERMOST_URL ? { mattermost: { url: process.env.MATTERMOST_URL, team: process.env.MATTERMOST_TEAM || "family" } } : {}),
   connectors: [
@@ -59,6 +61,8 @@ const cfg = parseConfig({
     { id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA_TOKEN", shopping_lists: ["todo.mealie_shopping_list"], meal_calendars: ["calendar.mealie_breakfast", "calendar.mealie_lunch", "calendar.mealie_dinner"] },
   ],
   hub: { devices: [{ id: "kitchen", name: "Kitchen" }], idle_seconds: 300 },
+  // DEMO_EMBED_FROM=http://<your test HA> lets HA's "FAITH Admin" sidebar page show FAITH.
+  embed: { allow_from: (process.env.DEMO_EMBED_FROM || "").split(",").filter(Boolean) },
   dashboard: { entities: ["climate.house", "lock.front_door", "light.kitchen", "sensor.outside"] },
   apps: [
     { id: "ha", name: "Home Assistant", url: "http://homeassistant.local:8123", icon: "🏠" }, { id: "mealie", name: "Mealie", url: "http://mealie.local", icon: "🍲" },
@@ -79,4 +83,5 @@ if (cfg.mattermost) {
 }
 console.log(`FAITH demo on http://localhost:${port}
   Pair this browser as the kitchen screen with code: ${auth.pairCode("kitchen")}
-  PINs: Wizard 1234 · Sam 5678 · Robin 0000. Wizard's password: demo-password`);
+  PINs: Wizard 1234 · Sam 5678 · Robin 0000. Wizard's password: demo-password
+  Token for a test Home Assistant (the FAITH integration): ${auth.addToken("ha", "demo-home-assistant")}`);
