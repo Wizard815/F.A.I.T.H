@@ -67,18 +67,46 @@ The fully local path, through HA:
 satellite (wake word) -> HA Assist pipeline -> speech-to-text -> FAITH (conversation agent) -> text-to-speech -> satellite
 ```
 
-- **Speech-to-text and text-to-speech:** use the Wyoming faster-whisper and Piper containers (HA's standard local voice), or a Wyoming bridge to Argos's `/v1/audio/*` so one GPU serves everything.
+- **Speech-to-text:** FAITH itself (`wyoming:` in `faith.yaml`). It passes the audio to Argos's `/v1/audio/transcriptions` and also recognises the voice (below). HA's Wyoming faster-whisper container works too, without voice ID.
+- **Text-to-speech:** HA's Piper container, or a Wyoming bridge to Argos's `/v1/audio/speech`.
   - omi-local's `omi-audio` already runs faster-whisper and Piper.
   - hermes-agent's plugin catalog has a `wyoming-voice-bridge`.
 - **Wake word:** openWakeWord in HA, with a custom "Hey Faith" model.
 - **On FAITH's own screen:** 🎤 records in the browser and Argos transcribes it; the reply is spoken back through Argos.
 
-**Knowing who's speaking.** HA hands conversation agents the *text*, not the audio, so FAITH can't recognise a voice that came through a satellite. Today:
-- **The HA app:** the request carries the signed-in HA user, so FAITH knows the person.
-- **Satellites:** household view; changes are sent for approval.
-- **FAITH's screen:** the person signed in.
+**Knowing who's speaking.** HA hands conversation agents the *text*, never the audio. So FAITH can also be the pipeline's speech-to-text, which does hear the voice:
 
-Recognising each family member's voice is on the [roadmap](roadmap.md). When it comes, it will suggest who's talking, like the face sensor does, not unlock private things by itself.
+```
+satellite -> HA Assist pipeline -> FAITH speech-to-text (Wyoming) -> FAITH conversation agent -> text-to-speech -> satellite
+                                     |  Argos: the words             ^ "Wizard said this a moment ago"
+                                     |  voice ID: who said them  ----+
+```
+
+1. In `faith.yaml`, add `wyoming: { port: 10300 }`, and `voice_id:` pointing at the [voiceid](../voiceid/README.md) service.
+2. Publish port 10300 in docker compose.
+3. Enrol each person's voice in FAITH's admin page (*People*, three short clips each).
+4. In HA, add the **Wyoming Protocol** integration with FAITH's address and port 10300. It shows up as speech-to-text "faith".
+5. In *Settings → Voice assistants*, make a pipeline with **speech-to-text: faith** and **conversation agent: FAITH**, then give it to your satellites.
+
+What a recognised voice does:
+- **It counts as that person speaking in the family's shared view.** A parent's change goes straight through; a child's or an unknown voice's waits for approval.
+- **It never unlocks private things.** The answer is still the household view, because everyone in the room hears it.
+- **Locks, alarm and garage** still need a Yes on a screen.
+- Set `voice_id.trust_for_changes: false` to log who spoke without letting it skip approvals.
+
+How FAITH ties the two together:
+- It remembers who said what for one minute and matches it to HA's conversation by the exact words.
+- Each match is used once.
+
+Other ways FAITH knows who's talking:
+- **The HA app:** the request carries the signed-in HA user.
+- **FAITH's cards on a shared screen:** the person signed in, or the voice from the card's microphone.
+
+**Checked in a real Home Assistant (2026.2.3)** with its own Wyoming integration and a pipeline:
+- Wizard's voice saying "We need bread" added bread straight away.
+- The same words in an unknown voice went to the parents for approval.
+- Recognition scores were 0.94 (Wizard) and 0.95 (Sam) on new sentences, with the real voiceid service and synthetic voices.
+- Port 10300 has no password in the Wyoming protocol, so keep it on your LAN or the docker network HA uses.
 
 ## Mealie
 

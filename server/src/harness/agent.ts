@@ -4,7 +4,7 @@ import type { Registry } from "../connectors/registry.js";
 import type { Approvals } from "../approvals.js";
 import type { Tool } from "../connectors/types.js";
 import { newId } from "../secrets.js";
-import { scopeKey, who, type Caller } from "../scope.js";
+import { scopeKey, speakerLabel, who, type Caller } from "../scope.js";
 import { ModelError, runLoop, type LoopEvent, type Msg } from "./llm.js";
 import { systemPrompt } from "./prompt.js";
 
@@ -39,7 +39,7 @@ export class Agent {
     this.db.prepare("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)").run(conversationId, role, content, Date.now());
   }
   audit(c: Caller, tool: string, summary: string, ok: boolean) {
-    const by = c.speaker ? `${c.speaker.id} in ${c.audience} chat` : who(c.scope) + (c.deviceId ? `@${c.deviceId}` : "");
+    const by = c.speaker ? speakerLabel(c, "id")! : who(c.scope) + (c.deviceId ? `@${c.deviceId}` : "");
     this.db.prepare("INSERT INTO audit (at, who, channel, tool, summary, ok) VALUES (?, ?, ?, ?, ?, ?)").run(Date.now(), by, c.channel, tool, summary.slice(0, 500), ok ? 1 : 0);
   }
 

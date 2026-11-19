@@ -12,6 +12,7 @@ import type { Voices } from "../voice.js";
 import { envValue } from "../config.js";
 import { dashboard } from "../dashboard.js";
 import { ModelError } from "../harness/llm.js";
+import { transcribe } from "../speech.js";
 import type { Caller } from "../scope.js";
 
 export type HaCtx = {
@@ -72,7 +73,7 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     let caller = w.caller, text = String(b.text || "").trim(), heard: string | undefined, speaker: Person | undefined;
     if (b.audio) {
       const audio = Buffer.from(String(b.audio), "base64"), mime = String(b.mime || "audio/webm");
-      heard = await transcribe(x, audio, mime); text = heard;
+      heard = await transcribe(x.cfg(), x.env, audio, mime); text = heard;
       // On a shared screen with nobody signed in, a known voice says who's talking.
       if (caller.scope.kind === "household" && voices.enabled()) {
         const m = await voices.identify(audio, mime).catch(() => undefined);
@@ -191,17 +192,4 @@ export function speakable(text: string) {
     .replace(/(\*\*|__|\*|_|`|~~)/g, "")
     .replace(/[ \t]+/g, " ")
     .trim();
-}
-
-async function transcribe(x: HaCtx, audio: Buffer, mime: string) {
-  const m = x.cfg().model, key = envValue(m.api_key_env, x.env);
-  const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(audio)], { type: mime }), `speech.${mime.split("/")[1]?.split(";")[0] || "webm"}`);
-  form.append("model", x.cfg().voice.stt_model);
-  let r: Response;
-  try { r = await fetch(`${m.base_url}/audio/transcriptions`, { method: "POST", body: form, headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(120_000) }); }
-  catch (e: any) { throw new ModelError(502, `Couldn't reach speech-to-text (${e?.cause?.code || e?.message}).`); }
-  const d: any = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ModelError(502, `Speech-to-text answered ${r.status}.`);
-  return String(d.text || "").trim();
 }

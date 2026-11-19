@@ -47,6 +47,7 @@ const model = await fakeModel((req) => {
   return { content: "I'm the demo model. Try: what's on today, what's for dinner, we need bread, lock the front door." };
 });
 
+model.stt.text = process.env.DEMO_STT_TEXT || "What's for dinner?";
 const env = { ...process.env, WIKI_TOKEN_HOUSEHOLD: "w-house", WIKI_TOKEN_WIZARD: "w-wiz", WIKI_TOKEN_PARTNER: "w-par", ALLG_HOUSEHOLD: "a-house", ALLG_WIZARD: "a-wiz", ALLG_PARTNER: "a-par", HA_TOKEN: "ha" };
 const cfg = parseConfig({
   name: "Faith", family_name: "the demo family", model: { base_url: model.url, model: "demo" },
@@ -63,6 +64,9 @@ const cfg = parseConfig({
   hub: { devices: [{ id: "kitchen", name: "Kitchen" }], idle_seconds: 300 },
   // DEMO_EMBED_FROM=http://<your test HA> lets HA's "FAITH Admin" sidebar page show FAITH.
   embed: { allow_from: (process.env.DEMO_EMBED_FROM || "").split(",").filter(Boolean) },
+  // DEMO_WYOMING_PORT=10300 runs FAITH's speech-to-text for HA's voice pipeline; DEMO_VOICEID_URL adds voice ID.
+  ...(process.env.DEMO_WYOMING_PORT ? { wyoming: { port: Number(process.env.DEMO_WYOMING_PORT), host: "127.0.0.1" } } : {}),
+  ...(process.env.DEMO_VOICEID_URL ? { voice_id: { url: process.env.DEMO_VOICEID_URL } } : {}),
   dashboard: { entities: ["climate.house", "lock.front_door", "light.kitchen", "sensor.outside"] },
   apps: [
     { id: "ha", name: "Home Assistant", url: "http://homeassistant.local:8123", icon: "🏠" }, { id: "mealie", name: "Mealie", url: "http://mealie.local", icon: "🍲" },
@@ -73,9 +77,14 @@ const cfg = parseConfig({
   ],
 }, {});
 const port = Number(process.env.PORT || 8097);
-const { app, auth, agent, approvals, db } = await buildApp({ config: () => ({ ...cfg, port }), dataFile: ":memory:", env, webDir: resolve(import.meta.dirname, "../../web/dist") });
+const { app, auth, agent, approvals, db, voices } = await buildApp({ config: () => ({ ...cfg, port }), dataFile: ":memory:", env, webDir: resolve(import.meta.dirname, "../../web/dist") });
 auth.setPin("wizard", "1234"); auth.setPin("partner", "5678"); auth.setPin("kid", "0000"); auth.setPassword("wizard", "demo-password");
 await app.listen({ port, host: "127.0.0.1" });
+if (cfg.wyoming) {
+  const { WyomingStt } = await import("../src/wyoming.js");
+  const stt = new WyomingStt({ cfg: () => cfg, env, voices, log: { info: (o, m) => console.log(m, JSON.stringify(o)), warn: (o, m) => console.warn(m, JSON.stringify(o)) } });
+  console.log(`Speech-to-text for HA (Wyoming) on port ${await stt.listen()}`);
+}
 if (cfg.mattermost) {
   const { MattermostBot } = await import("../src/mattermost.js");
   const bot = new MattermostBot(() => cfg, db, agent, approvals, { info: (o, m) => console.log("[mattermost]", m, JSON.stringify(o)), warn: (o, m) => console.warn("[mattermost]", m, JSON.stringify(o)) }, env);

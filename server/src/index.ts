@@ -20,7 +20,7 @@ try { config = loadConfig(configPath); }
 catch (e) { if (e instanceof ConfigError) { console.error(e.message); process.exit(1); } throw e; }
 const cfg = () => config!;
 
-const { app, presence, agent, approvals, db, routines, rewards, notifier } = await buildApp({ config: cfg, dataFile: resolve(dataDir, "faith.db"), webDir: process.env.FAITH_WEB || resolve(here, "../../web/dist"), logger: true });
+const { app, presence, agent, approvals, db, routines, rewards, notifier, voices } = await buildApp({ config: cfg, dataFile: resolve(dataDir, "faith.db"), webDir: process.env.FAITH_WEB || resolve(here, "../../web/dist"), logger: true });
 
 // Say what's missing instead of failing quietly later.
 for (const c of cfg().connectors) {
@@ -42,6 +42,13 @@ if (cfg().mattermost) {
   notifier.bot = bot;
   bot.start();
   app.addHook("onClose", async () => bot.stop());
+}
+if (cfg().wyoming) {
+  const { WyomingStt } = await import("./wyoming.js");
+  const stt = new WyomingStt({ cfg, env: process.env, voices, log: app.log });
+  const port = await stt.listen();
+  app.log.info(`Speech-to-text for Home Assistant (Wyoming) on port ${port}${voices.enabled() ? ", with voice ID" : ""}.`);
+  app.addHook("onClose", async () => stt.close());
 }
 await app.listen({ port: cfg().port, host: process.env.HOST || "0.0.0.0" });
 app.log.info(`${cfg().name} is up. Model: ${cfg().model.base_url} (${cfg().model.model || "server default"}).`);

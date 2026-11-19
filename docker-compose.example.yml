@@ -11,6 +11,7 @@ services:
       TZ: ${TZ:-America/Detroit}
     ports:
       - "8097:8097"
+      # - "10300:10300"   # speech-to-text for HA's voice pipeline (wyoming: in faith.yaml)
     volumes:
       - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/data:/data
       - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/config:/config

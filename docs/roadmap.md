@@ -18,12 +18,13 @@
 - The look: brass & honey (brown and gold), the d20-and-bees emblem that shows listening / thinking / speaking, hexagon faces, an HA theme.
 - The hub card: the wall tablet's home. Tap FAITH to talk; answers are read aloud through Argos.
 - Checked in a real Home Assistant 2026.2.3: config flow, sensors, theme, every card, hub sign-in and the admin sidebar page.
+- Voice ID on HA's voice satellites: FAITH is the pipeline's speech-to-text (Wyoming), so it knows who said what; checked with HA's own Wyoming integration.
 - Points and rewards: 0.5 / 1 / 2 point jobs, rewards, parent approval; money rewards recorded as owed (Firefly card payout is a placeholder in `server/src/rewards.ts`).
 - Voice ID: `voiceid/` service (local, resemblyzer); FAITH keeps voiceprints and names the speaker on a shared screen.
 
 ## Next
 
-0. **Voice ID for HA satellites** (a Wyoming wrapper), and a run on the real Unraid HA VM.
+0. **A run on the real Unraid HA VM** with a real satellite and real voices.
 
 1. **Mattermost extras:** photos sent in a chat go to the vision model; voice messages through Argos's speech-to-text; a morning brief in each personal DM.
 2. **Knowing who's speaking.** HA hands conversation agents text, not audio, so this goes in front of speech-to-text:

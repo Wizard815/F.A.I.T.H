@@ -30,6 +30,14 @@ export const policyName = (s: Scope): PolicyName => (s.kind === "person" ? s.per
 export const scopeKey = (s: Scope) => (s.kind === "person" ? `person:${s.person.id}` : "household");
 export const who = (s: Scope) => (s.kind === "person" ? s.person.id : "household");
 
+/** Who is speaking on a shared channel, for logs and approval requests:
+ *  "Sam in the family chat" (Mattermost), or "Sam (by voice)" (a screen or satellite). */
+export const speakerLabel = (c: Caller, by: "id" | "name" = "name") => {
+  if (!c.speaker) return undefined;
+  const n = by === "id" ? c.speaker.id : c.speaker.name;
+  return c.channel === "mattermost" ? `${n} in the ${c.audience} chat` : `${n} (by voice)`;
+};
+
 export function personById(cfg: Config, id: string | undefined | null) {
   return id ? cfg.people.find((p) => p.id === id) : undefined;
 }
