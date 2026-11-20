@@ -62,6 +62,21 @@ export class HomeAssistant implements Connector {
     return !!pol.ha_domains?.includes(domain) || anyGlob(pol.ha_entities, entityId);
   }
 
+  private rooms = new Map<string, { at: number; room: string | null }>();
+  /** The area a device or satellite is in ("Kitchen"), so "the lights" means that room. */
+  async roomOf(...ids: (string | undefined | null)[]) {
+    for (const id of ids) {
+      if (!id || !/^[A-Za-z0-9_.]{1,80}$/.test(id)) continue;
+      const hit = this.rooms.get(id);
+      if (hit && Date.now() - hit.at < 10 * 60_000) { if (hit.room) return hit.room; continue; }
+      let room: string | null = null;
+      try { const out = await this.api("POST", "/api/template", { template: `{{ area_name('${id}') or '' }}` }); room = String(out ?? "").trim() || null; } catch { /* rooms are a nicety */ }
+      this.rooms.set(id, { at: Date.now(), room });
+      if (room) return room;
+    }
+    return undefined;
+  }
+
   private async areaMap(caller: Caller) {
     if (this.areas && Date.now() - this.areas.at < 5 * 60_000) return this.areas.map;
     const map = new Map<string, string>();

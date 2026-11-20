@@ -18,7 +18,7 @@ const env = { HA: "ha", AG_H: "a-house", AG_WIZARD: "a-wiz" };
 
 before(async () => {
   skillsDir = mkdtempSync(join(tmpdir(), "faith-skills-"));
-  ha = await fakeHa({ "light.kitchen": { state: "off", attributes: { friendly_name: "Kitchen light" } } }, { shopping: [] });
+  ha = await fakeHa({ "light.kitchen": { state: "off", attributes: { friendly_name: "Kitchen light" } } }, { shopping: [], areas: { "assist_satellite.kitchen_sat": "Kitchen" } });
   allg = await fakeMcp([{ name: "allglance_get_day", readOnly: true, run: (_a, t) => ({ blocks: [{ title: t === "a-house" ? "Family dinner" : "Dentist (private)", start: "18:00" }] }) }]);
   model = await fakeModel((req) => script(req));
   vid = await fakeVoiceId();
@@ -277,6 +277,36 @@ test("voice satellites: FAITH's speech-to-text knows who spoke, and HA's convers
     assert.ok(A.approvals.pendingCount() > before, "an unknown voice's change waits for approval");
     assert.equal(A.approvals.list()[0].requested_by, "someone talking to Home Assistant", "newest first: the unknown voice's request");
   } finally { await stt.close(); }
+});
+
+test("satellites speak in FAITH's voice (Wyoming text-to-speech through Argos)", async () => {
+  const cfg = () => ({ ...A.registry["cfg"](), wyoming: { port: 0, host: "127.0.0.1", languages: ["en"] } });
+  const stt = new WyomingStt({ cfg, env, voices: A.voices, log: { info: () => {}, warn: () => {} } });
+  const port = (await stt.listen())!;
+  try {
+    const sock = connect(port, "127.0.0.1"), dec = new Decoder(), got: any[] = [];
+    await new Promise<void>((r) => sock.once("connect", () => r()));
+    const done = new Promise<void>((res) => sock.on("data", (c) => { got.push(...dec.push(c)); if (got.some((e) => e.type === "audio-stop" || e.type === "error")) res(); }));
+    sock.write(Buffer.concat([encode("describe"), encode("synthesize", { text: "Dinner is **ready**.", voice: { name: "faith" } })]));
+    await done; sock.end();
+    const info = got.find((e) => e.type === "info").data;
+    assert.equal(info.tts[0].name, "faith");
+    const start = got.find((e) => e.type === "audio-start").data;
+    assert.deepEqual([start.rate, start.width, start.channels], [16000, 2, 1], "the WAV's own format");
+    const pcm = Buffer.concat(got.filter((e) => e.type === "audio-chunk").map((e) => e.payload));
+    assert.ok(pcm.toString().startsWith("Dinner is ready."), "the words, without Markdown marks");
+    assert.equal(pcm.length, 5000);
+  } finally { await stt.close(); }
+});
+
+test("a satellite's room is passed on: 'the lights' means that room", async () => {
+  script = () => ({ content: "Done." });
+  const r = (await H("/api/ha/conversation", { text: "turn off the lights", satellite_id: "assist_satellite.kitchen_sat", device_id: "abc123" })).json();
+  assert.equal(r.room, "Kitchen");
+  const sys = model.calls.at(-1).messages[0].content as string;
+  assert.match(sys, /voice satellite in the Kitchen/);
+  const none = (await H("/api/ha/conversation", { text: "turn off the lights", device_id: "nowhere1" })).json();
+  assert.equal(none.room, null);
 });
 
 // ---------------- HA → Mattermost / phones ----------------

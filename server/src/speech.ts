@@ -24,3 +24,45 @@ export function wav(pcm: Buffer, rate: number, width: number, channels: number) 
   h.write("data", 36); h.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([h, pcm]);
 }
+
+/** What a voice should read: the words, without Markdown's marks. */
+export function speakable(text: string) {
+  return text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, "")
+    .replace(/(\*\*|__|\*|_|`|~~)/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+/** Text to speech through the model server (Argos's OpenAI-compatible /audio/speech). */
+export async function synthesize(cfg: Config, env: NodeJS.ProcessEnv, text: string, format: "mp3" | "wav" = "mp3", voice?: string) {
+  const m = cfg.model, v = cfg.voice, key = envValue(m.api_key_env, env);
+  let r: Response;
+  try {
+    r = await fetch(`${m.base_url}/audio/speech`, { method: "POST", signal: AbortSignal.timeout(120_000),
+      headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+      body: JSON.stringify({ model: v.tts_model, input: speakable(text).slice(0, 4000), ...((voice || v.tts_voice) ? { voice: voice || v.tts_voice } : {}), response_format: format }) });
+  } catch (e: any) { throw new ModelError(502, `Couldn't reach text-to-speech (${e?.cause?.code || e?.message}).`); }
+  if (!r.ok) throw new ModelError(502, `Text-to-speech answered ${r.status}.`);
+  return { audio: Buffer.from(await r.arrayBuffer()), mime: r.headers.get("content-type") || (format === "wav" ? "audio/wav" : "audio/mpeg") };
+}
+
+/** The PCM inside a WAV file, and its format. */
+export function parseWav(buf: Buffer) {
+  if (buf.length < 12 || buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") throw new Error("not a WAV file (set Argos's text-to-speech to return wav)");
+  let off = 12, fmt: { channels: number; rate: number; width: number } | undefined;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString("ascii", off, off + 4), size = buf.readUInt32LE(off + 4), body = off + 8;
+    if (id === "fmt ") fmt = { channels: buf.readUInt16LE(body + 2), rate: buf.readUInt32LE(body + 4), width: buf.readUInt16LE(body + 14) / 8 };
+    if (id === "data") {
+      if (!fmt) throw new Error("WAV has no format chunk");
+      const end = size === 0xffffffff || body + size > buf.length ? buf.length : body + size; // streamed WAVs leave the size open
+      return { ...fmt, pcm: buf.subarray(body, end) };
+    }
+    off = body + size + (size % 2);
+  }
+  throw new Error("WAV has no audio");
+}

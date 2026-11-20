@@ -341,9 +341,14 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     // Said to a voice satellite: FAITH's own speech-to-text (wyoming.ts) may have heard who it was.
     const speaker = c.scope.kind === "household" ? voices.recall(String(b?.text || "")) : undefined;
     if (speaker && cfg().voice_id?.trust_for_changes !== false) c = { ...c, speaker, audience: "family", label: `${speaker.id} (voice) via HA` };
-    const r = await agent.turn({ caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined,
-      extraSystem: b?.language && !String(b.language).startsWith("en") ? `Answer in the language with code ${b.language}.` : undefined });
-    return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null, speaker: speaker?.id ?? null };
+    // Which room the satellite (or device) is in: "the lights" means that room.
+    const room = await registry.ha?.roomOf(b?.satellite_id, b?.device_id);
+    const extra = [
+      room ? `They're talking to a voice satellite in the ${room}. "The lights", "it's cold in here" and other requests without a room mean the ${room}.` : "",
+      b?.language && !String(b.language).startsWith("en") ? `Answer in the language with code ${b.language}.` : "",
+    ].filter(Boolean).join("\n") || undefined;
+    const r = await agent.turn({ caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined, extraSystem: extra });
+    return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null, speaker: speaker?.id ?? null, room: room ?? null };
   });
   app.get("/api/ha/summary", async (req) => {
     const c = haCaller(req);

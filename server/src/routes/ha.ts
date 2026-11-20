@@ -12,7 +12,7 @@ import type { Voices } from "../voice.js";
 import { envValue } from "../config.js";
 import { dashboard } from "../dashboard.js";
 import { ModelError } from "../harness/llm.js";
-import { transcribe } from "../speech.js";
+import { speakable, synthesize, transcribe } from "../speech.js";
 import type { Caller } from "../scope.js";
 
 export type HaCtx = {
@@ -102,15 +102,8 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     who(req);
     const text = speakable(String((req.body as any)?.text || "")).slice(0, 2000).trim();
     if (!text) throw new AuthError(400, "Nothing to say.");
-    const m = x.cfg().model, v = x.cfg().voice, key = envValue(m.api_key_env, x.env);
-    let r: Response;
-    try {
-      r = await fetch(`${m.base_url}/audio/speech`, { method: "POST", signal: AbortSignal.timeout(120_000),
-        headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: v.tts_model, input: text, ...(v.tts_voice ? { voice: v.tts_voice } : {}), response_format: "mp3" }) });
-    } catch (e: any) { throw new ModelError(502, `Couldn't reach text-to-speech (${e?.cause?.code || e?.message}).`); }
-    if (!r.ok) throw new ModelError(502, `Text-to-speech answered ${r.status}.`);
-    return { audio: Buffer.from(await r.arrayBuffer()).toString("base64"), mime: r.headers.get("content-type") || "audio/mpeg" };
+    const r = await synthesize(x.cfg(), x.env, text, "mp3");
+    return { audio: r.audio.toString("base64"), mime: r.mime };
   });
 
   // ---- approvals (cards, and the Approve / Deny buttons on a phone notification) ----
@@ -184,14 +177,3 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   });
 }
 
-/** What a voice should read: the words, without Markdown's marks. */
-export function speakable(text: string) {
-  return text
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, "")
-    .replace(/(\*\*|__|\*|_|`|~~)/g, "")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-}
