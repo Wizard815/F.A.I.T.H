@@ -8,12 +8,14 @@ export type Tool = {
   description: string;
   parameters: Record<string, unknown>;
   write: boolean;                     // changes something
+  /** Always offered, however many tools there are (e.g. HA's live status). */
+  always?: boolean;
   /** A sentence describing the action when it must wait for an on-screen Yes, else null. */
-  confirm?: (args: any) => string | null;
+  confirm?: (args: any) => string | null | Promise<string | null>;
   run: (args: any) => Promise<unknown>;
   /** This call must never run on someone else's approval (unlock, disarm, open, destructive):
    *  only a signed-in grown-up's own Yes. */
-  strict?: (args: any) => boolean;
+  strict?: (args: any) => boolean | Promise<boolean>;
   /** Set by the registry: this change waits for a family member's approval. */
   approval?: boolean;
   /** The tool makes its own approval request (with everything filled in), so the registry doesn't. */

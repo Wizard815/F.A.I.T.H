@@ -37,7 +37,7 @@ from .const import CONF_PANEL_URL, CONF_TOKEN, CONF_URL, DOMAIN, PANEL_PATH, SCA
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CONVERSATION, Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 CARDS_URL = "/faith_static"
 
 # What the cards may ask FAITH. Every call gets the logged-in HA user added here.
@@ -109,6 +109,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     await hass.http.async_register_static_paths([StaticPathConfig(CARDS_URL, str(Path(__file__).parent / "www"), False)])
     frontend.add_extra_js_url(hass, f"{CARDS_URL}/faith-cards.js?v={VERSION}")
     websocket_api.async_register_command(hass, ws_call)
+    # FAITH's door to HA's Assist API (areas, aliases, intents, exposure): see assist.py.
+    from .assist import FaithAssistView  # noqa: PLC0415
+    hass.http.register_view(FaithAssistView())
 
     async def send_message(call: ServiceCall) -> ServiceResponse:
         return await _client(hass).request("POST", "/api/ha/send", {"to": call.data["to"], "message": call.data["message"], "user_id": call.context.user_id})

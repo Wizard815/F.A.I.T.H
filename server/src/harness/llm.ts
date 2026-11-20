@@ -12,6 +12,8 @@ export class ModelError extends Error { constructor(public status: number, messa
 export type LoopOpts = {
   baseUrl: string; model: string; key?: string; temperature?: number; timeoutMs?: number;
   messages: Msg[]; tools: LoopTool[]; maxRounds: number;
+  /** Tools the caller may use that weren't offered this turn (the router's shortlist): run if the model names one anyway. */
+  callable?: LoopTool[];
   onEvent?: (e: LoopEvent) => void; signal?: AbortSignal;
 };
 
@@ -80,7 +82,7 @@ export async function runLoop(o: LoopOpts): Promise<{ text: string; toolsUsed: s
     msgs.push({ role: "assistant", content: text || null, tool_calls: real.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
     for (const c of real) {
       if (o.signal?.aborted) throw new ModelError(499, "Stopped.");
-      const t = o.tools.find((x) => x.name === c.name); emit({ type: "tool", name: c.name });
+      const t = o.tools.find((x) => x.name === c.name) ?? o.callable?.find((x) => x.name === c.name); emit({ type: "tool", name: c.name });
       let out: unknown, ok = true;
       try {
         let args: any = {};

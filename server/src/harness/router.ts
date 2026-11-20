@@ -17,7 +17,7 @@ export class ToolRouter {
   async pick(tools: Tool[], question: string): Promise<Tool[]> {
     const { max, always } = this.cfg().tools;
     if (tools.length <= max) return tools;
-    const keep = tools.filter((t) => t.connector === "faith" || always.some((p) => glob(p, t.name)));
+    const keep = tools.filter((t) => t.connector === "faith" || t.always || always.some((p) => glob(p, t.name)));
     const rest = tools.filter((t) => !keep.includes(t));
     const room = Math.max(0, max - keep.length);
     const scores = (await this.byEmbedding(rest, question)) ?? rest.map((t) => words(question, t));
@@ -55,7 +55,8 @@ export class ToolRouter {
   }
 }
 
-const describe = (t: Tool) => `${t.name.replace(/_/g, " ")}: ${t.description}`.slice(0, 600);
+const spaced = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " "); // HassClimateSetTemperature -> Hass Climate Set Temperature
+const describe = (t: Tool) => `${spaced(t.name)}: ${t.description}`.slice(0, 600);
 const key = (t: string) => createHash("sha1").update(t).digest("hex");
 function cosine(a: number[], b: number[]) {
   let d = 0, na = 0, nb = 0;
@@ -71,7 +72,7 @@ const tokens = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => 
 export function words(question: string, t: Tool) {
   const q = new Set(tokens(question));
   if (!q.size) return 0;
-  const name = tokens(t.name), desc = tokens(t.description);
+  const name = tokens(spaced(t.name)), desc = tokens(t.description);
   let s = 0;
   for (const w of new Set(name)) if (q.has(w)) s += 2;
   for (const w of new Set(desc)) if (q.has(w)) s += 1;
