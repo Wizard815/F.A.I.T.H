@@ -44,3 +44,16 @@ Open [`brand/emblem.html`](brand/emblem.html) in a browser to see it move. Rebui
 - Fraunces for headings, Instrument Sans for text, both bundled.
 
 **Home Assistant.** Copy `ha/themes/faith.yaml` to HA's `config/themes/` and pick *FAITH*. The FAITH cards use `--faith-accent`, which defaults to gold, so they match even without the theme.
+
+## The clickable preview
+
+`docs/brand/faith-hub.html` is FAITH's family interface as one page you can click through:
+- the wall-tablet hub with the emblem, which listens, thinks and speaks;
+- the family day card, which you can arrange;
+- chat with FAITH;
+- points and the kid's card;
+- the admin's approvals and integrations watch.
+
+It runs on example data with a scripted FAITH, so nothing in it touches your system. Changes carry across screens: a "we need bread" from the shared tablet waits in Admin until you approve it.
+
+The source is `web/preview/app.tsx` (React and FAITH's real emblem renderer). Rebuild the page with `node web/scripts/preview.mjs`.
