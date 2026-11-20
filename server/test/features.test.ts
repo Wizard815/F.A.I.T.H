@@ -391,3 +391,12 @@ test("admin API: only an admin, and it manages skills, routines and rewards", as
   const sam = await A.app.inject({ method: "POST", url: "/api/auth/pin", payload: {} });
   assert.notEqual(sam.statusCode, 200);
 });
+
+test("rewards: the starter jobs fit a family's own point steps (no half points)", async () => {
+  const { openDb } = await import("../src/db.js");
+  const { Rewards } = await import("../src/rewards.js");
+  const cfg = parseConfig({ name: "Faith", model: { base_url: "http://m/v1" }, people: [{ id: "kid", name: "Kid", role: "child" }], rewards: { allowed_points: [1, 2, 5, 10] } }, {});
+  const r = new Rewards(openDb(":memory:"), () => cfg);
+  r.seed(); // FAITH calls this on start: it must not throw
+  assert.deepEqual([...new Set(r.activities().map((a) => a.points))].sort(), [1, 2]);
+});
