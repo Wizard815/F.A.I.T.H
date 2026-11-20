@@ -341,7 +341,9 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     const b = req.body as any;
     let c = haCaller(req, b?.user_id ? String(b.user_id) : undefined);
     // Said to a voice satellite: FAITH's own speech-to-text (wyoming.ts) may have heard who it was.
-    const speaker = c.scope.kind === "household" ? voices.recall(String(b?.text || "")) : undefined;
+    // Only for a voice pipeline (a satellite or device, no HA user): typed Assist never borrows a voice.
+    const fromVoice = !b?.user_id && !!(b?.satellite_id || b?.device_id);
+    const speaker = c.scope.kind === "household" && fromVoice ? voices.recall(String(b?.text || "")) : undefined;
     if (speaker && cfg().voice_id?.trust_for_changes !== false) c = { ...c, speaker, audience: "family", label: `${speaker.id} (voice) via HA` };
     // Which room the satellite (or device) is in: "the lights" means that room.
     const room = await registry.ha?.roomOf(b?.satellite_id, b?.device_id);

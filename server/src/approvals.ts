@@ -91,6 +91,9 @@ export class Approvals {
       if (row.status === "denied" && !approve) throw new ApprovalError(409, "It's already denied.");
       overrule = true;
     }
+    // Claim it first: two parents tapping Approve at once must not run it twice.
+    const claimed = Number(this.db.prepare("UPDATE requests SET status = ? WHERE id = ? AND status = ?").run(approve ? "running" : "denied", id, row.status).changes) === 1;
+    if (!claimed) throw new ApprovalError(409, "Someone else has just decided this one.");
     if (!approve) {
       this.db.prepare("UPDATE requests SET status = 'denied', decided_by = ?, decided_at = ?, overruled = ? WHERE id = ?").run(me.id, this.now(), overrule ? 1 : 0, id);
       const text = `Denied by ${me.name}: ${row.summary}.`;
@@ -108,6 +111,8 @@ export class Approvals {
       catch (e: any) { result = e.message; }
     }
     this.db.prepare("UPDATE requests SET status = ?, decided_by = ?, decided_at = ?, result = ?, overruled = ? WHERE id = ?").run(ok ? "approved" : "failed", me.id, this.now(), result, overrule ? 1 : 0, id);
+    // The action log, like every other change: who asked, who approved.
+    this.db.prepare("INSERT INTO audit (at, who, channel, tool, summary, ok) VALUES (?, ?, ?, ?, ?, ?)").run(this.now(), `${row.requested_by} (approved by ${me.id})`, row.channel, row.tool, `${row.args}`.slice(0, 500), ok ? 1 : 0);
     const r = this.row(id);
     if (r) this.emit({ kind: "decided", request: r, channel: row.channel, device_id: row.device_id, text: ok ? `Approved by ${me.name}: ${row.summary}.` : `${me.name} approved "${row.summary}", but it didn't work: ${result}` });
     return { ok, status: ok ? ("approved" as const) : ("failed" as const), text: ok ? `Approved and done: ${row.summary}.` : `Approved, but it didn't work: ${result}` };

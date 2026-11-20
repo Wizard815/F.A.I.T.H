@@ -188,11 +188,15 @@ test("Home Assistant: Assist from a mapped HA user acts as that person; others g
   script = (req) => (n++ === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "lock.front_door", service: "unlock" } }] } : { content: req.messages.at(-1).content });
   const v = await A.app.inject({ method: "POST", url: "/api/ha/conversation", headers: { authorization: `Bearer ${tok}` }, payload: { text: "unlock the door", user_id: "ha-wiz" } });
   assert.match(v.json().speech, /tap Yes on a FAITH screen/);
-  // An unknown voice (household): the change is sent for a family member's approval.
+  // An unknown voice (household): unlocking can't even be asked for; locking goes to a family member.
   n = 0;
   const hv = await A.app.inject({ method: "POST", url: "/api/ha/conversation", headers: { authorization: `Bearer ${tok}` }, payload: { text: "unlock the door" } });
-  assert.match(hv.json().speech, /sent_for_approval/);
+  assert.match(hv.json().speech, /can't be asked for from here/);
   assert.ok(!ha.services.some((x) => x.service === "unlock"));
+  n = 0;
+  script = (req) => (n++ === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "lock.front_door", service: "lock" } }] } : { content: req.messages.at(-1).content });
+  const lk = await A.app.inject({ method: "POST", url: "/api/ha/conversation", headers: { authorization: `Bearer ${tok}` }, payload: { text: "lock the door" } });
+  assert.match(lk.json().speech, /sent_for_approval/, "making the house safer can wait for a parent's approval");
 
   const household = A.auth.addToken("household", "not-ha");
   assert.equal((await A.app.inject({ method: "POST", url: "/api/ha/conversation", headers: { authorization: `Bearer ${household}` }, payload: { text: "x" } })).statusCode, 403);

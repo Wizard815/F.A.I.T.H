@@ -39,6 +39,10 @@ the source (wiki, ALLGlance, HA, Coinpile, Orb, Hermes, Studio) decides what tha
    - Hermes is off for children and the household.
 3. **Confirmation: the riskiest actions.** Locks, alarm, garage and anything an MCP server marks destructive wait for a Yes from the same person, on the same screen or in the same chat. Voice and API callers (including `/mcp`) can't give one, so those actions are refused there (unless `voice.confirm_on_voice`).
 
+**Approvals never stand in for a Yes on the risky ones.** Unlocking, disarming, opening, and anything an MCP server marks destructive can't be asked for from a view that needs approval: no request is made, so nobody can approve one by mistake. Every approved request is claimed once, so two parents tapping Approve don't run it twice, and it goes into the action log.
+
+**Where people are stays in Home Assistant.** FAITH sees `person.*` and trackers only as home or away, and never address, GPS or zone sensors, whatever the config exposes.
+
 **Speakers, not sign-ins.** In a group chat, or from a recognised voice on a shared screen or satellite, FAITH knows *who is speaking* but still answers from the household view, because everyone there hears the answer. The speaker only decides whose changes need approval.
 
 An approved household request runs with the household's tokens, not the approver's. Approving never lends someone's private access to the shared screen.

@@ -31,21 +31,24 @@ const SCREEN = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   const { cfg, auth, agent, approvals, rewards, voices, presence } = x;
 
-  type Who = { caller: Caller; user?: string; screen?: string; hub?: { person: Person; remaining: number }; shared: boolean };
+  type Who = { caller: Caller; user?: string; screen?: string; asked?: string; hub?: { person: Person; remaining: number }; shared: boolean };
   const who = (req: FastifyRequest): Who => {
     const base = x.apiCaller(req);
     if (base.apiKind !== "ha") throw new AuthError(403, "Use a Home Assistant token (`faith token add ha <name>`).");
     const b: any = req.body || {};
     const user = b.user_id ? String(b.user_id) : undefined;
-    const screen = b.screen && SCREEN.test(String(b.screen)) ? String(b.screen) : undefined;
+    const asked = b.screen && SCREEN.test(String(b.screen)) ? String(b.screen) : undefined;
+    // A screen only counts once this tablet is paired (faith pair <screen>, typed into the card):
+    // otherwise any HA account on any device could claim to be the kitchen tablet.
+    const screen = asked && auth.device(b.device_token ? String(b.device_token) : undefined)?.id === asked ? asked : undefined;
     const ha = cfg().connectors.find((c) => c.type === "homeassistant") as any;
     const mapped = user && ha?.trust_ha_users !== false ? cfg().people.find((p) => p.ha_user_id === user) : undefined;
     if (screen && !mapped) {
       const h = auth.haHub(b.hub_session ? String(b.hub_session) : undefined, screen);
-      if (h) return { caller: { scope: { kind: "person", person: h.person }, channel: "ha", deviceId: `ha:${screen}`, sessionHash: h.hash, label: `${h.person.id} on ${screen}` }, user, screen, hub: { person: h.person, remaining: auth.remaining(h.row) }, shared: true };
+      if (h) return { caller: { scope: { kind: "person", person: h.person }, channel: "ha", deviceId: `ha:${screen}`, sessionHash: h.hash, label: `${h.person.id} on ${screen}` }, user, screen, asked, hub: { person: h.person, remaining: auth.remaining(h.row) }, shared: true };
     }
-    if (mapped) return { caller: { scope: { kind: "person", person: mapped }, channel: "ha", deviceId: "ha", label: `${mapped.id} in HA` }, user, screen, shared: false };
-    return { caller: { scope: { kind: "household" }, channel: "ha", deviceId: `ha:${screen || "default"}`, label: `household on ${screen || "HA"}` }, user, screen, shared: true };
+    if (mapped) return { caller: { scope: { kind: "person", person: mapped }, channel: "ha", deviceId: "ha", label: `${mapped.id} in HA` }, user, screen, asked, shared: false };
+    return { caller: { scope: { kind: "household" }, channel: "ha", deviceId: `ha:${screen || "default"}`, label: `household on ${screen || "HA"}` }, user, screen, asked, shared: true };
   };
   const pub = (p: Person) => ({ id: p.id, name: p.name, role: p.role, color: p.color });
 
@@ -73,7 +76,8 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     return {
       name: cfg().name, person: p ? pub(p) : null, household: !p, screen: w.screen ?? null,
       hub: w.hub ? { person: pub(w.hub.person), remaining_seconds: w.hub.remaining } : null,
-      can_sign_in: w.shared && !w.hub && cfg().people.length > 0,
+      can_sign_in: !!w.screen && w.shared && !w.hub && cfg().people.length > 0,
+      pair_needed: !!w.asked && !w.screen && w.shared,
       can_approve: approvals.canApprove(c), pending_approvals: approvals.pendingCount(),
       cards, apps, home: presence.whoIsHome().home.map(pub),
       layout: { can_arrange: !!p && !fixed, available, order: cards.map((k) => k.id), hidden: mine?.hidden ?? [], saved: !!mine },
@@ -167,7 +171,8 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   // ---- shared screens: "Who's here?" on a wall tablet signed into HA as the family ----
   const shared = (req: FastifyRequest) => {
     const w = who(req);
-    if (!w.screen) throw new AuthError(400, "Give the card a screen id (screen: kitchen).");
+    if (!w.asked) throw new AuthError(400, "Give the card a screen id (screen: kitchen).");
+    if (!w.screen) throw new AuthError(403, `This tablet isn't paired as ${w.asked} yet. On the server run: faith pair ${w.asked}, then type the code on this screen.`);
     if (!w.shared) throw new AuthError(403, "This HA account already belongs to a person, so there's nothing to sign in to.");
     return w;
   };
@@ -175,6 +180,21 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     const w = shared(req);
     const dev = cfg().hub.devices.find((d) => d.id === w.screen);
     return { people: cfg().people.map((p) => ({ ...pub(p), pin: auth.methods(p.id).pin })), suggested: presence.face(w.screen!) ?? null, face_unlock: !!dev?.face_unlock };
+  });
+  // Pairing a tablet as a screen: the one-time code from `faith pair <screen>`. The card keeps the device token.
+  const pairFails = new Map<string, number[]>();
+  app.post("/api/ha/hub/pair", async (req) => {
+    const w = who(req), b: any = req.body || {};
+    if (!w.asked) throw new AuthError(400, "Give the card a screen id (screen: kitchen).");
+    if (!w.shared) throw new AuthError(403, "This HA account already belongs to a person, so there's no shared screen to pair.");
+    // Codes are short: a few wrong tries, then wait (per screen, and for everyone together).
+    const now = Date.now(), recent = (k: string) => (pairFails.get(k) ?? []).filter((t) => now - t < 10 * 60_000);
+    if (recent(w.asked).length >= 5 || recent("*").length >= 20) throw new AuthError(429, "Too many wrong codes. Wait ten minutes, then make a new one with faith pair.");
+    let r;
+    try { r = auth.pair(String(b.code || "")); }
+    catch (e) { for (const k of [w.asked, "*"]) pairFails.set(k, [...recent(k), now]); throw e; }
+    if (r.device.id !== w.asked) { auth.unpair(r.device.id); throw new AuthError(400, `That code was for ${r.device.id}, not ${w.asked}. Make one with: faith pair ${w.asked}`); }
+    return { device_token: r.token, screen: r.device.id };
   });
   app.post("/api/ha/hub/signin", async (req) => {
     const w = shared(req), b: any = req.body || {};
@@ -193,8 +213,10 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   // ---- HA → Mattermost / phones (the faith.send_message action) ----
   app.post("/api/ha/send", async (req) => {
     const w = who(req), b: any = req.body || {};
-    // An automation is set up by whoever runs HA, so it sends straight away (no approval), with no private access.
-    const r = await agent.runTool({ scope: { kind: "household" }, audience: "parents", channel: "ha", label: "home assistant automation" }, "message_send", { to: b.to, text: b.message });
+    // Called by a person (a script or button in HA): their own rules, like any message they send.
+    // Called by an automation (no HA user): set up by whoever runs HA, so it sends straight away, with no private access.
+    const caller: Caller = w.user ? w.caller : { scope: { kind: "household" }, audience: "parents", channel: "ha", label: "home assistant automation" };
+    const r = await agent.runTool(caller, "message_send", { to: b.to, text: b.message });
     const out: any = r.out;
     if (out?.error) throw new ModelError(400, out.error);
     return out;

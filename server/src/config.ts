@@ -108,7 +108,7 @@ export type Config = {
   skills: { dir: string; packs: { dir: string; who?: PolicyName[] }[] }; // your own skills (Markdown); packs: SKILL.md folders (e.g. homeassistant-ai/skills)
   voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
   /** FAITH as a Wyoming speech-to-text service for HA's voice pipeline (and voice ID on satellites). */
-  wyoming?: { port: number; host: string; languages: string[] };
+  wyoming?: { port: number; host: string; languages: string[]; allow_from: string[] };
   rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
   notifications: { approvals_push: boolean };
   /** Checking every source on a schedule and telling the parents when one goes down (health.ts). 0 = off. */
@@ -286,7 +286,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
       packs: (raw.skills?.packs || []).map((p: any) => (typeof p === "string" ? { dir: p } : { dir: str(p.dir), who: p.who ? (list(p.who) as PolicyName[]) : undefined })) },
     voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
       threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true) } : undefined,
-    wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"] } : undefined,
+    wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"], allow_from: list(raw.wyoming.allow_from) } : undefined,
     rewards: (() => {
       const r = raw.rewards || {}, payout = str(r.payout, "manual");
       if (!["manual", "firefly"].includes(payout)) throw new ConfigError("rewards.payout is manual or firefly.");

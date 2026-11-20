@@ -10,6 +10,9 @@ const ENTRY_TYPES = ["breakfast", "lunch", "dinner", "side", "dessert", "snack",
  *  shopping lists and meal plan. FAITH only sees entities in `expose`, a
  *  role can be narrowed to some domains, and `confirm_domains` (locks,
  *  alarm, garage) always wait for an on-screen Yes. */
+/** Sensors that say where someone is: never shown to anyone through FAITH. */
+const WHERE = ["sensor.*geocoded_location*", "sensor.*_location", "sensor.*_address", "sensor.*_latitude", "sensor.*_longitude", "sensor.*_gps*", "sensor.*_zone"];
+
 export class HomeAssistant implements Connector {
   id: string;
   private areas?: { at: number; map: Map<string, string> };
@@ -52,6 +55,8 @@ export class HomeAssistant implements Connector {
   exposed(entityId: string) {
     const e = this.cfg.expose, domain = entityId.split(".")[0];
     if (anyGlob(e.exclude, entityId)) return false;
+    // Where someone is (addresses, coordinates) is never FAITH's to pass on, whatever the config says.
+    if (WHERE.some((p) => anyGlob([p], entityId))) return false;
     return e.domains.includes(domain) || anyGlob(e.entities, entityId);
   }
   /** May this caller change this entity? */
@@ -91,7 +96,10 @@ export class HomeAssistant implements Connector {
 
   private brief(s: State, area?: string) {
     if (s.attributes?.friendly_name) this.names.set(s.entity_id, s.attributes.friendly_name);
-    const a = s.attributes || {}, out: Record<string, unknown> = { entity_id: s.entity_id, name: a.friendly_name || s.entity_id, state: s.state };
+    const a = s.attributes || {}, domain = s.entity_id.split(".")[0];
+    // People and trackers: home or away only, never the zone ("Work", "School") or coordinates.
+    const state = domain === "person" || domain === "device_tracker" ? (s.state === "home" ? "home" : ["unknown", "unavailable"].includes(s.state) ? s.state : "away") : s.state;
+    const out: Record<string, unknown> = { entity_id: s.entity_id, name: a.friendly_name || s.entity_id, state };
     if (area) out.area = area;
     for (const k of ["unit_of_measurement", "current_temperature", "temperature", "hvac_action", "brightness", "media_title", "battery_level"]) if (a[k] != null) out[k] = a[k];
     return out;
@@ -152,12 +160,15 @@ export class HomeAssistant implements Connector {
         if (!this.controllable(caller, id)) return null;
         return confirmDomains.includes(domain) ? this.say(id, String(a?.service || "")) : null;
       },
+      // Making the house less secure (unlock, disarm, open, toggle) is never done on someone else's approval.
+      strict: (a) => confirmDomains.includes(String(a?.entity_id || "").split(".")[0]) && /unlock|disarm|open|raise|toggle|stop/.test(String(a?.service || "")),
       run: async (a) => {
         const id = String(a?.entity_id || ""), service = String(a?.service || ""), domain = id.split(".")[0];
         if (!/^[a-z_]+\.[a-z0-9_]+$/.test(id)) return { error: "entity_id looks like light.kitchen." };
         if (!/^[a-z_]+$/.test(service)) return { error: "service is an action name like turn_on." };
         if (!this.controllable(caller, id)) return { error: `You can't control ${id} from here.` };
-        const data = a?.data && typeof a.data === "object" ? a.data : {};
+        // Only this one entity: targets hidden in data (area, device, label, floor) would reach past what this person may control.
+        const { entity_id: _e, area_id: _a, device_id: _d, label_id: _l, floor_id: _f, ...data } = a?.data && typeof a.data === "object" ? a.data : ({} as any);
         await this.api("POST", `/api/services/${domain}/${service}`, { ...data, entity_id: id }, caller);
         const s = await this.state(id, caller).catch(() => null);
         return { ok: true, entity_id: id, state: s?.state };

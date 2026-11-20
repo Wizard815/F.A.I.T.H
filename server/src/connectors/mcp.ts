@@ -113,6 +113,7 @@ export class McpConnector implements Connector {
         parameters: t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema : { type: "object", properties: {} },
         write: !isReadOnly(t),
         // Destructive tools (delete, restart, remove...) always wait for a Yes from the person asking.
+        strict: t.annotations?.destructiveHint ? () => true : undefined,
         confirm: t.annotations?.destructiveHint ? (args: any) => `${(t.description || t.name).split(/[.\n]/)[0].slice(0, 120)} (${t.name}${args && Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 160)}` : ""})` : undefined,
         run: async (args: any) => {
           const r = await c.call(t.name, args && typeof args === "object" ? args : {});

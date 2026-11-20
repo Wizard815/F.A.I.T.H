@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import css from "./cards.css?inline";
-import { hubSession, makeApi, setHubSession, type Api, type CardConfig, type Hass } from "./bridge";
+import { hubSession, makeApi, setDeviceToken, setHubSession, type Api, type CardConfig, type Hass } from "./bridge";
 import { Emblem, type EmblemState } from "../emblem/Emblem";
 
 declare global {
@@ -21,7 +21,7 @@ type Item = { title: string; time?: string; meta?: string; label?: string; done?
 type CardData = { id: string; title: string; kind: string; items?: Item[]; approvals?: { id: string; summary: string; requested_by: string }[]; entities?: { entity_id: string; name: string; state: string }[]; text?: string; error?: string; empty?: string };
 type Person = { id: string; name: string; role: string; color?: string };
 type Layout = { can_arrange: boolean; available: { id: string; title: string }[]; order: string[]; hidden: string[]; saved: boolean };
-type View = { layout?: Layout; home?: Person[]; name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
+type View = { layout?: Layout; home?: Person[]; name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; pair_needed?: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
 
 const ICON: Record<string, string> = { today: "mdi:calendar-today", meals: "mdi:silverware-fork-knife", shopping: "mdi:cart-outline", chores: "mdi:broom", home: "mdi:home-outline", approvals: "mdi:shield-check-outline" };
 const initials = (n: string) => n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -197,6 +197,20 @@ function PinPad({ api, people, pick, onBack, onDone }: { api: Api; people: Peopl
   );
 }
 
+/** Pairing this tablet as a screen: the code from `faith pair <screen>` on the server. */
+function PairForm({ api }: { api: Api }) {
+  const [code, setCode] = useState(""), [msg, setMsg] = useState("");
+  return (
+    <form className="pin" onSubmit={(e) => { e.preventDefault(); api.call("/api/ha/hub/pair", { code }).then((r: any) => setDeviceToken(api.screen!, r.device_token)).catch((err) => setMsg(err.message)); }}>
+      <h2>Pair this screen</h2>
+      <div className="meta" style={{ textAlign: "center" }}>Before people can sign in here, pair this tablet as <b>{api.screen}</b>. On the server run <code>faith pair {api.screen}</code>, then type the code.</div>
+      <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" aria-label="Pairing code" placeholder="Pairing code" style={{ maxWidth: 220, textAlign: "center" }} />
+      <button className="primary" type="submit" disabled={!code.trim()}>Pair</button>
+      <div className="err" role="alert">{msg}</div>
+    </form>
+  );
+}
+
 /** Keeps a tablet's sign-in alive while people touch it, and forgets it once the server signed them out. */
 function useHubKeepAlive(api: Api, data: View | null) {
   const last = useRef(0);
@@ -223,6 +237,7 @@ function WhoCard({ api }: { api: Api; config: CardConfig }) {
       <div className="right"><button onClick={() => signOut(api)}>Sign out</button></div></div></ha-card>
   );
   if (data.person) return <ha-card><div className="head"><Avatar p={data.person} size={44} /><div><h2>{data.person.name}</h2><div className="sub">Your own Home Assistant account</div></div></div></ha-card>;
+  if (data.pair_needed) return <ha-card><PairForm api={api} /></ha-card>;
   if (pick) return <ha-card><PinPad api={api} people={people} pick={pick} onBack={() => setPick(null)} onDone={() => { setPick(null); setPeople(null); }} /></ha-card>;
   if (!people) return (
     <ha-card><div className="head"><ha-icon icon="mdi:account-group-outline" /><div><h2>Shared view</h2><div className="sub">Everyone sees the family's things. Sign in for your own.</div></div>
@@ -389,6 +404,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
         {held.map((l, i) => <Held key={i} l={l} answer={c.answer} />)}
       </div>
       {config.show_input !== false && <AskBar c={c} placeholder="Or type to FAITH" />}
+      {shared && data?.pair_needed && <div className="faces"><PairForm api={api} /></div>}
       {shared && people && !data?.hub && (
         <div className="faces">
           {people.people.map((p) => <button key={p.id} className={`face ${people.suggested === p.id ? "on" : ""}`} onClick={() => setPick(p)}><Avatar p={p} size={56} ring={people.suggested === p.id} />{p.name}</button>)}

@@ -92,7 +92,7 @@ satellite -> HA Assist pipeline -> FAITH speech-to-text (Wyoming) -> FAITH conve
 What a recognised voice does:
 - **It counts as that person speaking in the family's shared view.** A parent's change goes straight through; a child's or an unknown voice's waits for approval.
 - **It never unlocks private things.** The answer is still the household view, because everyone in the room hears it.
-- **Locks, alarm and garage** still need a Yes on a screen.
+- **Locks, alarm and garage** still need a Yes on a screen. Unlocking, disarming or opening can't be asked for by voice from the shared view at all. Locking can, and waits for a parent's approval.
 - Set `voice_id.trust_for_changes: false` to log who spoke without letting it skip approvals.
 
 How FAITH ties the two together:
@@ -107,7 +107,8 @@ Other ways FAITH knows who's talking:
 - Wizard's voice saying "We need bread" added bread straight away.
 - The same words in an unknown voice went to the parents for approval.
 - Recognition scores were 0.94 (Wizard) and 0.95 (Sam) on new sentences, with the real voiceid service and synthetic voices.
-- Port 10300 has no password in the Wyoming protocol, so keep it on your LAN or the docker network HA uses.
+- Port 10300 has no password in the Wyoming protocol. Set `wyoming.allow_from: [<HA's IP>]` so only Home Assistant can use it (`faith init` does this when it finds HA).
+- A voice only counts for requests that come from a satellite. Typed Assist never borrows a voice heard a moment ago.
 
 ## Who's home
 
@@ -177,10 +178,13 @@ The family uses Home Assistant; FAITH's own page is the admin console. The integ
   - Replies can use a little Markdown (bold, lists). The cards show it formatted, and the marks aren't read aloud.
 - **Each person arranges their own day card.** Signed in (their own HA account, or a PIN on the tablet), they tap *Arrange* on the FAITH card, then reorder and hide sections. FAITH remembers it for them. A card with its own `cards:` list keeps that list for everyone.
 - **Each card asks FAITH as the HA user who's looking.** Map each person's HA user with `ha_user_id` in `faith.yaml`. A mapped user sees their own view.
-- **A tablet signed into HA as an unmapped "Family" user** sees the household view. Someone taps *Sign in* on the who card and enters their PIN. All FAITH cards on that tablet then show their view until they leave or sign out.
+- **A tablet signed into HA as an unmapped "Family" user** sees the household view.
+  - **Pair it first.** Run `faith pair kitchen` on the server, then type the code into the FAITH card on the tablet. The tablet keeps the pairing.
+  - **Then sign in.** Someone taps their face on the hub card (or *Sign in* on the who card) and enters their PIN. All FAITH cards on that tablet show their view until they leave or sign out.
+  - **Without pairing,** a device saying "I'm the kitchen" gets nothing: no faces, no PIN pad, no camera sign-in. Five wrong codes block pairing for ten minutes.
 - **Private things never go into HA sensors.** The cards fetch them live, for the person looking only.
 - **Phones:** give each person `ha_notify: [notify.mobile_app_<phone>]`. Approval requests arrive with Approve / Deny buttons. A tap decides as that person.
-- **Actions for automations:** `faith.send_message` (`to`: family, parents or a person) posts to Mattermost and/or their phone. `faith.award_points` gives points; from an automation, it waits for a parent's approval.
+- **Actions for automations:** `faith.send_message` (`to`: family, parents, home or a person) posts to Mattermost and/or their phone. Run by an automation, it sends straight away. Run by a person (a button or script), their own rules apply, so a child can't message the parents' chat. `faith.award_points` gives points; from an automation, it waits for a parent's approval.
 - **Checked in a real Home Assistant (2026.2.3)** with the demo behind it:
   - the integration set up through its config flow, and the sensors filled in;
   - the theme applied;
