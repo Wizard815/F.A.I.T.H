@@ -68,7 +68,8 @@ satellite (wake word) -> HA Assist pipeline -> speech-to-text -> FAITH (conversa
 ```
 
 - **Speech-to-text:** FAITH itself (`wyoming:` in `faith.yaml`). It passes the audio to Argos's `/v1/audio/transcriptions` and also recognises the voice (below). HA's Wyoming faster-whisper container works too, without voice ID.
-- **Text-to-speech:** HA's Piper container, or a Wyoming bridge to Argos's `/v1/audio/speech`.
+- **Text-to-speech:** FAITH too. The same Wyoming entry also offers text-to-speech "faith" (Argos's `/v1/audio/speech`), so the satellites sound like FAITH's screens. Argos's speech model must be able to return `wav`. HA's Piper container works as well.
+- **Which room:** assign each satellite to an area in HA. FAITH looks the area up for every request, so "turn the lights off" or "it's cold in here" means that room.
   - omi-local's `omi-audio` already runs faster-whisper and Piper.
   - hermes-agent's plugin catalog has a `wyoming-voice-bridge`.
 - **Wake word:** openWakeWord in HA, with a custom "Hey Faith" model.
@@ -86,7 +87,7 @@ satellite -> HA Assist pipeline -> FAITH speech-to-text (Wyoming) -> FAITH conve
 2. Publish port 10300 in docker compose.
 3. Enrol each person's voice in FAITH's admin page (*People*, three short clips each).
 4. In HA, add the **Wyoming Protocol** integration with FAITH's address and port 10300. It shows up as speech-to-text "faith".
-5. In *Settings → Voice assistants*, make a pipeline with **speech-to-text: faith** and **conversation agent: FAITH**, then give it to your satellites.
+5. In *Settings → Voice assistants*, make a pipeline with **speech-to-text: faith**, **conversation agent: FAITH** and **text-to-speech: faith**, then give it to your satellites.
 
 What a recognised voice does:
 - **It counts as that person speaking in the family's shared view.** A parent's change goes straight through; a child's or an unknown voice's waits for approval.

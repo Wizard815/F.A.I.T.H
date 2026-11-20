@@ -1,7 +1,7 @@
 import { createServer, type Server, type Socket } from "node:net";
 import type { Config } from "./config.js";
 import type { Voices } from "./voice.js";
-import { transcribe, wav } from "./speech.js";
+import { parseWav, synthesize, transcribe, wav } from "./speech.js";
 
 /** FAITH as a speech-to-text service for Home Assistant's voice pipeline,
  *  over the Wyoming protocol (what HA's voice satellites already use).
@@ -58,7 +58,12 @@ export class WyomingStt {
         name: "faith", description: "FAITH: Argos speech-to-text that also knows which family member is talking", attribution, installed: true, version: "0.3.0",
         models: [{ name: this.d.cfg().voice.stt_model, description: "Argos speech-to-text", attribution, installed: true, languages: w.languages, version: "1" }],
       }],
-      tts: [], handle: [], intent: [], wake: [],
+      // FAITH's voice: Argos's text-to-speech, so satellites sound like FAITH everywhere.
+      tts: [{
+        name: "faith", description: "FAITH's voice (Argos text-to-speech)", attribution, installed: true, version: "0.3.0",
+        voices: [{ name: this.d.cfg().voice.tts_voice || "faith", description: "FAITH", attribution, installed: true, languages: w.languages, version: "1" }],
+      }],
+      handle: [], intent: [], wake: [],
     };
   }
 
@@ -75,6 +80,10 @@ export class WyomingStt {
         else if (ev.type === "transcribe") { chunks = []; size = 0; }
         else if (ev.type === "audio-start") { fmt = { rate: Number(ev.data.rate) || 16000, width: Number(ev.data.width) || 2, channels: Number(ev.data.channels) || 1 }; chunks = []; size = 0; }
         else if (ev.type === "audio-chunk" && ev.payload) { if (size + ev.payload.length <= MAX_AUDIO) { chunks.push(ev.payload); size += ev.payload.length; } }
+        else if (ev.type === "synthesize") {
+          const text = String(ev.data.text || ""), voice = ev.data.voice?.name && ev.data.voice.name !== "faith" ? String(ev.data.voice.name) : undefined;
+          busy = busy.then(() => this.speak(sock, text, voice));
+        }
         else if (ev.type === "audio-stop") {
           const audio = wav(Buffer.concat(chunks), fmt.rate, fmt.width, fmt.channels);
           chunks = []; size = 0;
@@ -83,6 +92,21 @@ export class WyomingStt {
       }
     });
     sock.on("error", () => sock.destroy());
+  }
+
+  /** Say something: Argos's speech as WAV, sent back as PCM chunks. */
+  async speak(sock: Socket, text: string, voice?: string) {
+    const send = (type: string, data: Record<string, unknown> = {}, payload?: Buffer) => { if (!sock.destroyed) sock.write(encode(type, data, payload)); };
+    try {
+      const { audio } = await synthesize(this.d.cfg(), this.d.env, text, "wav", voice);
+      const w = parseWav(audio), fmt = { rate: w.rate, width: w.width, channels: w.channels }, step = 2048 * w.width * w.channels;
+      send("audio-start", fmt);
+      for (let i = 0; i < w.pcm.length; i += step) send("audio-chunk", fmt, Buffer.from(w.pcm.subarray(i, i + step)));
+      send("audio-stop");
+    } catch (e: any) {
+      this.d.log.warn({ err: e.message }, "wyoming: text-to-speech failed");
+      send("error", { text: `FAITH couldn't speak: ${e.message}`, code: "tts-failed" });
+    }
   }
 
   /** The words, and (when voice ID is on) who said them. */

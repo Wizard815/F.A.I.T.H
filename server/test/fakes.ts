@@ -16,7 +16,16 @@ export async function fakeModel(script: (req: any, n: number) => { content?: str
       embeds.push(...b.input); res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ data: b.input.map((t: string, index: number) => ({ index, embedding: vec(t) })) }));
     }
-    if (req.url?.endsWith("/audio/speech")) { const b = await body(req); res.setHeader("content-type", "audio/mpeg"); return res.end(Buffer.from(`mp3:${b?.input}`)); }
+    if (req.url?.endsWith("/audio/speech")) {
+      const b = await body(req);
+      if (b?.response_format === "wav") { // a real little WAV: 16 kHz mono 16-bit, the text's bytes as samples
+        const pcm = Buffer.from(String(b.input).padEnd(5000, ".")), h = Buffer.alloc(44);
+        h.write("RIFF", 0); h.writeUInt32LE(36 + pcm.length, 4); h.write("WAVE", 8); h.write("fmt ", 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+        h.writeUInt32LE(16000, 24); h.writeUInt32LE(32000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write("data", 36); h.writeUInt32LE(pcm.length, 40);
+        res.setHeader("content-type", "audio/wav"); return res.end(Buffer.concat([h, pcm]));
+      }
+      res.setHeader("content-type", "audio/mpeg"); return res.end(Buffer.from(`mp3:${b?.input}`));
+    }
     if (req.url?.endsWith("/audio/transcriptions")) { req.resume(); res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ text: stt.text })); }
     const b = await body(req); calls.push(b);
     const m = script(b, calls.length - 1);
@@ -50,7 +59,7 @@ export async function fakeMcp(tools: FakeTool[]) {
 }
 
 /** Enough of Home Assistant's REST API for FAITH. */
-export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[] } = {}) {
+export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[]; areas?: Record<string, string> } = {}) {
   const services: { domain: string; service: string; data: any; token: string }[] = [];
   const shopping = [...(opts.shopping || [])];
   const s = createServer(async (req, res) => {
@@ -63,7 +72,11 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     if (req.method === "GET" && u.pathname === "/api/states") return json(all());
     let m = u.pathname.match(/^\/api\/states\/(.+)$/);
     if (m) { const id = decodeURIComponent(m[1]); return states[id] ? json({ entity_id: id, ...states[id], attributes: states[id].attributes || {} }) : json({ message: "Entity not found." }, 404); }
-    if (u.pathname === "/api/template") return json(all().map((x) => ({ e: x.entity_id, a: x.entity_id.includes("kitchen") ? "Kitchen" : "" })));
+    if (u.pathname === "/api/template") {
+      const one = String(b?.template || "").match(/area_name\('([^']+)'\)/);
+      if (one) { res.statusCode = 200; res.setHeader("content-type", "text/plain"); return res.end((opts.areas || {})[one[1]] ?? ""); }
+      return json(all().map((x) => ({ e: x.entity_id, a: x.entity_id.includes("kitchen") ? "Kitchen" : "" })));
+    }
     m = u.pathname.match(/^\/api\/calendars\/(.+)$/);
     if (m) return json((opts.meals || []).filter((x) => x.cal === decodeURIComponent(m![1])).map((x) => ({ summary: x.summary, start: { date: x.date }, end: { date: x.date } })));
     m = u.pathname.match(/^\/api\/services\/([a-z_]+)\/([a-z_]+)$/);
