@@ -20,7 +20,8 @@ declare global {
 type Item = { title: string; time?: string; meta?: string; label?: string; done?: boolean };
 type CardData = { id: string; title: string; kind: string; items?: Item[]; approvals?: { id: string; summary: string; requested_by: string }[]; entities?: { entity_id: string; name: string; state: string }[]; text?: string; error?: string; empty?: string };
 type Person = { id: string; name: string; role: string; color?: string };
-type View = { name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
+type Layout = { can_arrange: boolean; available: { id: string; title: string }[]; order: string[]; hidden: string[]; saved: boolean };
+type View = { layout?: Layout; name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
 
 const ICON: Record<string, string> = { today: "mdi:calendar-today", meals: "mdi:silverware-fork-knife", shopping: "mdi:cart-outline", chores: "mdi:broom", home: "mdi:home-outline", approvals: "mdi:shield-check-outline" };
 const initials = (n: string) => n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -109,15 +110,44 @@ function Section({ c, api, can, reload }: { c: CardData; api: Api; can: boolean;
   return (<div className="section"><h3><ha-icon icon={ICON[c.id] || "mdi:note-text-outline"} />{c.title}{n ? <span className="count">{n}</span> : null}</h3>{body}</div>);
 }
 
+/** A signed-in person arranges their own day card: order, and which sections show. */
+function Arrange({ api, layout, onDone }: { api: Api; layout: Layout; onDone: () => void }) {
+  const all = layout.available, [order, setOrder] = useState<string[]>([...layout.order, ...all.map((a) => a.id).filter((id) => !layout.order.includes(id))]);
+  const [hidden, setHidden] = useState<string[]>(layout.hidden), [msg, setMsg] = useState("");
+  const title = (id: string) => all.find((a) => a.id === id)?.title ?? id;
+  const move = (i: number, by: number) => setOrder((o) => { const n = [...o], j = i + by; if (j < 0 || j >= n.length) return o; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const save = (body: Record<string, unknown>) => api.call("/api/ha/prefs/cards", body).then(onDone).catch((e) => setMsg(e.message));
+  return (
+    <div className="section">
+      <h3>Arrange your card</h3>
+      <ul aria-label="Sections, in order">{order.map((id, i) => (
+        <li key={id} className="row">
+          <label className="grow" style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={!hidden.includes(id)} onChange={(e) => setHidden((h) => (e.target.checked ? h.filter((x) => x !== id) : [...h, id]))} />Show {title(id)}</label>
+          <button className="ghost" aria-label={`Move ${title(id)} up`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+          <button className="ghost" aria-label={`Move ${title(id)} down`} disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</button>
+        </li>))}</ul>
+      <div className="btns" style={{ marginTop: 10 }}>
+        <button className="primary" onClick={() => save({ order, hidden })}>Save</button>
+        <button onClick={onDone}>Cancel</button>
+        {layout.saved && <button className="ghost" onClick={() => save({ reset: true })}>Back to the default</button>}
+      </div>
+      <div className="err" role="alert">{msg}</div>
+    </div>
+  );
+}
+
 function FaithCard({ api, config }: { api: Api; config: CardConfig }) {
   const { data, err, load } = useView<View>(api, "/api/ha/view", config.cards ? { cards: config.cards } : {});
+  const [arranging, setArranging] = useState(false);
   if (err) return <ha-card><div className="err">{err}</div></ha-card>;
   if (!data) return <ha-card><div className="empty">Loading…</div></ha-card>;
   const who = data.person ? `${data.person.name}'s` : "The family's";
+  if (arranging && data.layout) return <ha-card><Arrange api={api} layout={data.layout} onDone={() => { setArranging(false); load(); }} /></ha-card>;
   return (
     <ha-card>
       {config.title !== "" && <>
-        <div className="eyebrow">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</div>
+        <div className="head" style={{ marginBottom: 0 }}><div className="eyebrow">{new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</div>
+          {data.layout?.can_arrange && <div className="right"><button className="ghost" onClick={() => setArranging(true)}>Arrange</button></div>}</div>
         <div className="hello">{config.title ?? <>{who} <em>day</em>, at a glance.</>}</div>
       </>}
       {config.show_apps !== false && data.apps.length > 0 && <div className="section"><div className="apps">{data.apps.map((a) => <a key={a.id} href={a.url} target="_blank" rel="noreferrer"><span>{a.icon || "↗"}</span>{a.name}</a>)}</div></div>}

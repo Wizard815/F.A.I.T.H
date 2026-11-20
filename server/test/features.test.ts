@@ -211,6 +211,29 @@ test("next meal skips meals that are over for today", async () => {
   assert.equal(nextMeal(items, at(21))?.title, "Oats");
 });
 
+// ---------------- each person arranges their own day card ----------------
+test("a person arranges their own card; the shared view can't; a dashboard's fixed list wins", async () => {
+  const view = async (body: any) => (await H("/api/ha/view", body)).json();
+  let v = await view({ user_id: "ha-wiz" });
+  assert.equal(v.layout.can_arrange, true);
+  assert.deepEqual(v.layout.order, ["today", "approvals"], "faith.yaml's cards: for Wizard to start with");
+  const all = v.layout.available.map((a: any) => a.id);
+  assert.ok(all.length > 2);
+  const r = (await H("/api/ha/prefs/cards", { user_id: "ha-wiz", order: ["approvals", "nope", "today"], hidden: ["today"] })).json();
+  assert.deepEqual(r.order, ["approvals", "today"], "unknown sections are dropped");
+  v = await view({ user_id: "ha-wiz" });
+  assert.equal(v.layout.order[0], "approvals");
+  assert.ok(!v.cards.some((c: any) => c.id === "today"), "hidden");
+  assert.equal(v.layout.saved, true);
+  assert.equal((await H("/api/ha/prefs/cards", { order: ["today"] })).statusCode, 403, "nobody signed in: no arranging");
+  const fixed = await view({ user_id: "ha-wiz", cards: ["today"] });
+  assert.equal(fixed.layout.can_arrange, false);
+  assert.deepEqual(fixed.cards.map((c: any) => c.id), ["today"], "the dashboard's own list wins");
+  await H("/api/ha/prefs/cards", { user_id: "ha-wiz", reset: true });
+  assert.deepEqual((await view({ user_id: "ha-wiz" })).layout.order, ["today", "approvals"]);
+  assert.deepEqual((await view({ user_id: "ha-sam" })).layout.saved, false, "Sam's card isn't Wizard's");
+});
+
 // ---------------- the hub card's voice ----------------
 test("the hub card gets FAITH's reply spoken through Argos, and needs an HA token", async () => {
   const r = (await H("/api/ha/speak", { user_id: "ha-family", screen: "kitchen", text: "Dinner is fish tacos." })).json();

@@ -166,6 +166,7 @@ The family uses Home Assistant; FAITH's own page is the admin console. The integ
   - For a kiosk, put it alone on a panel view and pick the *FAITH* theme (`ha/themes/faith.yaml`).
   - Browsers only allow the microphone over https, so open HA on the tablet through https.
   - Replies can use a little Markdown (bold, lists). The cards show it formatted, and the marks aren't read aloud.
+- **Each person arranges their own day card.** Signed in (their own HA account, or a PIN on the tablet), they tap *Arrange* on the FAITH card, then reorder and hide sections. FAITH remembers it for them. A card with its own `cards:` list keeps that list for everyone.
 - **Each card asks FAITH as the HA user who's looking.** Map each person's HA user with `ha_user_id` in `faith.yaml`. A mapped user sees their own view.
 - **A tablet signed into HA as an unmapped "Family" user** sees the household view. Someone taps *Sign in* on the who card and enters their PIN. All FAITH cards on that tablet then show their view until they leave or sign out.
 - **Private things never go into HA sensors.** The cards fetch them live, for the person looking only.

@@ -49,13 +49,25 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   };
   const pub = (p: Person) => ({ id: p.id, name: p.name, role: p.role, color: p.color });
 
+  // Each person's own arrangement of the day card (order and hidden sections), saved in FAITH.
+  x.db.exec("CREATE TABLE IF NOT EXISTS person_prefs (person_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (person_id, key))");
+  const layoutOf = (id: string): { order: string[]; hidden: string[] } | undefined => {
+    const r = x.db.prepare("SELECT value FROM person_prefs WHERE person_id = ? AND key = 'cards'").get(id) as any;
+    try { return r ? JSON.parse(r.value) : undefined; } catch { return undefined; }
+  };
+
   // ---- the dashboard cards ----
   app.post("/api/ha/view", async (req) => {
     const w = who(req), c = w.caller, b: any = req.body || {};
     const p = c.scope.kind === "person" ? c.scope.person : undefined;
     let { cards } = await dashboard(cfg(), x.registry, c, { approvals });
-    const order = (Array.isArray(b.cards) && b.cards.length ? b.cards.map(String) : p?.cards) as string[] | undefined;
+    const available = cards.map((k) => ({ id: k.id, title: k.title }));
+    // The card's own list (set by whoever made the dashboard) wins; then the person's arrangement; then faith.yaml.
+    const fixed = Array.isArray(b.cards) && b.cards.length ? (b.cards.map(String) as string[]) : undefined;
+    const mine = !fixed && p ? layoutOf(p.id) : undefined;
+    const order = fixed ?? (mine ? [...mine.order, ...cards.map((k) => k.id).filter((id) => !mine.order.includes(id))] : p?.cards);
     if (order) cards = order.map((id) => cards.find((k) => k.id === id)).filter(Boolean) as typeof cards;
+    if (mine) cards = cards.filter((k) => !mine.hidden.includes(k.id));
     const role = p?.role ?? "household";
     const apps = cfg().apps.filter((a) => (a.who === "anyone" || p) && (!a.roles || a.roles.includes(role)) && (!a.people || (p && a.people.includes(p.id)))).map(({ id, name, url, icon }) => ({ id, name, url, icon }));
     return {
@@ -64,7 +76,19 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
       can_sign_in: w.shared && !w.hub && cfg().people.length > 0,
       can_approve: approvals.canApprove(c), pending_approvals: approvals.pendingCount(),
       cards, apps,
+      layout: { can_arrange: !!p && !fixed, available, order: cards.map((k) => k.id), hidden: mine?.hidden ?? [], saved: !!mine },
     };
+  });
+  app.post("/api/ha/prefs/cards", async (req) => {
+    const c = who(req).caller, b: any = req.body || {};
+    if (c.scope.kind !== "person") throw new AuthError(403, "Sign in to arrange your own cards.");
+    const id = c.scope.person.id;
+    if (b.reset) { x.db.prepare("DELETE FROM person_prefs WHERE person_id = ? AND key = 'cards'").run(id); return { ok: true }; }
+    const known = new Set(cfg().dashboard.cards.map((k) => k.id));
+    const clean = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(String).filter((k) => known.has(k)))] : []);
+    const layout = { order: clean(b.order), hidden: clean(b.hidden) };
+    x.db.prepare("INSERT OR REPLACE INTO person_prefs (person_id, key, value) VALUES (?, 'cards', ?)").run(id, JSON.stringify(layout));
+    return { ok: true, ...layout };
   });
 
   // ---- chat (text, or a recording the card made) ----
