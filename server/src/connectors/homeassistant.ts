@@ -10,6 +10,9 @@ const ENTRY_TYPES = ["breakfast", "lunch", "dinner", "side", "dessert", "snack",
  *  shopping lists and meal plan. FAITH only sees entities in `expose`, a
  *  role can be narrowed to some domains, and `confirm_domains` (locks,
  *  alarm, garage) always wait for an on-screen Yes. */
+/** Assist tools that only read (or set a timer on the satellite itself). */
+const ASSIST_READS = /^(GetLiveContext|GetDateTime|todo_get_items|calendar_get_events|HassGet\w*|HassTimerStatus|Hass(Start|Cancel|Increase|Decrease|Pause|Unpause)Timer|HassCancelAllTimers)$/;
+
 /** Sensors that say where someone is: never shown to anyone through FAITH. */
 const WHERE = ["sensor.*geocoded_location*", "sensor.*_location", "sensor.*_address", "sensor.*_latitude", "sensor.*_longitude", "sensor.*_gps*", "sensor.*_zone"];
 
@@ -65,6 +68,70 @@ export class HomeAssistant implements Connector {
     if (!this.exposed(entityId)) return false;
     if (!pol.ha_domains && !pol.ha_entities) return true;
     return !!pol.ha_domains?.includes(domain) || anyGlob(pol.ha_entities, entityId);
+  }
+
+  // ---- HA's Assist API, through the FAITH integration (ha/custom_components/faith/assist.py) ----
+  private assistCache = new Map<string, { at: number; prompt: string; tools: { name: string; description: string; parameters: any }[] }>();
+  private async assist(caller: Caller, body: Record<string, unknown>) {
+    return this.api("POST", "/api/faith/assist", { ...body, device_id: caller.haDevice ?? null }, caller);
+  }
+  private async assistDescribe(caller: Caller) {
+    const k = caller.haDevice ?? "", hit = this.assistCache.get(k);
+    if (hit && Date.now() - hit.at < 5 * 60_000) return hit;
+    const d = await this.assist(caller, { action: "describe" });
+    const v = { at: Date.now(), prompt: String(d?.prompt || ""), tools: Array.isArray(d?.tools) ? d.tools : [] };
+    this.assistCache.set(k, v);
+    return v;
+  }
+  /** HA's overview of the house (areas, devices, aliases), for FAITH's instructions. */
+  async houseContext(caller: Caller) {
+    if (!this.cfg.assist_api || !this.token(caller)) return undefined;
+    try { return (await this.assistDescribe(caller)).prompt.slice(0, 8000) || undefined; } catch { return undefined; }
+  }
+  private async assistTools(caller: Caller): Promise<Tool[]> {
+    const d = await this.assistDescribe(caller), confirmDomains = this.cfg.confirm_domains;
+    const targets = new Map<string, string[]>(); // per call (tool + args): worked out once, used by the Yes check and the run
+    const targetsOf = async (tool: string, args: any) => {
+      const k = `${tool}\n${JSON.stringify(args ?? {})}`;
+      if (!targets.has(k)) targets.set(k, ((await this.assist(caller, { action: "targets", tool, args: args ?? {} }))?.targets ?? []).map(String));
+      return targets.get(k)!;
+    };
+    const dom = (e: string) => e.split(".")[0];
+    const risky = (ts: string[]) => ts.filter((e) => confirmDomains.includes(dom(e)));
+    // Which way is the change? Locking and closing make the house safer; the rest don't.
+    const verb = (tool: string, e: string) => {
+      const d = dom(e);
+      if (d === "lock") return tool === "HassTurnOn" ? "lock" : "unlock";
+      if (["cover", "garage_door"].includes(d)) return tool === "HassTurnOff" ? "close" : "open";
+      if (d === "alarm_control_panel") return tool === "HassTurnOn" ? "arm" : "disarm";
+      return tool.replace(/^Hass/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+    };
+    const safer = (tool: string, e: string) => ["lock", "close", "arm"].includes(verb(tool, e));
+    return d.tools.map((t: { name: string; description: string; parameters: any }): Tool => {
+      const write = !ASSIST_READS.test(t.name);
+      return {
+        name: t.name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64), connector: this.id, write, always: t.name === "GetLiveContext",
+        description: `${t.description} (Home Assistant)`.slice(0, 1024),
+        parameters: t.parameters && typeof t.parameters === "object" ? t.parameters : { type: "object", properties: {} },
+        explain: (a: any) => `${t.name.replace(/^Hass/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()} ${[a?.name, a?.area && `in ${a.area}`, a?.domain && `(${[].concat(a.domain).join(", ")})`].filter(Boolean).join(" ")}`.trim(),
+        confirm: write ? async (a: any) => {
+          const ts = await targetsOf(t.name, a);
+          if (ts.some((e) => !this.controllable(caller, e))) return null; // not allowed at all: run() says so, no Yes card
+          const r = risky(ts);
+          return r.length ? r.map((e) => `${verb(t.name, e)} ${this.names.get(e) || e}`).join(", ") : null;
+        } : undefined,
+        strict: write ? async (a: any) => risky(await targetsOf(t.name, a)).some((e) => !safer(t.name, e)) : undefined,
+        run: async (a: any) => {
+          if (write) {
+            const ts = await targetsOf(t.name, a);
+            const no = ts.filter((e) => !this.controllable(caller, e));
+            if (no.length) return { error: `You can't control ${no.map((e) => this.names.get(e) || e).join(", ")} from here.` };
+          }
+          const r = await this.assist(caller, { action: "call", tool: t.name, args: a ?? {} });
+          return r?.result ?? r;
+        },
+      };
+    });
   }
 
   private rooms = new Map<string, { at: number; room: string | null }>();
@@ -125,64 +192,68 @@ export class HomeAssistant implements Connector {
     const T: Tool[] = [];
     const add = (t: Omit<Tool, "connector">) => T.push({ ...t, connector: this.id });
 
-    add({ name: "home_find", write: false,
-      description: "Find devices and sensors in the house by name, room or kind (light, climate, lock, sensor...). Returns entity ids and current states. Use before home_control when you don't know the entity id.",
-      parameters: { type: "object", properties: { query: { type: "string", description: "words from the name or room, e.g. 'kitchen light'" }, domain: { type: "string" }, area: { type: "string" } }, additionalProperties: false },
-      run: async (a) => {
-        const all = (await this.api("GET", "/api/states", undefined, caller)) as State[];
-        for (const x of all) if (x.attributes?.friendly_name) this.names.set(x.entity_id, x.attributes.friendly_name);
-        const areas = await this.areaMap(caller);
-        const words = String(a?.query || "").toLowerCase().split(/\s+/).filter(Boolean);
-        const hay = (s: State) => `${s.entity_id} ${s.attributes?.friendly_name || ""} ${areas.get(s.entity_id) || ""}`.toLowerCase();
-        const pool = all.filter((s) => this.exposed(s.entity_id)).filter((s) => !a?.domain || s.entity_id.startsWith(`${a.domain}.`));
-        const inArea = (s: State) => !a?.area || (areas.get(s.entity_id) || "").toLowerCase().includes(String(a.area).toLowerCase());
-        const out = (hits: State[], note?: string) => ({ count: hits.length, ...(note ? { note } : {}), entities: hits.slice(0, 40).map((s) => this.brief(s, areas.get(s.entity_id))) });
-        let hits = pool.filter(inArea).filter((s) => words.every((w) => hay(s).includes(w)));
-        if (hits.length) return out(hits);
-        // Nothing exact: widen step by step and say so, instead of leaving the model to guess again.
-        if (a?.area) {
-          hits = pool.filter((s) => words.every((w) => hay(s).includes(w)) || !words.length);
-          if (hits.length) return out(hits, `Nothing in HA's ${a.area} area matched; these are elsewhere in the house (one may serve that room, like a whole-house thermostat).`);
-        }
-        hits = pool.filter((s) => words.some((w) => w.length > 2 && hay(s).includes(w)));
-        if (hits.length) return out(hits, "No exact match; these share some of the words.");
-        const domains = [...new Set(all.filter((s) => this.exposed(s.entity_id)).map((s) => s.entity_id.split(".")[0]))].sort();
-        return { count: 0, note: `Nothing matched. Search by kind instead (domain: one of ${domains.join(", ")}), e.g. domain climate for heating.` };
-      } });
+    // With HA's Assist API (assist_api: true), HA's own intents replace FAITH's generic device tools.
+    if (this.cfg.assist_api) T.push(...(await this.assistTools(caller)));
+    else {
+      add({ name: "home_find", write: false,
+        description: "Find devices and sensors in the house by name, room or kind (light, climate, lock, sensor...). Returns entity ids and current states. Use before home_control when you don't know the entity id.",
+        parameters: { type: "object", properties: { query: { type: "string", description: "words from the name or room, e.g. 'kitchen light'" }, domain: { type: "string" }, area: { type: "string" } }, additionalProperties: false },
+        run: async (a) => {
+          const all = (await this.api("GET", "/api/states", undefined, caller)) as State[];
+          for (const x of all) if (x.attributes?.friendly_name) this.names.set(x.entity_id, x.attributes.friendly_name);
+          const areas = await this.areaMap(caller);
+          const words = String(a?.query || "").toLowerCase().split(/\s+/).filter(Boolean);
+          const hay = (s: State) => `${s.entity_id} ${s.attributes?.friendly_name || ""} ${areas.get(s.entity_id) || ""}`.toLowerCase();
+          const pool = all.filter((s) => this.exposed(s.entity_id)).filter((s) => !a?.domain || s.entity_id.startsWith(`${a.domain}.`));
+          const inArea = (s: State) => !a?.area || (areas.get(s.entity_id) || "").toLowerCase().includes(String(a.area).toLowerCase());
+          const out = (hits: State[], note?: string) => ({ count: hits.length, ...(note ? { note } : {}), entities: hits.slice(0, 40).map((s) => this.brief(s, areas.get(s.entity_id))) });
+          let hits = pool.filter(inArea).filter((s) => words.every((w) => hay(s).includes(w)));
+          if (hits.length) return out(hits);
+          // Nothing exact: widen step by step and say so, instead of leaving the model to guess again.
+          if (a?.area) {
+            hits = pool.filter((s) => words.every((w) => hay(s).includes(w)) || !words.length);
+            if (hits.length) return out(hits, `Nothing in HA's ${a.area} area matched; these are elsewhere in the house (one may serve that room, like a whole-house thermostat).`);
+          }
+          hits = pool.filter((s) => words.some((w) => w.length > 2 && hay(s).includes(w)));
+          if (hits.length) return out(hits, "No exact match; these share some of the words.");
+          const domains = [...new Set(all.filter((s) => this.exposed(s.entity_id)).map((s) => s.entity_id.split(".")[0]))].sort();
+          return { count: 0, note: `Nothing matched. Search by kind instead (domain: one of ${domains.join(", ")}), e.g. domain climate for heating.` };
+        } });
 
-    add({ name: "home_state", write: false, description: "Current state of one device or sensor by entity id.",
-      parameters: { type: "object", properties: { entity_id: { type: "string" } }, required: ["entity_id"], additionalProperties: false },
-      run: async (a) => {
-        const id = String(a?.entity_id || "");
-        if (!this.exposed(id)) return { error: `${id} isn't shared with FAITH.` };
-        const s = await this.state(id, caller);
-        return s ? this.brief(s, (await this.areaMap(caller)).get(id)) : { error: `No entity ${id}.` };
-      } });
+      add({ name: "home_state", write: false, description: "Current state of one device or sensor by entity id.",
+        parameters: { type: "object", properties: { entity_id: { type: "string" } }, required: ["entity_id"], additionalProperties: false },
+        run: async (a) => {
+          const id = String(a?.entity_id || "");
+          if (!this.exposed(id)) return { error: `${id} isn't shared with FAITH.` };
+          const s = await this.state(id, caller);
+          return s ? this.brief(s, (await this.areaMap(caller)).get(id)) : { error: `No entity ${id}.` };
+        } });
 
-    const confirmDomains = this.cfg.confirm_domains;
-    add({ name: "home_control", write: true,
-      description: "Control a device: call a Home Assistant action on one entity, e.g. service 'turn_on' / 'turn_off' / 'toggle' for lights and switches, 'set_temperature' with data {temperature} for climate, 'lock' / 'unlock', 'open_cover' / 'close_cover', 'media_pause'. Scenes and scripts use 'turn_on'.",
-      parameters: { type: "object", properties: { entity_id: { type: "string" }, service: { type: "string" }, data: { type: "object", description: "extra fields, e.g. {brightness_pct: 40}" } }, required: ["entity_id", "service"], additionalProperties: false },
-      explain: (a) => this.say(String(a?.entity_id || ""), String(a?.service || "")),
-      confirm: (a) => {
-        const id = String(a?.entity_id || ""), domain = id.split(".")[0];
-        // Not allowed at all: no Yes card; run() refuses straight away.
-        if (!this.controllable(caller, id)) return null;
-        return confirmDomains.includes(domain) ? this.say(id, String(a?.service || "")) : null;
-      },
-      // Making the house less secure (unlock, disarm, open, toggle) is never done on someone else's approval.
-      strict: (a) => confirmDomains.includes(String(a?.entity_id || "").split(".")[0]) && /unlock|disarm|open|raise|toggle|stop/.test(String(a?.service || "")),
-      run: async (a) => {
-        const id = String(a?.entity_id || ""), service = String(a?.service || ""), domain = id.split(".")[0];
-        if (!/^[a-z_]+\.[a-z0-9_]+$/.test(id)) return { error: "entity_id looks like light.kitchen." };
-        if (!/^[a-z_]+$/.test(service)) return { error: "service is an action name like turn_on." };
-        if (!this.controllable(caller, id)) return { error: `You can't control ${id} from here.` };
-        // Only this one entity: targets hidden in data (area, device, label, floor) would reach past what this person may control.
-        const { entity_id: _e, area_id: _a, device_id: _d, label_id: _l, floor_id: _f, ...data } = a?.data && typeof a.data === "object" ? a.data : ({} as any);
-        await this.api("POST", `/api/services/${domain}/${service}`, { ...data, entity_id: id }, caller);
-        const s = await this.state(id, caller).catch(() => null);
-        return { ok: true, entity_id: id, state: s?.state };
-      } });
+      const confirmDomains = this.cfg.confirm_domains;
+      add({ name: "home_control", write: true,
+        description: "Control a device: call a Home Assistant action on one entity, e.g. service 'turn_on' / 'turn_off' / 'toggle' for lights and switches, 'set_temperature' with data {temperature} for climate, 'lock' / 'unlock', 'open_cover' / 'close_cover', 'media_pause'. Scenes and scripts use 'turn_on'.",
+        parameters: { type: "object", properties: { entity_id: { type: "string" }, service: { type: "string" }, data: { type: "object", description: "extra fields, e.g. {brightness_pct: 40}" } }, required: ["entity_id", "service"], additionalProperties: false },
+        explain: (a) => this.say(String(a?.entity_id || ""), String(a?.service || "")),
+        confirm: (a) => {
+          const id = String(a?.entity_id || ""), domain = id.split(".")[0];
+          // Not allowed at all: no Yes card; run() refuses straight away.
+          if (!this.controllable(caller, id)) return null;
+          return confirmDomains.includes(domain) ? this.say(id, String(a?.service || "")) : null;
+        },
+        // Making the house less secure (unlock, disarm, open, toggle) is never done on someone else's approval.
+        strict: (a) => confirmDomains.includes(String(a?.entity_id || "").split(".")[0]) && /unlock|disarm|open|raise|toggle|stop/.test(String(a?.service || "")),
+        run: async (a) => {
+          const id = String(a?.entity_id || ""), service = String(a?.service || ""), domain = id.split(".")[0];
+          if (!/^[a-z_]+\.[a-z0-9_]+$/.test(id)) return { error: "entity_id looks like light.kitchen." };
+          if (!/^[a-z_]+$/.test(service)) return { error: "service is an action name like turn_on." };
+          if (!this.controllable(caller, id)) return { error: `You can't control ${id} from here.` };
+          // Only this one entity: targets hidden in data (area, device, label, floor) would reach past what this person may control.
+          const { entity_id: _e, area_id: _a, device_id: _d, label_id: _l, floor_id: _f, ...data } = a?.data && typeof a.data === "object" ? a.data : ({} as any);
+          await this.api("POST", `/api/services/${domain}/${service}`, { ...data, entity_id: id }, caller);
+          const s = await this.state(id, caller).catch(() => null);
+          return { ok: true, entity_id: id, state: s?.state };
+        } });
+    }
 
     if (this.cfg.shopping_lists.length) {
       add({ name: "shopping_list", write: false, description: `Items on a shopping list (Mealie, through Home Assistant). Lists: ${this.cfg.shopping_lists.join(", ")}; the first is the default.`,

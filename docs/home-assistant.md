@@ -110,6 +110,42 @@ Other ways FAITH knows who's talking:
 - Port 10300 has no password in the Wyoming protocol. Set `wyoming.allow_from: [<HA's IP>]` so only Home Assistant can use it (`faith init` does this when it finds HA).
 - A voice only counts for requests that come from a satellite. Typed Assist never borrows a voice heard a moment ago.
 
+## Knowing the house: HA's Assist API
+
+Set `assist_api: true` on the `homeassistant` connector (FAITH's HA integration 0.4 or newer). FAITH then controls the house the way HA's own AI agents do. It uses the same Assist API that HA's OpenAI and Ollama integrations use, through the FAITH integration.
+
+```yaml
+connectors:
+  - id: homeassistant
+    type: homeassistant
+    url: http://192.168.20.10:8123
+    token_env: HA_TOKEN
+    assist_api: true
+```
+
+What FAITH gets from Home Assistant:
+- **The house, described.** HA's overview of your areas, devices and their aliases goes into FAITH's instructions, so "the lights in the kitchen" or a device's nickname just works.
+- **HA's own intents** in place of FAITH's generic device tools: `HassTurnOn`, `HassLightSet`, `HassClimateSetTemperature`, `HassSetPosition`, media, fans, vacuums, list items, your exposed scripts, and `GetLiveContext` for "is anything on?".
+- **The satellite's room.** A request from a voice satellite carries its device, so Assist prefers that room, and timers work on satellites that support them.
+- **Your exposure settings.** Only what you've exposed under *Settings → Voice assistants → Expose* is there. HA leaves locks unexposed by default.
+
+FAITH's rules still apply on top:
+- Before any change, FAITH asks HA which entities the call would touch, then checks them.
+  - Locks, alarms and covers wait for a Yes.
+  - Unlocking, disarming or opening can't be asked for from the shared view at all.
+  - A child stays within their kinds of device.
+  - `expose.exclude` still applies.
+- `GetLiveContext` shows people and trackers only as home or away.
+- Mealie's shopping list and meal plan stay FAITH's own tools.
+
+**Checked in a real Home Assistant 2026.2.3** (its demo house) with a real model:
+- lights on and off;
+- "what's the Ecobee set to?" (live context);
+- the heat pump (it read °F from the live state and set 72);
+- the shared screen couldn't open the garage;
+- closing it waited for a Yes;
+- a child could switch lights but not move a window.
+
 ## Who's home
 
 FAITH reads each person's HA `person.<id>` entity (phones, the router, whatever HA uses), or `ha_person:` in `faith.yaml` if the name differs. Set `ha_person: ""` to leave someone out.

@@ -19,6 +19,7 @@
 - The hub card: the wall tablet's home. Tap FAITH to talk; answers are read aloud through Argos.
 - Checked in a real Home Assistant 2026.2.3: config flow, sensors, theme, every card, hub sign-in and the admin sidebar page.
 - ha-mcp for the admin (86 Home Assistant tools), with a tool router that offers a local model only the tools a question needs, and SKILL.md skill packs (homeassistant-ai/skills).
+- HA's Assist API for the house (assist_api): HA's overview, intents, satellite rooms and exposure, with FAITH's rules checked on the actual targets.
 - Who's home, from HA's person entities: in FAITH's answers, on the hub card, and a `home` message target.
 - Each person arranges their own day card in HA (order and hidden sections, saved in FAITH).
 - `faith init`: finds the services on the network and writes a first config and the list of tokens to make.

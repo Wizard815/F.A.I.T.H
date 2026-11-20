@@ -13,6 +13,8 @@ export type Caller = {
   scope: Scope;
   channel: Channel;
   deviceId?: string;
+  /** Home Assistant's device id for the satellite or phone the request came from (Assist knows its room and timers). */
+  haDevice?: string;
   sessionHash?: string;
   label: string;           // for logs: "wizard on kitchen", "household on kitchen", "token:ha"
   /** Group chats: who wrote the message. The scope stays "household" because

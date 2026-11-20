@@ -25,3 +25,21 @@ test("the model answering 503 for a moment is tried again; a lasting error is re
     assert.equal(n, 3, "three tries in all");
   } finally { s.close(); delete process.env.FAITH_RETRY_SCALE; }
 });
+
+test("a tool the router didn't shortlist still runs when the model names it", async () => {
+  let n = 0;
+  const s = createServer((req, res) => {
+    req.resume(); n++;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ choices: [{ message: n === 1 ? { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "HassClimateSetTemperature", arguments: "{\"temperature\":22}" } }] } : { role: "assistant", content: "Set to 22." } }] }));
+  });
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+  let ran: any = null;
+  try {
+    const r = await runLoop({ baseUrl: `http://127.0.0.1:${(s.address() as AddressInfo).port}`, model: "m", messages: [{ role: "user", content: "22 please" }], maxRounds: 3,
+      tools: [{ name: "GetLiveContext", description: "", parameters: {}, run: async () => "x" }],
+      callable: [{ name: "HassClimateSetTemperature", description: "", parameters: {}, run: async (a: any) => { ran = a; return { ok: true }; } }] });
+    assert.deepEqual(ran, { temperature: 22 });
+    assert.deepEqual(r.toolsUsed, ["HassClimateSetTemperature"]);
+  } finally { s.close(); }
+});

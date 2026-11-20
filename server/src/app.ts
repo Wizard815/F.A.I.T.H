@@ -340,6 +340,8 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   app.post("/api/ha/conversation", async (req) => {
     const b = req.body as any;
     let c = haCaller(req, b?.user_id ? String(b.user_id) : undefined);
+    // HA's device id of the satellite or phone: Assist then knows its room, and timers work.
+    if (b?.device_id && /^[A-Za-z0-9_]{1,64}$/.test(String(b.device_id))) c = { ...c, haDevice: String(b.device_id) };
     // Said to a voice satellite: FAITH's own speech-to-text (wyoming.ts) may have heard who it was.
     // Only for a voice pipeline (a satellite or device, no HA user): typed Assist never borrows a voice.
     const fromVoice = !b?.user_id && !!(b?.satellite_id || b?.device_id);

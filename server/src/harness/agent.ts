@@ -71,8 +71,8 @@ export class Agent {
       run: async (args: any) => {
         // Unlocking, disarming, opening and destructive tools can't be approved from afar:
         // they need a signed-in grown-up's own Yes on a screen.
-        if (t.approval && t.strict?.(args)) {
-          const what = t.confirm?.(args) || t.explain?.(args) || t.name;
+        if (t.approval && (await t.strict?.(args))) {
+          const what = (await t.confirm?.(args)) || t.explain?.(args) || t.name;
           return { error: `"${what}" can't be asked for from here. A grown-up has to sign in and do it themselves, then tap Yes.` };
         }
         if (t.approval) {
@@ -81,7 +81,7 @@ export class Agent {
           requests.push(r); emit({ type: "approval", ...r });
           return { status: "sent_for_approval", action: r.summary, note: "Nothing has happened yet. A family member has to approve it (they'll see it on their FAITH screen or phone). Tell the person that, in one sentence. Or they can sign in and do it themselves." };
         }
-        const summary = t.confirm?.(args);
+        const summary = await t.confirm?.(args);
         if (summary && !(c.channel === "voice" && this.cfg().voice.confirm_on_voice)) {
           if (!this.canConfirm(c)) return { error: `"${summary}" needs someone to tap Yes on a FAITH screen. It can't be done from here.` };
           if (c.speaker && c.speaker.role === "child") return { error: `"${summary}" is for grown-ups. Ask a parent.` };
@@ -113,7 +113,10 @@ export class Agent {
       if (this.lastContext.size > 200) this.lastContext.delete(this.lastContext.keys().next().value!);
     }
     const sources = this.registry.describe(set.sources) + (set.problems.length ? `\n(Not reachable right now: ${set.problems.map((p) => p.split(":")[0]).join(", ")}.)` : "");
-    const system = systemPrompt(cfg, c, sources, { context, extra: o.extraSystem, home: this.homeLine?.() });
+    // HA's own overview of the house (areas, devices, aliases), when the Assist API is on.
+    const house = this.registry.ha && this.registry.allowedConnector(c, this.registry.ha.id) ? await this.registry.ha.houseContext(c) : undefined;
+    const extra = [o.extraSystem, house && `How the house is set up (from Home Assistant):\n${house}`].filter(Boolean).join("\n\n") || undefined;
+    const system = systemPrompt(cfg, c, sources, { context, extra, home: this.homeLine?.() });
     const past = o.history ?? this.history(conv.id);
     const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
     // Many tools (ha-mcp alone has 86): offer the ones this question needs. The previous question counts too.
@@ -125,7 +128,8 @@ export class Agent {
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
       messages: [{ role: "system", content: system }, ...past, userMsg],
-      tools: this.wrap(c, offered, conv.id, pending, requests, emit), maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      tools: this.wrap(c, offered, conv.id, pending, requests, emit),
+      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);

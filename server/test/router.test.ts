@@ -26,6 +26,10 @@ test("the router keeps FAITH's tools and finds the right ones by shared words", 
   assert.equal(picked[2], "ha_set_automation", "the best match comes first after the kept ones");
   assert.ok(words("turn the lights off", tool("light_off", "Turn off lights")) > words("turn the lights off", tool("ha_get_history", "History")));
   assert.equal((await r.pick(many.slice(0, 4), "anything")).length, 4, "few tools: all of them");
+  const ha = [...many, tool("HassClimateSetTemperature", "Sets the target of a climate device"), { ...tool("GetLiveContext", "Live state"), always: true }];
+  const p2 = (await r.pick(ha, "what temperature is the climate set to")).map((t) => t.name);
+  assert.ok(p2.includes("GetLiveContext"), "always-offered tools are kept");
+  assert.ok(p2.includes("HassClimateSetTemperature"), "joined-up names are read as words");
 });
 
 test("with an embedding model the router ranks by meaning (Argos /embeddings), and survives it failing", async () => {

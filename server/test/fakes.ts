@@ -69,6 +69,23 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     const u = new URL(req.url!, "http://x"), b = await body(req);
     const all = () => Object.entries(states).map(([entity_id, v]) => ({ entity_id, state: v.state, attributes: v.attributes || {} }));
     if (req.method === "GET" && u.pathname === "/api/") return json({ message: "API running." });
+    // The FAITH integration's door to HA's Assist API (assist.py): describe, targets, call.
+    if (u.pathname === "/api/faith/assist") {
+      const name = (e: string) => states[e]?.attributes?.friendly_name || e;
+      const match = (a: any) => Object.keys(states).filter((e) => (a?.name && name(e).toLowerCase() === String(a.name).toLowerCase()) || (a?.domain && [].concat(a.domain).includes(e.split(".")[0] as never) && !a?.name));
+      if (b?.action === "describe") return json({ prompt: `Static Context: An overview of the areas and the devices in this smart home:\n${Object.keys(states).map((e) => `- names: ${name(e)}\n  domain: ${e.split(".")[0]}`).join("\n")}`,
+        tools: ["HassTurnOn", "HassTurnOff", "GetLiveContext"].map((t) => ({ name: t, description: `${t} tool`, parameters: { type: "object", properties: { name: { type: "string" }, domain: { type: "array", items: { type: "string" } } } } })) });
+      if (b?.action === "targets") return json({ targets: b.tool === "GetLiveContext" ? [] : match(b.args) });
+      if (b?.action === "call") {
+        if (b.tool === "GetLiveContext") return json({ result: { success: true, result: Object.entries(states).map(([e, v]) => `${name(e)}: ${v.state}`).join("\n") } });
+        for (const e of match(b.args)) {
+          const d = e.split(".")[0], svc = d === "lock" ? (b.tool === "HassTurnOn" ? "lock" : "unlock") : b.tool === "HassTurnOn" ? "turn_on" : "turn_off";
+          services.push({ domain: d, service: svc, data: { entity_id: e, via: "assist", device_id: b.device_id }, token });
+          states[e].state = svc === "lock" ? "locked" : svc === "unlock" ? "unlocked" : svc === "turn_on" ? "on" : "off";
+        }
+        return json({ result: { response_type: "action_done", data: { success: match(b.args).map((e) => ({ id: e, name: name(e) })) } } });
+      }
+    }
     if (req.method === "GET" && u.pathname === "/api/states") return json(all());
     let m = u.pathname.match(/^\/api\/states\/(.+)$/);
     if (m) { const id = decodeURIComponent(m[1]); return states[id] ? json({ entity_id: id, ...states[id], attributes: states[id].attributes || {} }) : json({ message: "Entity not found." }, 404); }

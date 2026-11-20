@@ -46,6 +46,9 @@ export type HomeAssistantConnector = {
   meal_calendars: string[];        // calendar.* entities (Mealie's meal plan appears as these)
   mealie_config_entry_id?: string; // enables meal_plan / recipes_search through HA's Mealie actions
   trust_ha_users: boolean;         // Assist from a mapped HA user acts as that person (else household)
+  /** Use HA's own Assist API through the FAITH integration (0.4+): its house overview, areas,
+   *  aliases and intents, limited by HA's "Expose to Assist" list. Replaces home_find/state/control. */
+  assist_api: boolean;
   roles?: PolicyName[];
 };
 export type HermesConnector = {
@@ -131,7 +134,7 @@ const DEFAULT_ROLES: Record<PolicyName, RolePolicy> = {
   adult: { writes: "allow", allow_writes: [], approve_skip: [] },
   child: {
     writes: "allowlist",
-    allow_writes: ["shopping_add", "home_control", "wiki_memory_capture", "wiki_memory_log", "points_claim", "reward_redeem", "message_send"],
+    allow_writes: ["shopping_add", "home_control", "HassTurnOn", "HassTurnOff", "HassLightSet", "HassMedia*", "HassSetVolume*", "wiki_memory_capture", "wiki_memory_log", "points_claim", "reward_redeem", "message_send"],
     approve_skip: [],
     ha_domains: ["light", "media_player", "fan"],
     prompt: "You are talking with a child. Use short, kind, simple sentences. Don't discuss money, locks, alarms or other people's private things. If they ask for something you can't do, suggest they ask a parent.",
@@ -207,7 +210,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
         expose: { domains: ex.domains ? list(ex.domains) : ["light", "switch", "fan", "climate", "cover", "lock", "media_player", "scene", "script", "vacuum", "sensor", "binary_sensor", "weather", "person"], entities: list(ex.entities), exclude: list(ex.exclude) },
         confirm_domains: c.confirm_domains ? list(c.confirm_domains) : ["lock", "alarm_control_panel", "cover", "garage_door"],
         shopping_lists: list(c.shopping_lists), meal_calendars: list(c.meal_calendars), mealie_config_entry_id: c.mealie_config_entry_id ? str(c.mealie_config_entry_id) : undefined,
-        trust_ha_users: bool(c.trust_ha_users, true) } as HomeAssistantConnector;
+        trust_ha_users: bool(c.trust_ha_users, true), assist_api: bool(c.assist_api, false) } as HomeAssistantConnector;
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
     if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
