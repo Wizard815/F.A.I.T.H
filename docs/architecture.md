@@ -8,7 +8,8 @@ FAITH is one container: a Fastify server (TypeScript, Node 22, built-in `node:sq
 browser / HA / API token
    │  cookie (screen or person session) or bearer token
    ▼
-auth/sessions.ts   who is asking?  ->  Caller { scope: household | person, channel: hub | personal | voice | api }
+auth/sessions.ts   who is asking?  ->  Caller { scope: household | person, channel, speaker?, audience? }
+                   channels: hub, personal, ha (HA cards), voice (Assist), mattermost, api (tokens, /mcp), routine
    ▼
 connectors/registry.ts   which tools does this caller get?
    1. the connector allows the caller's role ("household" when nobody's signed in)
@@ -16,11 +17,12 @@ connectors/registry.ts   which tools does this caller get?
    3. the role's deny list and write rule: allow | allowlist | deny | approve
    ▼
 harness/agent.ts   one turn
-   - family prompt (harness/prompt.ts): who, where, rules; the wiki's context_for on a new conversation
+   - family prompt (harness/prompt.ts): who, where, who's home, rules; the wiki's context_for on a new conversation
+   - harness/router.ts: more than tools.max tools? offer the ones that fit the question (embeddings or shared words)
    - the loop (harness/llm.ts) against Argos's /v1/chat/completions, streaming
    - every tool call is wrapped:
        approve  -> stored in approvals.ts, waits for a family member
-       confirm  -> stored as pending, waits for this person's Yes on screen (locks, alarm, garage)
+       confirm  -> stored as pending, waits for this person's Yes (locks, alarm, garage, destructive MCP tools)
        else     -> runs with the caller's token; changes go to the action log
    ▼
 the source (wiki, ALLGlance, HA, Coinpile, Orb, Hermes, Studio) decides what that token may see
@@ -35,7 +37,9 @@ the source (wiki, ALLGlance, HA, Coinpile, Orb, Hermes, Studio) decides what tha
    - Children get a short allowlist and only some kinds of device.
    - The household view's changes need an adult's approval.
    - Hermes is off for children and the household.
-3. **Confirmation: the riskiest actions.** Locks, alarm and garage wait for a Yes from the same person on the same screen. Voice and API callers can't give one, so those actions are refused there (unless `voice.confirm_on_voice`).
+3. **Confirmation: the riskiest actions.** Locks, alarm, garage and anything an MCP server marks destructive wait for a Yes from the same person, on the same screen or in the same chat. Voice and API callers (including `/mcp`) can't give one, so those actions are refused there (unless `voice.confirm_on_voice`).
+
+**Speakers, not sign-ins.** In a group chat, or from a recognised voice on a shared screen or satellite, FAITH knows *who is speaking* but still answers from the household view, because everyone there hears the answer. The speaker only decides whose changes need approval.
 
 An approved household request runs with the household's tokens, not the approver's. Approving never lends someone's private access to the shared screen.
 
@@ -50,6 +54,11 @@ An approved household request runs with the household's tokens, not the approver
 | `conversations`, `messages` | chat history per view and channel; a person's chats are only theirs |
 | `pending`, `requests` | held confirmations; household changes waiting for approval |
 | `audit` | every change FAITH made: who, where, what, whether it worked |
+| `routines` | scheduled skills: when, as whom, to where, how the last run went |
+| `reward_*`, `points_ledger`, `payouts` | jobs, rewards, points, and money rewards (owed, paid, or recorded in Firefly) |
+| `voiceprints` | one averaged voiceprint per person (never audio) |
+| `person_prefs` | each person's arrangement of their day card |
+| `mm_state` | the Mattermost bot's channels and welcome messages |
 
 Secrets never go in `faith.yaml`. It names environment variables, the same convention as Orb, Coinpile and ALLGlance.
 
@@ -59,24 +68,42 @@ FAITH could hand every turn to Hermes. It runs its own small loop instead (adapt
 
 The loop is OpenAI-compatible, so the model is whatever Argos serves, and FAITH also *is* a model to other apps: `/v1/chat/completions` with a `faith token` answers with that token's view and rules.
 
+## Where the family meets FAITH
+
+| Where | How | Who it acts as |
+|---|---|---|
+| Home Assistant dashboard | FAITH's cards over HA's websocket (`faith/call`, a fixed list of paths) | the HA user who's looking, or whoever signed in on that tablet |
+| HA Assist and voice satellites | FAITH as conversation agent; FAITH's own Wyoming speech-to-text and voice (`wyoming.ts`) | the mapped HA user, or the household with a recognised speaker |
+| Mattermost | the bot: a DM each, a family channel, a parents' channel | the person (DM), or the household with a speaker (channels) |
+| Phones | HA notifications; Approve / Deny buttons | the person who tapped |
+| Other agents | `/v1/chat/completions` and `/mcp` with a `faith token` | that token's view |
+| FAITH's own page | the admin console | admins only |
+
+## What runs in the background
+
+- **Routines** (`routines.ts`): scheduled skills, checked every 30 seconds, caught up within the hour.
+- **The integrations watch** (`health.ts`): every source checked every two minutes; the parents hear when one goes down and when it's back.
+- **Presence** (`auth/presence.ts`): each screen's camera sensors for sign-out, and HA's `person.*` entities for who's home.
+- **The Mattermost bot** keeps its channels' members right.
+
 ## The screens
 
-The web app follows the design language of the family organizers that inspired it ([decisions.md](decisions.md)):
-- warm paper and a neutral dark theme;
+The family's screens are Home Assistant dashboards with FAITH's cards. FAITH's own page is the admin console. Both use the brass-and-honey theme ([brand.md](brand.md)):
+- espresso and parchment, with gold as the accent;
 - serif headings (Fraunces) over Instrument Sans;
-- hairline cards, a stats strip and a floating pill tab bar.
+- hexagon faces and FAITH's emblem.
 
-The fonts ship with the app, so nothing is fetched from the internet.
+The fonts ship with the app, so nothing is fetched from the internet. A clickable preview of the whole family UI is in [`brand/faith-hub.html`](brand/faith-hub.html).
 
-| Screen | What |
+| Card | What |
 |---|---|
-| Wall view | a paired screen with nobody signed in: a big clock, today, meals, shopping, chores, and *Talk* / *Ask* |
-| Home | "*name*'s day, at a glance": stats, the apps launcher, cards |
-| Ask | the chat, with tool calls shown as chips, Copy and Read aloud, a photo button, the mic, and Yes / approval cards |
-| Apps | every app that viewer may open |
-| Sheets | who's here (face tiles, PIN pad, Face ID, password), settings, waiting for approval |
+| `faith-hub-card` | the wall tablet's home: the clock, the emblem (tap to talk, answers out loud), who's home, faces to sign in |
+| `faith-card` | the day: today, meals, shopping, chores, the house, approvals; each person can arrange theirs |
+| `faith-chat-card` | chat with FAITH, with Yes and approval cards |
+| `faith-rewards-card` | points, jobs, rewards, the kid's card |
+| `faith-who-card` | who's signed in on this tablet; the PIN pad |
 
 | | |
 |---|---|
-| ![The hub card on a wall tablet](screenshots/ha-hub.png) | ![The hub card by day](screenshots/ha-hub-light.png) |
-| ![Signing in on the tablet](screenshots/ha-sign-in.png) | ![FAITH's admin page](screenshots/admin.png) |
+| ![The hub card in Home Assistant](screenshots/ha-live-hub.png) | ![Signed in on the hub](screenshots/ha-live-hub-signed-in.png) |
+| ![The day, chat, points and who cards](screenshots/ha-live-today.png) | ![FAITH Admin in HA's sidebar](screenshots/ha-live-admin.png) |
