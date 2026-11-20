@@ -133,11 +133,21 @@ export class HomeAssistant implements Connector {
         for (const x of all) if (x.attributes?.friendly_name) this.names.set(x.entity_id, x.attributes.friendly_name);
         const areas = await this.areaMap(caller);
         const words = String(a?.query || "").toLowerCase().split(/\s+/).filter(Boolean);
-        const hits = all.filter((s) => this.exposed(s.entity_id))
-          .filter((s) => !a?.domain || s.entity_id.startsWith(`${a.domain}.`))
-          .filter((s) => !a?.area || (areas.get(s.entity_id) || "").toLowerCase().includes(String(a.area).toLowerCase()))
-          .filter((s) => { const hay = `${s.entity_id} ${s.attributes?.friendly_name || ""} ${areas.get(s.entity_id) || ""}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
-        return { count: hits.length, entities: hits.slice(0, 40).map((s) => this.brief(s, areas.get(s.entity_id))) };
+        const hay = (s: State) => `${s.entity_id} ${s.attributes?.friendly_name || ""} ${areas.get(s.entity_id) || ""}`.toLowerCase();
+        const pool = all.filter((s) => this.exposed(s.entity_id)).filter((s) => !a?.domain || s.entity_id.startsWith(`${a.domain}.`));
+        const inArea = (s: State) => !a?.area || (areas.get(s.entity_id) || "").toLowerCase().includes(String(a.area).toLowerCase());
+        const out = (hits: State[], note?: string) => ({ count: hits.length, ...(note ? { note } : {}), entities: hits.slice(0, 40).map((s) => this.brief(s, areas.get(s.entity_id))) });
+        let hits = pool.filter(inArea).filter((s) => words.every((w) => hay(s).includes(w)));
+        if (hits.length) return out(hits);
+        // Nothing exact: widen step by step and say so, instead of leaving the model to guess again.
+        if (a?.area) {
+          hits = pool.filter((s) => words.every((w) => hay(s).includes(w)) || !words.length);
+          if (hits.length) return out(hits, `Nothing in HA's ${a.area} area matched; these are elsewhere in the house (one may serve that room, like a whole-house thermostat).`);
+        }
+        hits = pool.filter((s) => words.some((w) => w.length > 2 && hay(s).includes(w)));
+        if (hits.length) return out(hits, "No exact match; these share some of the words.");
+        const domains = [...new Set(all.filter((s) => this.exposed(s.entity_id)).map((s) => s.entity_id.split(".")[0]))].sort();
+        return { count: 0, note: `Nothing matched. Search by kind instead (domain: one of ${domains.join(", ")}), e.g. domain climate for heating.` };
       } });
 
     add({ name: "home_state", write: false, description: "Current state of one device or sensor by entity id.",

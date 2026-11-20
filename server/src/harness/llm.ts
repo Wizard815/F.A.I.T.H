@@ -17,22 +17,32 @@ export type LoopOpts = {
 
 /** Run the loop, streaming text when the server streams. Servers that ignore
  *  stream:true and answer with plain JSON still work. */
+const RETRY_MS = [1500, 4000];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, Number(process.env.FAITH_RETRY_SCALE ?? 1) * ms));
+
 export async function runLoop(o: LoopOpts): Promise<{ text: string; toolsUsed: string[] }> {
   const msgs = [...o.messages], used: string[] = []; let full = "";
   const tools = o.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const emit = o.onEvent ?? (() => {});
   for (let round = 0; round < o.maxRounds; round++) {
-    let res: Response;
+    let res!: Response;
     const signal = o.signal ? AbortSignal.any([o.signal, AbortSignal.timeout(o.timeoutMs ?? 180_000)]) : AbortSignal.timeout(o.timeoutMs ?? 180_000);
-    try {
-      res = await fetch(`${o.baseUrl}/chat/completions`, { method: "POST", signal,
-        headers: { "Content-Type": "application/json", ...(o.key ? { Authorization: `Bearer ${o.key}` } : {}) },
-        body: JSON.stringify({ model: o.model || undefined, messages: msgs, tools: tools.length ? tools : undefined, temperature: o.temperature, stream: true }) });
-    } catch (e: any) {
-      if (o.signal?.aborted) throw new ModelError(499, "Stopped.");
-      throw new ModelError(502, `Couldn't reach the model at ${o.baseUrl} (${e?.name === "TimeoutError" ? "timed out" : e?.cause?.code || e?.message}).`);
+    // A model server that's busy or swapping models (Argos/llama-swap) can answer 429/502/503/504
+    // for a moment: try again twice before giving up. Nothing has been streamed yet, so it's safe.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(`${o.baseUrl}/chat/completions`, { method: "POST", signal,
+          headers: { "Content-Type": "application/json", ...(o.key ? { Authorization: `Bearer ${o.key}` } : {}) },
+          body: JSON.stringify({ model: o.model || undefined, messages: msgs, tools: tools.length ? tools : undefined, temperature: o.temperature, stream: true }) });
+      } catch (e: any) {
+        if (o.signal?.aborted) throw new ModelError(499, "Stopped.");
+        if (attempt < 2 && e?.name !== "TimeoutError") { await sleep(RETRY_MS[attempt]); continue; }
+        throw new ModelError(502, `Couldn't reach the model at ${o.baseUrl} (${e?.name === "TimeoutError" ? "timed out" : e?.cause?.code || e?.message}).`);
+      }
+      if (attempt < 2 && [429, 502, 503, 504].includes(res.status)) { await res.body?.cancel().catch(() => {}); await sleep(RETRY_MS[attempt]); continue; }
+      break;
     }
-    if (!res.ok) throw new ModelError(502, `The model answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    if (!res.ok) throw new ModelError(502, `The model answered ${res.status}: ${(await res.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200)}`);
     let text = ""; const calls: { id: string; name: string; args: string }[] = [];
     if (!(res.headers.get("content-type") || "").includes("text/event-stream")) {
       const m = (await res.json())?.choices?.[0]?.message || {};

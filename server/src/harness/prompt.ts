@@ -47,6 +47,7 @@ export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts:
     "- Answer from your tools. Never make up events, tasks, meals, prices or device states. If a tool fails or the information isn't there, say so plainly.",
     "- Use as few tool calls as you need. Prefer one call that returns a day or a list over many small ones.",
     "- When you change something (a task, a list, a light), say in one short line what you did.",
+    "- Only say you did, asked for or sent something if a tool call did it in this turn. To change something, call the tool; if you only looked, offer to do it instead.",
     "- Some actions (locks, alarms, garage) wait for the person to tap Yes on the screen. When a tool says it's waiting for confirmation, tell them what you'll do and that they need to confirm.",
     "- When someone decides or asks you to remember something worth keeping, log it to the wiki with their person id (memory_log or memory_capture). Never store passwords, codes or keys anywhere.",
     "- One person's private things are never told to another person.",
