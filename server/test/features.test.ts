@@ -12,7 +12,7 @@ import { Decoder, encode, WyomingStt } from "../src/wyoming.js";
 
 // Skills, routines, notifications, the HA cards' API, points and rewards, voice ID, the admin API.
 let ha: Awaited<ReturnType<typeof fakeHa>>, allg: Awaited<ReturnType<typeof fakeMcp>>, model: Awaited<ReturnType<typeof fakeModel>>, vid: Awaited<ReturnType<typeof fakeVoiceId>>;
-let A: App, haTok = "", skillsDir = "";
+let A: App, haTok = "", skillsDir = "", kitchen = "";
 let script: (req: any) => any = () => ({ content: "ok" });
 const env = { HA: "ha", AG_H: "a-house", AG_WIZARD: "a-wiz" };
 
@@ -41,6 +41,7 @@ before(async () => {
   A.rewards.seed();
   A.auth.setPin("wizard", "2468"); A.auth.setPin("robin", "1111"); A.auth.setPassword("wizard", "wizard-password");
   haTok = A.auth.addToken("ha", "homeassistant");
+  kitchen = A.auth.pair(A.auth.pairCode("kitchen")).token; // the wall tablet, paired as "kitchen"
 });
 after(async () => { await A.app.close(); for (const s of [ha, allg, model, vid]) s.close(); });
 
@@ -73,10 +74,13 @@ test("skills: built-in ones load, a family's own wins on a name clash, and who m
 
 // ---------------- the HA cards' view ----------------
 test("cards: the HA user decides the view; a person's own card list and order are used", async () => {
-  const house = (await H("/api/ha/view", { user_id: "ha-unknown", screen: "kitchen" })).json();
+  const house = (await H("/api/ha/view", { user_id: "ha-unknown", screen: "kitchen", device_token: kitchen })).json();
   assert.equal(house.household, true);
   assert.equal(house.cards.find((c: any) => c.id === "today").items[0].title, "Family dinner");
   assert.equal(house.can_sign_in, true);
+  const unpaired = (await H("/api/ha/view", { user_id: "ha-unknown", screen: "kitchen" })).json();
+  assert.equal(unpaired.can_sign_in, false, "a tablet only counts as the kitchen once it's paired");
+  assert.equal(unpaired.pair_needed, true);
   const wiz = (await H("/api/ha/view", { user_id: "ha-wiz" })).json();
   assert.equal(wiz.person.id, "wizard");
   assert.deepEqual(wiz.cards.map((c: any) => c.id), ["today"], "Wizard's cards: today (approvals only shows when something waits)");
@@ -86,17 +90,22 @@ test("cards: the HA user decides the view; a person's own card list and order ar
 });
 
 test("cards: a shared tablet signs a person in with their PIN; a personal HA account can't", async () => {
-  const people = (await H("/api/ha/hub/people", { user_id: "ha-family", screen: "kitchen" })).json();
+  const K = { user_id: "ha-family", screen: "kitchen", device_token: kitchen };
+  const people = (await H("/api/ha/hub/people", K)).json();
   assert.ok(people.people.find((p: any) => p.id === "wizard").pin);
-  assert.equal((await H("/api/ha/hub/signin", { user_id: "ha-family", screen: "kitchen", person: "wizard", pin: "0000" })).statusCode, 401);
-  const s = (await H("/api/ha/hub/signin", { user_id: "ha-family", screen: "kitchen", person: "wizard", pin: "2468" })).json();
-  const v = (await H("/api/ha/view", { user_id: "ha-family", screen: "kitchen", hub_session: s.hub_session })).json();
+  assert.equal((await H("/api/ha/hub/signin", { ...K, person: "wizard", pin: "0000" })).statusCode, 401);
+  const s = (await H("/api/ha/hub/signin", { ...K, person: "wizard", pin: "2468" })).json();
+  const v = (await H("/api/ha/view", { ...K, hub_session: s.hub_session })).json();
   assert.equal(v.person.id, "wizard"); assert.ok(v.hub.remaining_seconds > 0);
   // The session only works on its own screen.
   assert.equal((await H("/api/ha/view", { user_id: "ha-family", screen: "hall", hub_session: s.hub_session })).json().household, true);
   await H("/api/ha/hub/signout", { hub_session: s.hub_session });
-  assert.equal((await H("/api/ha/view", { user_id: "ha-family", screen: "kitchen", hub_session: s.hub_session })).json().household, true);
-  assert.equal((await H("/api/ha/hub/signin", { user_id: "ha-sam", screen: "kitchen", person: "wizard", pin: "2468" })).statusCode, 403);
+  assert.equal((await H("/api/ha/view", { ...K, hub_session: s.hub_session })).json().household, true);
+  assert.equal((await H("/api/ha/hub/signin", { user_id: "ha-sam", screen: "kitchen", device_token: kitchen, person: "wizard", pin: "2468" })).statusCode, 403);
+  // Any other device saying "I'm the kitchen" gets nothing: no people list, no sign-in (PIN or face).
+  assert.equal((await H("/api/ha/hub/people", { user_id: "ha-family", screen: "kitchen" })).statusCode, 403);
+  assert.equal((await H("/api/ha/hub/signin", { user_id: "ha-family", screen: "kitchen", person: "wizard", pin: "2468" })).statusCode, 403);
+  assert.equal((await H("/api/ha/hub/signin", { user_id: "ha-family", screen: "kitchen", device_token: "fdev_guess", person: "wizard", face: true })).statusCode, 403);
 });
 
 // ---------------- points, rewards, approvals, pushes ----------------
@@ -302,18 +311,21 @@ test("voice satellites: FAITH's speech-to-text knows who spoke, and HA's convers
     let k = 0;
     script = () => (k++ % 2 === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "light.kitchen", service: "turn_on" } }] } : { content: "Done." });
     ha.states["light.kitchen"].state = "off";
-    const r = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat1" })).json();
+    // Typed Assist (an HA user, no satellite) never borrows the voice.
+    const typed = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "typed", user_id: "ha-family" })).json();
+    assert.equal(typed.speaker, null, "and the voice record is still there for the satellite's own request");
+    const r = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat1", satellite_id: "assist_satellite.kitchen_sat" })).json();
     assert.equal(r.speaker, "wizard", "matched the words heard a moment ago (case and punctuation aside)");
     assert.equal(ha.states["light.kitchen"].state, "on", "a parent's voice: the change goes through");
     assert.equal(r.person, null, "still the household view: a voice never unlocks private things");
 
     // The record is used once; an unknown voice gets no speaker, so the change waits.
     ha.states["light.kitchen"].state = "off";
-    const again = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat2" })).json();
+    const again = (await H("/api/ha/conversation", { text: "turn on the kitchen light", conversation_id: "sat2", satellite_id: "assist_satellite.kitchen_sat" })).json();
     assert.equal(again.speaker, null);
     const before = A.approvals.pendingCount();
     await satellite(port, "voice:stranger");
-    const u = (await H("/api/ha/conversation", { text: "Turn on the kitchen light.", conversation_id: "sat3" })).json();
+    const u = (await H("/api/ha/conversation", { text: "Turn on the kitchen light.", conversation_id: "sat3", satellite_id: "assist_satellite.kitchen_sat" })).json();
     assert.equal(u.speaker, null);
     assert.equal(ha.states["light.kitchen"].state, "off");
     assert.ok(A.approvals.pendingCount() > before, "an unknown voice's change waits for approval");

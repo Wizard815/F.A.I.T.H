@@ -69,6 +69,9 @@ export class WyomingStt {
 
   /** One connection from HA: describe, then any number of transcribe rounds. */
   handle(sock: Socket) {
+    // The protocol has no password: only the addresses in wyoming.allow_from (your HA) may talk to it.
+    const allow = this.d.cfg().wyoming?.allow_from ?? [], from = String(sock.remoteAddress || "").replace(/^::ffff:/, "");
+    if (allow.length && !allow.includes(from)) { this.d.log.warn({ from }, "wyoming: refused (not in wyoming.allow_from)"); sock.destroy(); return; }
     const dec = new Decoder();
     let fmt = { rate: 16000, width: 2, channels: 1 }, chunks: Buffer[] = [], size = 0, busy: Promise<void> = Promise.resolve();
     const send = (type: string, data: Record<string, unknown> = {}) => { if (!sock.destroyed) sock.write(encode(type, data)); };

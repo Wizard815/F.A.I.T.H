@@ -106,7 +106,8 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
   };
   need("ARGOS_API_KEY", "Argos's API key (leave empty if Argos has no keys)");
   if (has("mattermost")) { cfg.mattermost = { url: found.mattermost, team: "family", token_env: "MATTERMOST_BOT_TOKEN" }; need("MATTERMOST_BOT_TOKEN", "in Mattermost: System Console → Bot accounts → add bot \"faith\" → its token (docs/mattermost.md)"); }
-  if (has("voiceid")) { cfg.voice_id = { url: found.voiceid }; cfg.wyoming = { port: 10300 }; }
+  // Wyoming has no password: only Home Assistant may use it.
+  if (has("voiceid")) { cfg.voice_id = { url: found.voiceid }; cfg.wyoming = { port: 10300, ...(has("homeassistant") ? { allow_from: [new URL(found.homeassistant).hostname] } : {}) }; }
   parseConfig(cfg, Object.fromEntries(env.map((e) => [e.key, "x"]))); // what we write must load
   void ids;
   return { cfg, env };

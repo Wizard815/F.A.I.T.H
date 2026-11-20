@@ -13,6 +13,14 @@ export function setHubSession(screen: string, token: string | null) {
   window.dispatchEvent(new CustomEvent("faith-hub-changed", { detail: { screen } }));
 }
 
+/** This tablet's pairing as a screen (from `faith pair <screen>`), kept on the tablet. */
+const devKey = (screen: string) => `faith.device.${screen}`;
+export const deviceToken = (screen?: string) => { if (!screen) return undefined; try { return localStorage.getItem(devKey(screen)) || undefined; } catch { return undefined; } };
+export function setDeviceToken(screen: string, token: string) {
+  try { localStorage.setItem(devKey(screen), token); } catch { /* private mode: pairing won't stick */ }
+  window.dispatchEvent(new CustomEvent("faith-hub-changed", { detail: { screen } }));
+}
+
 export function makeApi(getHass: () => Hass | undefined, config: CardConfig): Api {
   return {
     screen: config.screen,
@@ -21,9 +29,9 @@ export function makeApi(getHass: () => Hass | undefined, config: CardConfig): Ap
     call: async <T,>(path: string, body: Record<string, unknown> = {}) => {
       const hass = getHass();
       if (!hass) throw new Error("Home Assistant isn't ready yet.");
-      const hs = hubSession(config.screen);
+      const hs = hubSession(config.screen), dev = deviceToken(config.screen);
       try {
-        return await hass.callWS<T>({ type: "faith/call", path, body: { ...body, ...(config.screen ? { screen: config.screen } : {}), ...(hs ? { hub_session: hs } : {}) } });
+        return await hass.callWS<T>({ type: "faith/call", path, body: { ...body, ...(config.screen ? { screen: config.screen } : {}), ...(hs ? { hub_session: hs } : {}), ...(dev ? { device_token: dev } : {}) } });
       } catch (e: any) { throw new Error(e?.message || e?.code || "FAITH didn't answer."); }
     },
   };

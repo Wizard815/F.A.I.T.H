@@ -44,7 +44,7 @@ CARDS_URL = "/faith_static"
 CARD_PATHS = {
     "/api/ha/view", "/api/ha/chat", "/api/ha/chat/history", "/api/ha/speak", "/api/ha/prefs/cards", "/api/ha/approvals", "/api/ha/rewards",
     "/api/ha/rewards/claim", "/api/ha/rewards/redeem", "/api/ha/rewards/award",
-    "/api/ha/hub/people", "/api/ha/hub/signin", "/api/ha/hub/signout", "/api/ha/hub/activity",
+    "/api/ha/hub/people", "/api/ha/hub/pair", "/api/ha/hub/signin", "/api/ha/hub/signout", "/api/ha/hub/activity",
 }
 CARD_PREFIXES = ("/api/ha/confirm/", "/api/ha/approvals/")
 

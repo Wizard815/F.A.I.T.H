@@ -69,6 +69,12 @@ export class Agent {
     return tools.map((t) => ({
       name: t.name, description: t.description + (t.approval ? " (Needs a family member's approval: it's sent to them, not done straight away.)" : ""), parameters: t.parameters,
       run: async (args: any) => {
+        // Unlocking, disarming, opening and destructive tools can't be approved from afar:
+        // they need a signed-in grown-up's own Yes on a screen.
+        if (t.approval && t.strict?.(args)) {
+          const what = t.confirm?.(args) || t.explain?.(args) || t.name;
+          return { error: `"${what}" can't be asked for from here. A grown-up has to sign in and do it themselves, then tap Yes.` };
+        }
         if (t.approval) {
           if (!this.approvals) return { error: "Changes from the shared view need approval, and approvals aren't set up." };
           const r = this.approvals.create(c, t, args, conversationId);
@@ -144,6 +150,8 @@ export class Agent {
   async confirm(c: Caller, id: string, approve: boolean) {
     const row = this.db.prepare("SELECT * FROM pending WHERE id = ? AND owner_key = ? AND status = 'waiting'").get(id, this.ownerKey(c)) as any;
     if (!row || Date.now() - row.created_at > PENDING_TTL) throw new ModelError(404, "That request has expired or was already answered. Ask again.");
+    // Claim it: a double tap on Yes must not run it twice.
+    if (Number(this.db.prepare("UPDATE pending SET status = 'claimed' WHERE id = ? AND status = 'waiting'").run(id).changes) !== 1) throw new ModelError(409, "That was already answered.");
     if (!approve) {
       this.db.prepare("UPDATE pending SET status = 'declined' WHERE id = ?").run(id);
       this.save(row.conversation_id, "assistant", `(Cancelled: ${row.summary}.)`);
@@ -151,7 +159,7 @@ export class Agent {
     }
     const set = await this.registry.toolsFor(c);
     const t = set.tools.find((x) => x.name === row.tool);
-    if (!t) throw new ModelError(403, "You can't do that from here any more.");
+    if (!t) { this.db.prepare("UPDATE pending SET status = 'failed' WHERE id = ?").run(id); throw new ModelError(403, "You can't do that from here any more."); }
     this.db.prepare("UPDATE pending SET status = 'running' WHERE id = ?").run(id);
     let out: any, ok = true;
     try { out = await t.run(JSON.parse(row.args)); ok = !(out && typeof out === "object" && "error" in out); }

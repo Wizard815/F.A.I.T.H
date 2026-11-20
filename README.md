@@ -37,7 +37,7 @@ is its hands, and Argos (local models) is its brain.
 **Changes from the household view need approval.**
 - Anyone can ask the shared screen to add bread or turn on a light. The change waits until a signed-in adult taps Approve (any adult can), and it then runs with the household's own access.
 - The admin can overrule a denial.
-- Locks, alarms and the garage always wait for an on-screen Yes, even for adults.
+- Locks, alarms and the garage always wait for an on-screen Yes, even for adults. Unlocking, disarming or opening can't be asked for from the shared view or a voice at all: a grown-up signs in and does it.
 - Children get a short list of what they may change, and only lights, media and fans.
 
 **One agent, all the integrations.** FAITH runs its own tool loop against Argos, so every call goes through its checks:
@@ -102,7 +102,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 5. **Set people up.**
    - `docker exec -it faith faith set-pin wizard` and `faith set-password wizard`.
    - Face ID is added from Settings on each device, and needs https: see [docs/hub.md](docs/hub.md).
-6. **Pair the wall screen.** Run `docker exec faith faith pair kitchen`, then on the tablet choose *Pair this screen* and type the code.
+6. **Pair the wall tablet.** Run `docker exec faith faith pair kitchen`, then type the code into the FAITH card on the tablet (its `screen:` is `kitchen`). Until a tablet is paired, nobody can sign in on it.
 7. **Connect Home Assistant.**
    - Copy `ha/custom_components/faith` into HA's `config/custom_components/` and restart HA.
    - Make a token with `docker exec faith faith token add ha homeassistant`.
