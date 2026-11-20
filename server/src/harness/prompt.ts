@@ -21,7 +21,7 @@ export function timeLine(now = new Date(), tz = process.env.TZ || Intl.DateTimeF
  *  every turn follows. The wiki's own home-agent contract (schema/agents.md:
  *  know who, load their context, log with `person`, never mix people up) is
  *  built in here, so a small local model doesn't have to discover it. */
-export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts: { context?: string; extra?: string; now?: Date } = {}) {
+export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts: { context?: string; extra?: string; now?: Date; home?: string } = {}) {
   const s = caller.scope;
   const family = cfg.people.map((p) => `${p.name} (id ${p.id}${p.allglance_owner_id && p.allglance_owner_id !== p.id ? `, ALLGlance owner_id ${p.allglance_owner_id}` : ""}, ${p.role})`).join("; ");
   const sp = caller.speaker;
@@ -38,6 +38,7 @@ export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts:
     `Where: ${CHANNEL[caller.channel]}.`,
     whoLine,
     `The family: ${family || "not set up yet"}.`,
+    ...(opts.home ? [opts.home] : []),
     "",
     "What you can reach through your tools:",
     sources || "- nothing right now (no sources are connected for this view)",

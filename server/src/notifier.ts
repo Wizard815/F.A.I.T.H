@@ -26,9 +26,16 @@ export class Notifier {
     return n;
   }
 
-  /** to: "family" | "parents" | a person id. Returns where it went. */
-  async send(to: string, text: string, opts: { title?: string; from?: string } = {}) {
+  /** Who's home (set by app.ts), for to: "home". */
+  presence?: { whoIsHome(): { home: { id: string }[] } };
+
+  /** to: "family" | "parents" | "home" (whoever is home) | a person id. Returns where it went. */
+  async send(to: string, text: string, opts: { title?: string; from?: string } = {}): Promise<string[]> {
     const sent: string[] = [], title = opts.title || this.cfg().name;
+    if (to === "home") {
+      for (const p of this.presence?.whoIsHome().home ?? []) sent.push(...(await this.send(p.id, text, opts)));
+      return sent;
+    }
     const people = this.cfg().people;
     const say = opts.from && !["routine", "faith"].includes(opts.from) ? `${text}\n\n_from ${people.find((p) => p.id === opts.from)?.name ?? opts.from}_` : text;
     if (to === "family" || to === "parents") {

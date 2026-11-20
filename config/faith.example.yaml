@@ -35,7 +35,8 @@ people:
     color: "#ff7a90"
     mattermost_username: partner
 # Later:
-#  - { id: kid1, name: Kid, role: child, color: "#3fb68b", firefly_account: "Kid's card" }   # the kid's card (docs/rewards.md)
+#  - { id: kid1, name: Kid, role: child, color: "#3fb68b", firefly_account: "Kid's card" }
+#    who's home comes from HA's person.<id>; set ha_person: person.other_name if it differs   # the kid's card (docs/rewards.md)
 
 # What each role may do. Defaults shown for child; admin/adult/household allow everything
 # their tokens can reach.
