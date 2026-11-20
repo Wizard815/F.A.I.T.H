@@ -42,7 +42,7 @@ CARDS_URL = "/faith_static"
 
 # What the cards may ask FAITH. Every call gets the logged-in HA user added here.
 CARD_PATHS = {
-    "/api/ha/view", "/api/ha/chat", "/api/ha/chat/history", "/api/ha/speak", "/api/ha/approvals", "/api/ha/rewards",
+    "/api/ha/view", "/api/ha/chat", "/api/ha/chat/history", "/api/ha/speak", "/api/ha/prefs/cards", "/api/ha/approvals", "/api/ha/rewards",
     "/api/ha/rewards/claim", "/api/ha/rewards/redeem", "/api/ha/rewards/award",
     "/api/ha/hub/people", "/api/ha/hub/signin", "/api/ha/hub/signout", "/api/ha/hub/activity",
 }
