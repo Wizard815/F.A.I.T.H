@@ -22,6 +22,8 @@ const HELP = `faith: set up FAITH's people, screens and tokens
   faith token list | faith token revoke <name>
   faith signout <person>                end all their sessions
   faith doctor                          check every source with every token
+  faith init [--hosts 192.168.20.5,192.168.20.10] [--person wizard:Wizard:admin ...] [--yes] [--force]
+                                        find your services and write a first faith.yaml and .env checklist
 
 Reads FAITH_CONFIG (default /config/faith.yaml) and FAITH_DATA (default /data).`;
 
@@ -52,9 +54,41 @@ async function doctor(cfg: Config) {
   return bad ? 1 : 0;
 }
 
+/** faith init: probe the network for the family's services and write a first config. */
+async function init(args: string[]) {
+  const { discover, render, writeOnce } = await import("./init.js");
+  const flag = (n: string) => args.includes(`--${n}`);
+  const values = (n: string) => args.flatMap((a, i) => (a === `--${n}` && args[i + 1] ? [args[i + 1]] : []));
+  const yes = flag("yes");
+  let hosts = values("hosts").flatMap((h) => h.split(",")).map((h) => h.trim()).filter(Boolean);
+  if (!hosts.length && !yes) hosts = (await ask("Which hosts run your services? (comma-separated IPs or names, e.g. 192.168.20.5,192.168.20.10): ")).split(",").map((h) => h.trim()).filter(Boolean);
+  console.log(`\nLooking for services on ${[...hosts, "(and their usual container names)"].join(", ")}…`);
+  const found = await discover(hosts, (m) => console.log(m));
+  let people = values("person").map((p) => { const [id, name, role] = p.split(":"); return { id, name: name || id, role: (role || "adult") as any }; });
+  if (!people.length && !yes) {
+    console.log("\nThe family (empty name to stop). Roles: admin (you), adult, child.");
+    for (;;) {
+      const name = await ask("  Name: "); if (!name) break;
+      const id = (await ask(`  Short id for ${name} [${name.toLowerCase().replace(/[^a-z0-9]+/g, "")}]: `)) || name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const role = (await ask(`  Role [${people.length ? "adult" : "admin"}]: `)) || (people.length ? "adult" : "admin");
+      people.push({ id, name, role: role as any });
+    }
+  }
+  if (!people.length) people = [{ id: "admin", name: "Admin", role: "admin" }];
+  const { yaml, dotenv, env } = render(found, people);
+  const cfgPath = process.env.FAITH_CONFIG || "/config/faith.yaml", envPath = `${cfgPath.replace(/[^/]+$/, "")}faith.env.todo`;
+  try { writeOnce(cfgPath, yaml, flag("force")); }
+  catch (e: any) { console.error(`\n${e.message}`); return 1; }
+  writeOnce(envPath, dotenv, true);
+  console.log(`\nWrote ${cfgPath}, and ${envPath} with the ${env.length} token${env.length === 1 ? "" : "s"} to make (and how).`);
+  console.log("Next: copy those lines into .env, fill them in, restart FAITH, then: docker exec faith faith doctor");
+  return 0;
+}
+
 async function main(argv: string[]) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === "help" || cmd === "--help") { console.log(HELP); return 0; }
+  if (cmd === "init") return init(rest);
   const cfg = loadConfig(process.env.FAITH_CONFIG || "/config/faith.yaml");
   if (cmd === "doctor") return doctor(cfg);
   const db = openDb(resolve(process.env.FAITH_DATA || "/data", "faith.db"));
