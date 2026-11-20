@@ -11,6 +11,7 @@ FAITH is the family's front-end agent: one container (server + web app) and a Ho
 | `ha/custom_components/faith` | HA integration | `cd ha && pytest` (needs `pytest-homeassistant-custom-component`) |
 | `server/scripts/demo.ts` | the whole thing with fakes | `node --import tsx server/scripts/demo.ts` |
 | `server/scripts/eval.ts` | 15 family requests against a real model (Argos by default), with checks | `EVAL_MODEL_URL=… EVAL_MODEL=… node --import tsx server/scripts/eval.ts`; after prompt or tool changes |
+| `server/scripts/eval-live.ts` | the same idea against a real setup (`FAITH_CONFIG`), checking HA, Firefly and the wiki afterwards; it changes things, so use a test setup | `FAITH_CONFIG=… FAITH_DATA=… EVAL_VAULT=… node --import tsx server/scripts/eval-live.ts` |
 | `server/src/wyoming.ts` | speech-to-text for HA's voice pipeline (Wyoming), which also notes who spoke | `npm test`; HA's own client: see `docs/home-assistant.md` |
 | `server/src/mattermost.ts` | the Mattermost bot (personal, family, parents chats) | `npm test`; real Mattermost: `server/scripts/mattermost/` (see `docs/mattermost.md`) |
 

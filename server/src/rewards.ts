@@ -201,7 +201,9 @@ export class Rewards {
   /** Seed a starter catalogue the first time (the admin page edits it after). */
   seed() {
     if (this.activities(true).length || this.rewards(true).length) return;
-    for (const [name, points] of [["Make your bed", 0.5], ["Put toys away", 0.5], ["Do the dishes", 1], ["Feed the pet", 1], ["Help with dinner", 1], ["Clean your room", 2], ["Help in the yard", 2]] as const) this.saveActivity({ name, points });
+    // The family's own point steps may not include these (rewards.allowed_points): use the nearest one.
+    const allowed = this.cfg().rewards.allowed_points, near = (n: number) => allowed.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a), allowed[0]);
+    for (const [name, points] of [["Make your bed", 0.5], ["Put toys away", 0.5], ["Do the dishes", 1], ["Feed the pet", 1], ["Help with dinner", 1], ["Clean your room", 2], ["Help in the yard", 2]] as const) this.saveActivity({ name, points: near(points) });
     for (const [name, cost] of [["Pick the movie", 3], ["30 minutes extra screen time", 5], ["Choose dinner", 8], ["Trip for ice cream", 12]] as const) this.saveReward({ name, cost });
   }
 }
