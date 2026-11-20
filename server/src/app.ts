@@ -48,6 +48,8 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   await app.register(cookie);
   const notifier = new Notifier(cfg, registry.ha, app.log);
   const health = new Health(cfg, registry, notifier, env);
+  notifier.presence = presence;
+  agent.homeLine = () => presence.homeLine();
   faithTools.approvals = approvals; faithTools.notifier = notifier;
   approvals.on((e) => { notifier.onApproval(e).catch((err) => app.log.warn({ err: err.message }, "approval push failed")); });
   const routines = new Routines(db, cfg, agent, skills, notifier, app.log);

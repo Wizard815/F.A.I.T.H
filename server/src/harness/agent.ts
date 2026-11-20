@@ -18,6 +18,8 @@ const PENDING_TTL = 10 * 60_000;
  *  keep the conversation, and hold risky actions for an on-screen Yes. */
 export class Agent {
   router: ToolRouter;
+  /** Who's home, from HA (set by app.ts). */
+  homeLine?: () => string | undefined;
   constructor(private db: Db, private cfg: () => Config, private registry: Registry, private env: NodeJS.ProcessEnv = process.env, private approvals?: Approvals) {
     this.router = new ToolRouter(cfg, env, (m) => console.warn(m));
   }
@@ -105,7 +107,7 @@ export class Agent {
       if (this.lastContext.size > 200) this.lastContext.delete(this.lastContext.keys().next().value!);
     }
     const sources = this.registry.describe(set.sources) + (set.problems.length ? `\n(Not reachable right now: ${set.problems.map((p) => p.split(":")[0]).join(", ")}.)` : "");
-    const system = systemPrompt(cfg, c, sources, { context, extra: o.extraSystem });
+    const system = systemPrompt(cfg, c, sources, { context, extra: o.extraSystem, home: this.homeLine?.() });
     const past = o.history ?? this.history(conv.id);
     const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
     // Many tools (ha-mcp alone has 86): offer the ones this question needs. The previous question counts too.

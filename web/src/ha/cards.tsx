@@ -21,7 +21,7 @@ type Item = { title: string; time?: string; meta?: string; label?: string; done?
 type CardData = { id: string; title: string; kind: string; items?: Item[]; approvals?: { id: string; summary: string; requested_by: string }[]; entities?: { entity_id: string; name: string; state: string }[]; text?: string; error?: string; empty?: string };
 type Person = { id: string; name: string; role: string; color?: string };
 type Layout = { can_arrange: boolean; available: { id: string; title: string }[]; order: string[]; hidden: string[]; saved: boolean };
-type View = { layout?: Layout; name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
+type View = { layout?: Layout; home?: Person[]; name: string; person: Person | null; household: boolean; hub: { person: Person; remaining_seconds: number } | null; can_sign_in: boolean; can_approve: boolean; pending_approvals: number; cards: CardData[]; apps: { id: string; name: string; url: string; icon?: string }[] };
 
 const ICON: Record<string, string> = { today: "mdi:calendar-today", meals: "mdi:silverware-fork-knife", shopping: "mdi:cart-outline", chores: "mdi:broom", home: "mdi:home-outline", approvals: "mdi:shield-check-outline" };
 const initials = (n: string) => n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -379,7 +379,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
       </div>
       <div className="hub-mid">
         <div className="hello">{greeting(now)}, <em>{me ? me.name : "everyone"}</em>.</div>
-        {next && <div className="meta">Next: {niceTime(next.time)} {next.title}</div>}
+        {(next || !!data?.home?.length) && <div className="meta">{[next ? `Next: ${niceTime(next.time)} ${next.title}` : "", data?.home?.length ? `Home now: ${data.home.map((p) => p.name).join(", ")}` : ""].filter(Boolean).join(" · ")}</div>}
         <button className="orb" onClick={c.mic} disabled={c.busy} aria-label={c.rec ? "Stop and send" : "Talk to FAITH"}>
           <Emblem size={size} tone={api.dark ? "dark" : "light"} state={c.state} level={c.level} />
         </button>

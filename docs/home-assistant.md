@@ -109,6 +109,15 @@ Other ways FAITH knows who's talking:
 - Recognition scores were 0.94 (Wizard) and 0.95 (Sam) on new sentences, with the real voiceid service and synthetic voices.
 - Port 10300 has no password in the Wyoming protocol, so keep it on your LAN or the docker network HA uses.
 
+## Who's home
+
+FAITH reads each person's HA `person.<id>` entity (phones, the router, whatever HA uses), or `ha_person:` in `faith.yaml` if the name differs. Set `ha_person: ""` to leave someone out.
+- **What it uses:** only *home* or *away*. Zones ("Work", "School") are never passed on.
+- **FAITH knows it** in every answer ("is anyone home?").
+- **The hub card** shows *Home now: …*.
+- **Messages to `home`** go to each person who's home right now, for example "dinner's ready" from a routine or `faith.send_message`.
+- **A parents' routine** can't be sent to `home` or the family chat, because the children would read it.
+
 ## Full control for the parents: ha-mcp
 
 FAITH's own Home Assistant connector does everyday things for everyone: lights, the shopping list, the meal plan.

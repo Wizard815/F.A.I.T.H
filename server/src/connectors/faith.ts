@@ -101,7 +101,7 @@ export class FaithTools implements Connector {
       }) });
 
     add({ name: "message_send", write: true, explain: (a) => `send ${a?.to} a message: "${String(a?.text || "").slice(0, 60)}"`,
-      description: "Send a short message: to 'family' (the family chat), 'parents' (the grown-ups' chat), or one person (by name): their FAITH chat and their phone.",
+      description: "Send a short message: to 'family' (the family chat), 'parents' (the grown-ups' chat), 'home' (each person who is home right now, e.g. dinner's ready), or one person (by name): their FAITH chat and their phone.",
       parameters: { type: "object", properties: { to: { type: "string" }, text: { type: "string" } }, required: ["to", "text"], additionalProperties: false },
       run: async (a) => {
         if (!this.notifier) return { error: "Messages aren't set up." };

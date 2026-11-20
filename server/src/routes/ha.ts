@@ -75,7 +75,7 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
       hub: w.hub ? { person: pub(w.hub.person), remaining_seconds: w.hub.remaining } : null,
       can_sign_in: w.shared && !w.hub && cfg().people.length > 0,
       can_approve: approvals.canApprove(c), pending_approvals: approvals.pendingCount(),
-      cards, apps,
+      cards, apps, home: presence.whoIsHome().home.map(pub),
       layout: { can_arrange: !!p && !fixed, available, order: cards.map((k) => k.id), hidden: mine?.hidden ?? [], saved: !!mine },
     };
   });

@@ -18,7 +18,7 @@ const env = { HA: "ha", AG_H: "a-house", AG_WIZARD: "a-wiz" };
 
 before(async () => {
   skillsDir = mkdtempSync(join(tmpdir(), "faith-skills-"));
-  ha = await fakeHa({ "light.kitchen": { state: "off", attributes: { friendly_name: "Kitchen light" } } }, { shopping: [], areas: { "assist_satellite.kitchen_sat": "Kitchen" } });
+  ha = await fakeHa({ "light.kitchen": { state: "off", attributes: { friendly_name: "Kitchen light" } }, "person.wizard": { state: "home" }, "person.sam": { state: "Work" } }, { shopping: [], areas: { "assist_satellite.kitchen_sat": "Kitchen" } });
   allg = await fakeMcp([{ name: "allglance_get_day", readOnly: true, run: (_a, t) => ({ blocks: [{ title: t === "a-house" ? "Family dinner" : "Dentist (private)", start: "18:00" }] }) }]);
   model = await fakeModel((req) => script(req));
   vid = await fakeVoiceId();
@@ -232,6 +232,25 @@ test("a person arranges their own card; the shared view can't; a dashboard's fix
   await H("/api/ha/prefs/cards", { user_id: "ha-wiz", reset: true });
   assert.deepEqual((await view({ user_id: "ha-wiz" })).layout.order, ["today", "approvals"]);
   assert.deepEqual((await view({ user_id: "ha-sam" })).layout.saved, false, "Sam's card isn't Wizard's");
+});
+
+// ---------------- who's home (HA person entities) ----------------
+test("who's home: FAITH knows (home or away, never where), 'home' messages reach only them, the hub shows it", async () => {
+  await A.presence.pollPeople();
+  assert.equal(A.presence.homeLine(), "At home right now: Wizard. Away: Sam.", "Sam's zone (Work) isn't told; Robin has no person entity");
+  script = () => ({ content: "ok" });
+  await H("/api/ha/conversation", { text: "who's around?" });
+  assert.match(model.calls.at(-1).messages[0].content, /At home right now: Wizard\. Away: Sam\./);
+
+  const before = ha.services.length;
+  const wiz = { scope: { kind: "person" as const, person: A.registry["cfg"]().people[0] }, channel: "personal" as const, label: "wizard" };
+  const r = await A.agent.runTool(wiz, "message_send", { to: "home", text: "Dinner's ready!" });
+  assert.deepEqual((r.out as any).sent_to, ["push:wizard"]);
+  assert.ok(!ha.services.slice(before).some((x) => x.service === "mobile_app_sam"), "Sam is away: not bothered");
+
+  assert.throws(() => A.routines.save({ name: "Gift ideas", days: "daily", time: "08:00", prompt: "x", run_as: "parents", deliver: ["home"] }), /parents' routine/);
+  const v = (await H("/api/ha/view", { user_id: "ha-family", screen: "kitchen" })).json();
+  assert.deepEqual(v.home.map((p: any) => p.name), ["Wizard"]);
 });
 
 // ---------------- the hub card's voice ----------------
