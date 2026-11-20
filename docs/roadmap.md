@@ -35,4 +35,4 @@
 
 1. **A run on the real Unraid HA VM** with a real satellite and real voices. Synthetic voices are easier to tell apart than family members.
 2. **"Hey Faith" everywhere.** A custom openWakeWord model for the satellites (trained once, then loaded into HA's openWakeWord).
-3. **ALLGlance: a Mealie adapter**, so `allglance_get_day` includes tonight's dinner for agents that only use ALLGlance.
+3. **ALLGlance: merge the Mealie adapter** (on ALLGlance's `claude/nice-darwin-wx3t3u` branch): `allglance_get_day` then includes the day's meals for agents that only use ALLGlance.
