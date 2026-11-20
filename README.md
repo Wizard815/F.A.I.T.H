@@ -90,15 +90,20 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
    mkdir -p /mnt/user/appdata/faith/{data,config} && cp config/faith.example.yaml /mnt/user/appdata/faith/config/faith.yaml
    chown -R 1000:1000 /mnt/user/appdata/faith        # the container runs as node (uid 1000)
    ```
-2. **Fill in the config.**
+2. **Let FAITH find your services**, or fill the config in by hand.
+   - `docker compose build && docker compose run --rm faith faith init --hosts 192.168.1.5,192.168.1.10`
+   - It looks for each service on those hosts (and its usual container name) and asks who's in the family.
+   - It writes `faith.yaml` with what it found, and `faith.env.todo` listing every token to make and exactly how to make it.
+   - It only reads: nothing changes on your services, and it won't overwrite an existing `faith.yaml` without `--force`.
+3. **Fill in the config.**
    - Put your family, connectors, screens and apps in `faith.yaml`.
    - Put the tokens in `.env`. [docs/setup.md](docs/setup.md) says how to make each one.
-3. **Start it.** Run `docker compose up -d --build`, then `docker exec faith faith doctor`. Doctor checks every source with every person's token and the household's.
-4. **Set people up.**
+4. **Start it.** Run `docker compose up -d --build`, then `docker exec faith faith doctor`. Doctor checks every source with every person's token and the household's.
+5. **Set people up.**
    - `docker exec -it faith faith set-pin wizard` and `faith set-password wizard`.
    - Face ID is added from Settings on each device, and needs https: see [docs/hub.md](docs/hub.md).
-5. **Pair the wall screen.** Run `docker exec faith faith pair kitchen`, then on the tablet choose *Pair this screen* and type the code.
-6. **Connect Home Assistant.**
+6. **Pair the wall screen.** Run `docker exec faith faith pair kitchen`, then on the tablet choose *Pair this screen* and type the code.
+7. **Connect Home Assistant.**
    - Copy `ha/custom_components/faith` into HA's `config/custom_components/` and restart HA.
    - Make a token with `docker exec faith faith token add ha homeassistant`.
    - Add the *FAITH* integration and pick it as the agent of your Assist pipeline. See [docs/home-assistant.md](docs/home-assistant.md).
