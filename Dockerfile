@@ -25,6 +25,8 @@ COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/web/dist web/dist
 COPY server/skills server/skills
 COPY config/faith.example.yaml /app/faith.example.yaml
+# ffmpeg: phone photos (HEIC, big JPEGs) and videos for the vision model.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN printf '#!/bin/sh\nexec node /app/server/dist/cli.js "$@"\n' > /usr/local/bin/faith && chmod +x /usr/local/bin/faith \
  && mkdir -p /data /config && chown -R node:node /data /config
 USER node

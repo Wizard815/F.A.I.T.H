@@ -64,8 +64,11 @@ export class Agent {
 
   private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost" || c.channel === "ha"; }
 
-  /** Tools wrapped with confirmation and the action log. */
-  private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void) {
+  /** Tools wrapped with confirmation and the action log.
+   *  `media`: the turn carries a photo or video. What's in it (a note, a sign,
+   *  a video's sound) can read like a request, so every change waits for the
+   *  person's own Yes. That's enforced here, not left to the prompt. */
+  private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void, media = false) {
     return tools.map((t) => ({
       name: t.name, description: t.description + (t.approval ? " (Needs a family member's approval: it's sent to them, not done straight away.)" : ""), parameters: t.parameters,
       run: async (args: any) => {
@@ -81,8 +84,8 @@ export class Agent {
           requests.push(r); emit({ type: "approval", ...r });
           return { status: "sent_for_approval", action: r.summary, note: "Nothing has happened yet. A family member has to approve it (they'll see it on their FAITH screen or phone). Tell the person that, in one sentence. Or they can sign in and do it themselves." };
         }
-        const summary = await t.confirm?.(args);
-        if (summary && !(c.channel === "voice" && this.cfg().voice.confirm_on_voice)) {
+        const summary = (await t.confirm?.(args)) || (media && t.write ? t.explain?.(args) || described(t.name, args) : null);
+        if (summary && !(c.channel === "voice" && this.cfg().voice.confirm_on_voice && !media)) {
           if (!this.canConfirm(c)) return { error: `"${summary}" needs someone to tap Yes on a FAITH screen. It can't be done from here.` };
           if (c.speaker && c.speaker.role === "child") return { error: `"${summary}" is for grown-ups. Ask a parent.` };
           const id = newId();
@@ -123,13 +126,14 @@ export class Agent {
     const before = [...past].reverse().find((m) => m.role === "user");
     const offered = await this.router.pick(set.tools, `${typeof before?.content === "string" ? before.content : ""}\n${text}`);
     // A photo goes to the vision model (Argos serves it) as an image part.
-    const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 4);
+    // Up to 8: a video sends 6 frames.
+    const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 8);
     const userMsg: Msg = images.length ? { role: "user", content: [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] } : { role: "user", content: text };
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
       messages: [{ role: "system", content: system }, ...past, userMsg],
-      tools: this.wrap(c, offered, conv.id, pending, requests, emit),
-      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      tools: this.wrap(c, offered, conv.id, pending, requests, emit, images.length > 0),
+      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit, images.length > 0) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);
@@ -183,4 +187,10 @@ export class Agent {
   latest(c: Caller) {
     return (this.db.prepare("SELECT id FROM conversations WHERE owner_key = ? ORDER BY updated_at DESC LIMIT 1").get(this.ownerKey(c)) as any)?.id as string | undefined;
   }
+}
+
+/** A held change in words, for tools without their own: "allglance create task: Call the plumber, 2026-11-27". */
+function described(name: string, args: any) {
+  const vals = Object.values(args ?? {}).filter((v) => typeof v === "string" || typeof v === "number").map(String);
+  return `${name.replace(/_/g, " ")}${vals.length ? `: ${vals.join(", ")}` : ""}`.slice(0, 160);
 }

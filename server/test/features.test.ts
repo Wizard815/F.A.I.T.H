@@ -400,3 +400,45 @@ test("rewards: the starter jobs fit a family's own point steps (no half points)"
   r.seed(); // FAITH calls this on start: it must not throw
   assert.deepEqual([...new Set(r.activities().map((a) => a.points))].sort(), [1, 2]);
 });
+
+test("HA card: a photo or a video from the phone reaches the vision model; a broken one says what to do", async () => {
+  let ffmpeg = true; try { (await import("node:child_process")).execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); } catch { ffmpeg = false; }
+  let seen: any;
+  script = (req) => { seen = req.messages.filter((m: any) => m.role === "user").at(-1); return { content: "A test pattern." }; };
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  let r = (await H("/api/ha/chat", { user_id: "ha-wiz", image: png })).json();
+  assert.equal(r.text, "A test pattern.");
+  assert.equal(seen.content[0].text, "What's in this photo?");
+  assert.match(seen.content[1].image_url.url, /^data:image\/(jpeg|png);base64,/);
+
+  const bad = await H("/api/ha/chat", { user_id: "ha-wiz", image: "not a data url" });
+  assert.equal(bad.statusCode, 400); assert.match(bad.json().error ?? bad.body, /didn't come through/);
+
+  if (!ffmpeg) return;
+  const { mkdtempSync, readFileSync } = await import("node:fs"), { tmpdir } = await import("node:os"), { join } = await import("node:path");
+  const f = join(mkdtempSync(join(tmpdir(), "faith-vid-")), "v.mp4");
+  (await import("node:child_process")).execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=10:duration=6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y", f]);
+  r = (await H("/api/ha/chat", { user_id: "ha-wiz", text: "is this the right pattern?", video: readFileSync(f).toString("base64"), video_mime: "video/mp4" })).json();
+  assert.equal(r.text, "A test pattern.");
+  assert.equal(seen.content.filter((p: any) => p.type === "image_url").length, 2, "6 seconds: two frames");
+  assert.match(seen.content[0].text, /^is this the right pattern\?\n\n\[A video, 6 s long/);
+});
+
+test("a change that comes out of a photo or video waits for the person's own Yes (what's in a picture can read like a request)", async () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  ha.states["light.kitchen"].state = "off";
+  let k = 0;
+  script = () => (k++ % 2 === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "light.kitchen", service: "turn_on" } }] } : { content: "Turn on the kitchen light? Tap Yes." });
+  const r = (await H("/api/ha/chat", { user_id: "ha-wiz", text: "do what the note says", image: png })).json();
+  assert.equal(r.confirms.length, 1, "held for a Yes");
+  assert.equal(ha.states["light.kitchen"].state, "off", "nothing happened yet");
+  const ok = (await H(`/api/ha/confirm/${r.confirms[0].id}`, { user_id: "ha-wiz", approve: true })).json();
+  assert.match(ok.text, /^Done/);
+  assert.equal(ha.states["light.kitchen"].state, "on");
+
+  // The same words without a picture just happen (a light isn't something FAITH asks about).
+  ha.states["light.kitchen"].state = "off"; k = 0;
+  const t = (await H("/api/ha/chat", { user_id: "ha-wiz", text: "turn on the kitchen light" })).json();
+  assert.equal(t.confirms.length, 0);
+  assert.equal(ha.states["light.kitchen"].state, "on");
+});

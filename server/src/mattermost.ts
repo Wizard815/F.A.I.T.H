@@ -4,8 +4,9 @@ import type { Agent } from "./harness/agent.js";
 import { Approvals, type ApprovalEvent } from "./approvals.js";
 import type { Caller } from "./scope.js";
 import { transcribe } from "./speech.js";
+import { MediaError, photo, video } from "./media.js";
 
-const MAX_FILE = 15_000_000;
+const MAX_FILE = 15_000_000, MAX_VIDEO = 50_000_000;
 
 /** Where a Mattermost message was written, and so who reads the answer. */
 export type Room = { kind: "personal"; person: Person } | { kind: "family" } | { kind: "parents" };
@@ -53,32 +54,40 @@ export class MattermostBot {
   /** A file someone attached (a photo, a voice message), as bytes. */
   async file(id: string): Promise<{ mime: string; name: string; bytes: Buffer } | undefined> {
     const info = await this.api("GET", `/files/${encodeURIComponent(id)}/info`);
-    if (!info || Number(info.size) > MAX_FILE) return undefined;
+    const max = String(info?.mime_type || "").startsWith("video/") ? MAX_VIDEO : MAX_FILE;
+    if (!info || Number(info.size) > max) return undefined;
     let r: Response;
     try { r = await fetch(`${this.mm.url}/api/v4/files/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${this.token()}`, "X-Requested-With": "XMLHttpRequest" }, signal: AbortSignal.timeout(30000) }); }
     catch (e: any) { throw new MattermostError(`Couldn't fetch a file from Mattermost (${e?.cause?.code || e?.message}).`); }
     if (!r.ok) throw new MattermostError(`Mattermost answered ${r.status} for a file.`);
     const bytes = Buffer.from(await r.arrayBuffer());
-    if (bytes.length > MAX_FILE) return undefined;
+    if (bytes.length > max) return undefined;
     return { mime: String(info.mime_type || "application/octet-stream").toLowerCase(), name: String(info.name || "file"), bytes };
   }
 
-  /** Photos go to the vision model; voice messages are turned into words (Argos). */
+  /** Photos go to the vision model, videos as frames plus what their sound says;
+   *  voice messages are turned into words (Argos). */
   private async attachments(post: Post, photos: boolean) {
-    const images: string[] = [], heard: string[] = [], skipped: string[] = [];
+    const images: string[] = [], heard: string[] = [], skipped: string[] = [], notes: string[] = [], problems: string[] = [];
     for (const id of (post.file_ids || []).slice(0, 4)) {
       try {
-        if (!photos) { const info = await this.api("GET", `/files/${encodeURIComponent(id)}/info`); if (String(info?.mime_type || "").startsWith("image/")) continue; }
+        if (!photos) { const info = await this.api("GET", `/files/${encodeURIComponent(id)}/info`); if (/^(image|video)\//.test(String(info?.mime_type || ""))) continue; }
         const f = await this.file(id);
         if (!f) { skipped.push("a file that's too big"); continue; }
-        if (/^image\/(png|jpe?g|webp|gif)$/.test(f.mime)) images.push(`data:${f.mime.replace("jpg", "jpeg")};base64,${f.bytes.toString("base64")}`);
+        if (f.mime.startsWith("image/")) images.push(await photo(f.bytes, f.mime));
         else if (f.mime.startsWith("audio/") || (f.mime === "video/mp4" && /\.m4a$/i.test(f.name))) {
           const t = await transcribe(this.cfg(), this.env, f.bytes, f.mime.startsWith("audio/") ? f.mime : "audio/mp4");
           if (t) heard.push(t);
+        } else if (f.mime.startsWith("video/")) {
+          const v = await video(this.cfg(), this.env, f.bytes);
+          images.push(...v.frames); notes.push(v.note);
         } else skipped.push(f.name);
-      } catch (e: any) { this.log.warn({ err: e.message }, "mattermost: couldn't read an attachment"); skipped.push("an attachment I couldn't open"); }
+      } catch (e: any) {
+        this.log.warn({ err: e.message }, "mattermost: couldn't read an attachment");
+        if (e instanceof MediaError) problems.push(e.message); else skipped.push("an attachment I couldn't open");
+      }
     }
-    return { images, heard, skipped };
+    return { images, heard, skipped, notes, problems };
   }
 
   private kv(key: string) { return (this.db.prepare("SELECT value FROM mm_state WHERE key = ?").get(key) as any)?.value as string | undefined; }
@@ -176,11 +185,12 @@ export class MattermostBot {
     // In a group chat where FAITH answers only when named, don't fetch every photo people share.
     const named = (t: string) => new RegExp(`@${this.me!.username}\\b`, "i").test(t) || new RegExp(`^(hey\\s+)?${this.cfg().name}\\b`, "i").test(t);
     const photos = room.kind === "personal" || this.mm.answer_in_groups !== "mention" || named(text);
-    const att = post.file_ids?.length ? await this.attachments(post, photos) : { images: [] as string[], heard: [] as string[], skipped: [] as string[] };
+    const att = post.file_ids?.length ? await this.attachments(post, photos) : { images: [] as string[], heard: [] as string[], skipped: [] as string[], notes: [] as string[], problems: [] as string[] };
     if (att.heard.length) text = [text, ...att.heard].filter(Boolean).join("\n");
-    const heardNote = att.heard.length ? `_Heard: “${att.heard.join(" ")}”_\n\n` : "";
-    if (!text && att.images.length) text = "What's in this photo?";
-    if (!text) return att.skipped.length ? this.say(post, `I can read photos and voice messages, not ${att.skipped.join(", ")}.`) : undefined;
+    const heardNote = (att.heard.length ? `_Heard: “${att.heard.join(" ")}”_\n\n` : "") + (att.problems.length ? `_${att.problems.join(" ")}_\n\n` : "");
+    if (!text && att.images.length) text = att.notes.length ? "What's in this video?" : "What's in this photo?";
+    if (!text && att.problems.length) return this.say(post, att.problems.join(" "));
+    if (!text) return att.skipped.length ? this.say(post, `I can read photos, videos and voice messages, not ${att.skipped.join(", ")}.`) : undefined;
 
     // "yes" / "no" to something waiting for a confirmation in this chat.
     const wait = this.pending.get(post.channel_id);
@@ -212,7 +222,7 @@ export class MattermostBot {
 
     const typing = setInterval(() => this.typing(post.channel_id, post.root_id), 4000); this.typing(post.channel_id, post.root_id);
     try {
-      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text, images: att.images, extId: `mm:${post.channel_id}` });
+      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text: [text, ...att.notes].join("\n\n"), images: att.images, extId: `mm:${post.channel_id}` });
       let reply = heardNote + (r.text || "Done.");
       if (r.pending.length) {
         this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });

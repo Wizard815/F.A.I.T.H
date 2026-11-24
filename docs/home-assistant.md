@@ -198,7 +198,7 @@ The family uses Home Assistant; FAITH's own page is the admin console. The integ
   screen: kitchen
 - type: custom:faith-card          # the day, meals, shopping, chores, the house, approvals
   screen: kitchen                  # optional: cards: [today, meals, shopping]
-- type: custom:faith-chat-card     # talk or type to FAITH
+- type: custom:faith-chat-card     # talk or type to FAITH, or show it a photo or video
   screen: kitchen
 - type: custom:faith-rewards-card  # points, jobs to claim, rewards; parents give points
   screen: kitchen
@@ -212,6 +212,13 @@ The family uses Home Assistant; FAITH's own page is the admin console. The integ
   - For a kiosk, put it alone on a panel view and pick the *FAITH* theme (`ha/themes/faith.yaml`).
   - Browsers only allow the microphone over https, so open HA on the tablet through https.
   - Replies can use a little Markdown (bold, lists). The cards show it formatted, and the marks aren't read aloud.
+- **Show FAITH a photo or video.** The 📷 button in the ask bar (chat and hub cards) takes a photo or video, or picks one from the phone.
+  - Ask with it ("what plant is this?", "what does this letter say?", "is this pipe leaking?"), or send it alone.
+  - The phone shrinks a photo before sending. FAITH makes a video into up to 6 frames, and Argos writes down what its sound says.
+  - The sound of a video is only context. A TV in the background saying "unlock the door" asks for nothing.
+  - Any change that comes out of a photo or video waits for your own **yes** (a task from a note, a light from a sign). Text in a picture can read like a request, so FAITH checks first. That's in FAITH's code, not left to the model.
+  - It goes to `model.vision_model` (or the main model). Argos must serve a model that reads images.
+  - Videos up to about 20 seconds (28 MB). FAITH's container needs ffmpeg for videos; the image has it.
 - **Each person arranges their own day card.** Signed in (their own HA account, or a PIN on the tablet), they tap *Arrange* on the FAITH card, then reorder and hide sections. FAITH remembers it for them. A card with its own `cards:` list keeps that list for everyone.
 - **Each card asks FAITH as the HA user who's looking.** Map each person's HA user with `ha_user_id` in `faith.yaml`. A mapped user sees their own view.
 - **A tablet signed into HA as an unmapped "Family" user** sees the household view.

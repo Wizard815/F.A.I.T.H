@@ -52,7 +52,7 @@ is its hands, and Argos (local models) is its brain.
 | Hermes | big jobs, run in each person's own Hermes profile |
 | Hermes Studio | that person's chats, and starting a job there |
 | Mattermost | FAITH as a bot: a personal DM each, a family channel, a parents' channel where approvals land ([details](docs/mattermost.md)) |
-| Argos | speech-to-text for the mic, text-to-speech for replies, and a vision model for photos |
+| Argos | speech-to-text for the mic, text-to-speech for replies, and a vision model for photos and videos |
 
 **Home Assistant is part of it, both ways.**
 - FAITH controls the house through HA's API.

@@ -13,6 +13,7 @@ import { envValue } from "../config.js";
 import { dashboard } from "../dashboard.js";
 import { ModelError } from "../harness/llm.js";
 import { speakable, synthesize, transcribe } from "../speech.js";
+import { MediaError, photo, video } from "../media.js";
 import type { Caller } from "../scope.js";
 
 export type HaCtx = {
@@ -96,7 +97,8 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   });
 
   // ---- chat (text, or a recording the card made) ----
-  app.post("/api/ha/chat", async (req) => {
+  // A phone video is big: up to about 30 MB once it's base64.
+  app.post("/api/ha/chat", { bodyLimit: 40_000_000 }, async (req) => {
     const w = who(req), b: any = req.body || {};
     let caller = w.caller, text = String(b.text || "").trim(), heard: string | undefined, speaker: Person | undefined;
     if (b.audio) {
@@ -108,11 +110,21 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
         if (m) { speaker = m.person; if (cfg().voice_id?.trust_for_changes !== false) caller = { ...caller, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen || "HA"}` }; }
       }
     }
+    // Photos (the card already shrank them) and a video (frames plus what its sound says).
+    const images: string[] = [], notes: string[] = [];
+    try {
+      for (const u of [b.image, ...(Array.isArray(b.images) ? b.images : [])].filter(Boolean).slice(0, 4)) {
+        const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(String(u));
+        if (!m) throw new MediaError("That photo didn't come through. Try it again.");
+        images.push(await photo(Buffer.from(m[2], "base64"), m[1]));
+      }
+      if (b.video) { const v = await video(x.cfg(), x.env, Buffer.from(String(b.video), "base64")); images.push(...v.frames); notes.push(v.note); }
+    } catch (e) { if (e instanceof MediaError) throw new AuthError(400, e.message); throw e; }
+    if (!text && images.length) text = notes.length ? "What's in this video?" : "What's in this photo?";
     if (!text) throw new AuthError(400, b.audio ? "I didn't catch that." : "Say something first.");
     auth.touch(caller.sessionHash);
     const events: AgentEvent[] = [];
-    const images = b.image ? [String(b.image)] : undefined;
-    const r = await agent.turn({ caller, text, images, conversationId: b.conversation_id || undefined, onEvent: (e) => { if (e.type === "tool") events.push(e); } });
+    const r = await agent.turn({ caller, text: [text, ...notes].join("\n\n"), images, conversationId: b.conversation_id || undefined, onEvent: (e) => { if (e.type === "tool") events.push(e); } });
     return { text: r.text, heard, speaker: speaker ? pub(speaker) : null, conversation_id: r.conversationId, confirms: r.pending, approvals: r.requests, tools: [...new Set(events.map((e: any) => e.name))] };
   });
   app.post("/api/ha/chat/history", async (req) => {

@@ -39,6 +39,8 @@ the source (wiki, ALLGlance, HA, Coinpile, Orb, Hermes, Studio) decides what tha
    - Hermes is off for children and the household.
 3. **Confirmation: the riskiest actions.** Locks, alarm, garage and anything an MCP server marks destructive wait for a Yes from the same person, on the same screen or in the same chat. Voice and API callers (including `/mcp`) can't give one, so those actions are refused there (unless `voice.confirm_on_voice`).
 
+**A photo or video can't make changes by itself.** In a turn that carries one, every change waits for the person's own Yes (`Agent.wrap`). Text in a picture or words in a video's sound can read like a request; the model may follow them, the code doesn't let it act alone.
+
 **Approvals never stand in for a Yes on the risky ones.** Unlocking, disarming, opening, and anything an MCP server marks destructive can't be asked for from a view that needs approval: no request is made, so nobody can approve one by mistake. Every approved request is claimed once, so two parents tapping Approve don't run it twice, and it goes into the action log.
 
 **Where people are stays in Home Assistant.** FAITH sees `person.*` and trackers only as home or away, and never address, GPS or zone sensors, whatever the config exposes.

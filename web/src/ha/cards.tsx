@@ -323,14 +323,56 @@ function Held({ l, answer }: { l: Line; answer: (id: string, ok: boolean) => voi
   return <div className="box wait"><div>Waiting for a grown-up: <b>{l.waiting}</b></div></div>;
 }
 
+type Media = { kind: "photo"; data: string } | { kind: "video"; data: string; mime: string; name: string };
+const MAX_VIDEO = 28_000_000; // what the route takes once it's base64
+
+/** A photo shrunk in the browser (phone photos are 3-12 MB): JPEG, 1600 px at most. */
+async function shrink(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext("2d")!.drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close?.();
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+
 function AskBar({ c, placeholder = "Ask FAITH" }: { c: ReturnType<typeof useChat>; placeholder?: string }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(""), [media, setMedia] = useState<Media | null>(null), [note, setNote] = useState(""), pick = useRef<HTMLInputElement>(null);
+  const choose = async (f: File | undefined) => {
+    setNote("");
+    if (!f) return;
+    try {
+      if (f.type.startsWith("video/")) {
+        if (f.size > MAX_VIDEO) { setNote("That video is too long to send. Keep it under about 20 seconds, or send a photo."); return; }
+        setMedia({ kind: "video", data: toBase64(new Uint8Array(await f.arrayBuffer())), mime: f.type, name: f.name });
+      } else setMedia({ kind: "photo", data: await shrink(f) });
+    } catch { setNote("That picture didn't open on this phone. Try taking it again, or pick another."); }
+  };
+  const submit = () => {
+    const t = text.trim();
+    if ((!t && !media) || c.busy) return;
+    const body: Record<string, unknown> = { text: t };
+    if (media?.kind === "photo") body.image = media.data;
+    if (media?.kind === "video") { body.video = media.data; body.video_mime = media.mime; }
+    c.send(body, media ? `${media.kind === "photo" ? "📷 Photo" : "🎞️ Video"}${t ? `: ${t}` : ""}` : t);
+    setText(""); setMedia(null);
+  };
   return (
-    <form className="ask" onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (t && !c.busy) { setText(""); c.send({ text: t }, t); } }}>
-      <button type="button" className={c.rec ? "rec" : ""} title={c.rec ? "Stop and send" : "Talk"} aria-label={c.rec ? "Stop recording and send" : "Talk to FAITH"} aria-pressed={!!c.rec} disabled={c.busy} onClick={c.mic}><ha-icon icon={c.rec ? "mdi:stop" : "mdi:microphone"} /></button>
-      <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Message to FAITH" placeholder={c.rec ? "Listening… tap stop when done" : placeholder} />
-      <button className="primary" type="submit" disabled={c.busy || !text.trim()} title="Send" aria-label="Send"><ha-icon icon="mdi:send" /></button>
-    </form>
+    <>
+      {(media || note) && (
+        <div className="attached" role="status">
+          {media?.kind === "photo" && <img src={media.data} alt="The photo you're sending" />}
+          {media?.kind === "video" && <span>🎞️ {media.name}</span>}
+          {note && <span>{note}</span>}
+          {media && <button type="button" className="ghost" aria-label="Remove the attachment" onClick={() => setMedia(null)}><ha-icon icon="mdi:close" /></button>}
+        </div>
+      )}
+      <form className="ask" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <button type="button" className={c.rec ? "rec" : ""} title={c.rec ? "Stop and send" : "Talk"} aria-label={c.rec ? "Stop recording and send" : "Talk to FAITH"} aria-pressed={!!c.rec} disabled={c.busy} onClick={c.mic}><ha-icon icon={c.rec ? "mdi:stop" : "mdi:microphone"} /></button>
+        <button type="button" title="Photo or video" aria-label="Show FAITH a photo or video" disabled={c.busy || !!c.rec} onClick={() => pick.current?.click()}><ha-icon icon="mdi:camera" /></button>
+        <input ref={pick} type="file" accept="image/*,video/*" hidden aria-hidden="true" tabIndex={-1} onChange={(e) => { choose(e.target.files?.[0]); e.target.value = ""; }} />
+        <input value={text} onChange={(e) => setText(e.target.value)} aria-label="Message to FAITH" placeholder={c.rec ? "Listening… tap stop when done" : media ? "What should FAITH look for? (optional)" : placeholder} />
+        <button className="primary" type="submit" disabled={c.busy || (!text.trim() && !media)} title="Send" aria-label="Send"><ha-icon icon="mdi:send" /></button>
+      </form>
+    </>
   );
 }
 

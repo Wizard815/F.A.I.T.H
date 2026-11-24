@@ -54,7 +54,10 @@ input:focus { outline: 2px solid var(--fc-accent); outline-offset: -1px; }
 .msg.faith { align-self: flex-start; background: var(--fc-bg2); border-bottom-left-radius: 4px; }
 .chips { display: flex; gap: 4px; flex-wrap: wrap; } .chip { font-size: .75rem; color: var(--fc-muted); border: 1px solid var(--fc-line); border-radius: 999px; padding: 1px 8px; }
 .ask { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
-.ask button { min-width: 44px; padding: 8px 10px; }
+.ask button { min-width: 44px; min-height: 44px; padding: 8px 10px; }
+.attached { display: flex; gap: 8px; align-items: center; margin-top: 10px; color: var(--fc-muted); font-size: .9rem; }
+.attached img { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; }
+.attached button { margin-left: auto; min-width: 44px; min-height: 44px; }
 .rec { background: var(--fc-err) !important; color: #fff !important; border-color: var(--fc-err) !important; }
 .box { border: 1px solid var(--fc-accent); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .box.wait { border-style: dashed; }
