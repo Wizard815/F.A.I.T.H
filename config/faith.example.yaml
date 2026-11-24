@@ -107,7 +107,7 @@ connectors:
   - id: hermes
     type: hermes
     url: http://192.168.1.5:8642
-    key_env: HERMES_API_KEY
+    key_env: HERMES_API_KEY_{PROFILE}       # each profile's own API_SERVER_KEY; HERMES_API_KEY_WIZARD
     model: hermes-agent
     roles: [admin, adult]
     # household_profile: household

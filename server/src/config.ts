@@ -52,7 +52,8 @@ export type HomeAssistantConnector = {
   roles?: PolicyName[];
 };
 export type HermesConnector = {
-  id: string; type: "hermes"; url: string; key_env?: string; model: string;
+  id: string; type: "hermes"; url: string; model: string;
+  key_env?: string;                // HERMES_API_KEY_{PROFILE}: each profile's own API_SERVER_KEY (Hermes refuses a shared one)
   household_profile?: string;      // profile for the household view; unset = no Hermes when nobody is signed in
   roles?: PolicyName[];
 };

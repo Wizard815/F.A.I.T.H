@@ -87,7 +87,10 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
     connectors.push({ id: "orb", type: "mcp", url: `${found.orb}/mcp`, description: "Pondering Orb: this person's dashboard, projects and journal", person_token_env: "ORB_TOKEN_{ID}", roles: ["admin", "adult"] });
     for (const p of adults) need(`ORB_TOKEN_${p.id.toUpperCase()}`, `in that person's Orb: add faith:<a long random token> to ORB_API_TOKENS, and put the token here`);
   }
-  if (has("hermes")) { connectors.push({ id: "hermes", type: "hermes", url: found.hermes, key_env: "HERMES_API_KEY", model: "hermes-agent", roles: ["admin", "adult"] }); need("HERMES_API_KEY", "Hermes's API key (leave empty if it has none)"); }
+  if (has("hermes")) {
+    connectors.push({ id: "hermes", type: "hermes", url: found.hermes, key_env: "HERMES_API_KEY_{PROFILE}", model: "hermes-agent", roles: ["admin", "adult"] });
+    for (const p of adults) need(`HERMES_API_KEY_${p.id.toUpperCase()}`, `API_SERVER_KEY from ~/.hermes/profiles/${p.id}/.env (make the profile with: hermes profile create ${p.id})`);
+  }
   if (has("studio")) {
     connectors.push({ id: "studio", type: "studio", url: found.studio, user_env: "STUDIO_USER_{ID}", password_env: "STUDIO_PASSWORD_{ID}", roles: ["admin", "adult"] });
     for (const p of adults) { need(`STUDIO_USER_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio user name`); need(`STUDIO_PASSWORD_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio password`); }

@@ -84,8 +84,10 @@ docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard    
 
 ## Hermes and Hermes Studio
 
-- **Hermes agent:** enable the API server (`API_SERVER_ENABLED=true`, `API_SERVER_KEY`) and put the key in `HERMES_API_KEY`.
+- **Hermes agent:** enable the API server (`API_SERVER_ENABLED=true`, `API_SERVER_KEY`).
   - Make one profile per person (`hermes profile create wizard`). FAITH calls `/p/<person>/v1`, so each person's Hermes has its own memory.
+  - Give each profile its own key: `API_SERVER_KEY` in `~/.hermes/profiles/wizard/.env`. Put it in FAITH's `HERMES_API_KEY_WIZARD` (`key_env: HERMES_API_KEY_{PROFILE}`).
+  - Hermes refuses one shared key on a person's profile (401). A person whose key is missing gets no Hermes in FAITH.
   - Children don't get Hermes by default.
 - **Hermes Studio:** each person signs in with their own Studio account (`STUDIO_USER_<ID>`, `STUDIO_PASSWORD_<ID>`).
   - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio.

@@ -5,7 +5,11 @@ import { call, ToolError, type Connector, type Tool } from "./types.js";
 /** Hermes (hermes-agent's API server) as a helper for bigger jobs: research,
  *  long multi-step work, things that need Hermes's own skills and tools. Each
  *  person reaches their own Hermes profile (/p/<profile>/v1), so Hermes's
- *  memory stays per person. Not offered to children by default. */
+ *  memory stays per person. Not offered to children by default.
+ *
+ *  Hermes takes only a profile's own API_SERVER_KEY on /p/<profile>/, so
+ *  key_env can name one variable per profile: HERMES_API_KEY_{PROFILE}.
+ *  A profile without its key gets no Hermes tools. */
 export class Hermes implements Connector {
   id: string;
   constructor(private cfg: HermesCfg, private env: NodeJS.ProcessEnv = process.env) { this.id = cfg.id; }
@@ -15,8 +19,15 @@ export class Hermes implements Connector {
     return caller.scope.kind === "person" ? caller.scope.person.hermes_profile || caller.scope.person.id : this.cfg.household_profile;
   }
 
+  /** The key for one profile: HERMES_API_KEY_{PROFILE} -> HERMES_API_KEY_WIZARD. */
+  keyFor(profile: string) {
+    return envValue(this.cfg.key_env?.replace(/\{PROFILE\}/g, profile.toUpperCase().replace(/[^A-Z0-9]/g, "_")), this.env);
+  }
+  /** Each profile has its own key, so a missing one means no Hermes for that profile. */
+  private perProfile() { return !!this.cfg.key_env?.includes("{PROFILE}"); }
+
   async ping(caller: Caller) {
-    const profile = this.profileFor(caller) || "default", key = envValue(this.cfg.key_env, this.env);
+    const profile = this.profileFor(caller) || "default", key = this.keyFor(profile);
     const r = await call(`${this.cfg.url}/p/${encodeURIComponent(profile)}/v1/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, timeoutMs: 10_000 });
     if (r.status >= 500 || r.status === 0) throw new ToolError(`Hermes answered ${r.status}.`);
   }
@@ -24,7 +35,8 @@ export class Hermes implements Connector {
   async tools(caller: Caller): Promise<Tool[]> {
     const profile = this.profileFor(caller);
     if (!profile) return [];
-    const key = envValue(this.cfg.key_env, this.env);
+    const key = this.keyFor(profile);
+    if (!key && this.perProfile()) return [];
     return [{
       name: "hermes_ask", connector: this.id, write: true,
       description: "Hand a bigger job to Hermes (research, planning, long multi-step work, anything needing tools FAITH doesn't have). Write the task in full: Hermes doesn't see this conversation. Slow: only use it when the person wants that.",
