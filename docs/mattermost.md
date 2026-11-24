@@ -18,7 +18,8 @@ FAITH makes the two channels (private) and opens a DM with each person.
 - **A video** becomes up to 6 frames, plus what its sound says (Argos), and goes to the vision model with the question, or "What's in this video?".
   - The sound is context, not a request: FAITH won't act on what someone says in a video.
   - Any change that comes out of a photo or video waits for your own **yes** (a task from a note, a light from a sign). Text in a picture can read like a request, so FAITH checks first. That's in FAITH's code, not left to the model.
-  - Videos up to 50 MB; phone photos of any size or type (HEIC too) are made into a 1600 px JPEG first.
+  - Videos up to 50 MB. Photos are made into a 1600 px JPEG first.
+  - iPhone HEIC photos: FAITH's ffmpeg can't open them, so it asks for a JPEG. Set the iPhone camera to *Most Compatible*, or use the HA card, which converts them on the phone.
 - **A voice message** (any audio file) is turned into words by Argos and counts as what was said. FAITH shows what it heard (_Heard: "…"_) above its answer.
   - A voice message in a group chat that starts with "Faith, …" counts as calling it.
 - Up to four attachments per message, up to 15 MB each (videos 50 MB).
