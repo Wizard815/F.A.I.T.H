@@ -146,6 +146,66 @@ FAITH's rules still apply on top:
 - closing it waited for a Yes;
 - a child could switch lights but not move a window.
 
+## Simple commands without the model (the fast path)
+
+With `assist_api: true`, FAITH first asks HA's own sentence matcher (the built-in "Home Assistant" agent) what a request means. "Turn off the kitchen lights" or "what time is it" is then done in well under a second, with no model. Needs the FAITH integration 0.5 or newer.
+
+- HA says what it would do and which devices it would touch. Nothing is done yet.
+- FAITH checks that against its own rules, the same ones the model's tools follow:
+  - only switching, setting, media and plain questions;
+  - only devices this person may control;
+  - nothing that needs a Yes (locks, alarms, covers);
+  - nothing that needs approval (the household view);
+  - never where someone is, and never scripts.
+- Then HA does it and says what it did. HA only does it if the sentence still means exactly what FAITH checked.
+- It's in FAITH's action log like any other change.
+- Anything else goes to the model as before: a request HA doesn't understand, two requests in one sentence, a lock.
+- Turn it off with `fast_path: false` on the `homeassistant` connector.
+- Don't turn on HA's own "Prefer handling commands locally" in the voice assistant's settings. It runs commands before FAITH sees them, so it skips FAITH's voice ID and rules. FAITH's fast path is the same speed and keeps them.
+
+## Cameras
+
+FAITH can look through a camera: "who's at the door?", "is the car in the driveway?". Only the cameras you list, only for the people listed:
+
+```yaml
+connectors:
+  - id: homeassistant
+    # ...
+    cameras:
+      - entity: camera.front_door
+        name: Front door
+        who: [admin, adult, parents]     # parents: automations may use it too
+      - entity: camera.nursery
+        who: [admin]
+```
+
+- The picture goes to the local vision model (`model.vision_model`, else `model.model`) and nowhere else. Only its words come back.
+- `who` defaults to `[admin, adult]`. Add `household` for the kitchen screen, `parents` for automations.
+- Text in the picture is reported, never followed. A change FAITH wants to make after looking through a camera waits for the person's own Yes, as with a photo.
+- Frigate cameras work the same way through HA's Frigate integration.
+
+**A doorbell that says who's there.** In an automation, use the `faith.look` action:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.doorbell
+    to: "on"
+actions:
+  - action: faith.look
+    data:
+      camera: camera.front_door
+      question: Who is at the door?
+      to: parents            # or family, or a person's id: their chat and phone
+```
+
+The message reads "Front door: a person in a brown uniform holding a parcel…". An automation acts as the parents' view, so the camera needs `parents` in `who`.
+
+**What goes wrong:**
+- "No camera is shared with automations": add `parents` to that camera's `who`.
+- "didn't send a picture": the camera is off, asleep, or HA can't reach it.
+- "The vision model answered 4xx": Argos has no vision model loaded. Set `model.vision_model`.
+
 ## Who's home
 
 FAITH reads each person's HA `person.<id>` entity (phones, the router, whatever HA uses), or `ha_person:` in `faith.yaml` if the name differs. Set `ha_person: ""` to leave someone out.

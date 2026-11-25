@@ -222,12 +222,31 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   app.post("/api/ha/hub/signout", async (req) => { const b: any = req.body || {}; if (b.hub_session) auth.endSession(String(b.hub_session)); return { ok: true }; });
   app.post("/api/ha/hub/activity", async (req) => { const c = who(req).caller; auth.touch(c.sessionHash); return { ok: true }; });
 
+  // Called by a person (a script or button in HA): their own rules, like any message they send.
+  // Called by an automation (no HA user): set up by whoever runs HA, so it acts as the parents' view, with no private access.
+  const sender = (w: ReturnType<typeof who>): Caller => w.user ? w.caller : { scope: { kind: "household" }, audience: "parents", channel: "ha", label: "home assistant automation" };
+
+  // ---- HA → a camera, then a message (the faith.look action: "someone's at the door") ----
+  app.post("/api/ha/look", async (req) => {
+    const w = who(req), b: any = req.body || {}, caller = sender(w);
+    const cams = x.registry.ha?.cameras(caller) ?? [];
+    if (!cams.length) throw new ModelError(403, `No camera is shared with ${w.user ? "this Home Assistant user" : "automations"}. In FAITH's config, add ${w.user ? "their role" : "parents"} to the camera's who list.`);
+    const r = await agent.runTool(caller, "camera_look", { camera: b.camera, question: b.question });
+    const out: any = r.out;
+    if (out?.error) throw new ModelError(400, out.error);
+    let sent: unknown;
+    if (b.to) {
+      const m = await agent.runTool(caller, "message_send", { to: b.to, text: `${out.camera}: ${out.sees}` });
+      if ((m.out as any)?.error) throw new ModelError(400, (m.out as any).error);
+      sent = m.out;
+    }
+    return { camera: out.camera, sees: out.sees, at: out.at, ...(sent ? { sent } : {}) };
+  });
+
   // ---- HA → Mattermost / phones (the faith.send_message action) ----
   app.post("/api/ha/send", async (req) => {
     const w = who(req), b: any = req.body || {};
-    // Called by a person (a script or button in HA): their own rules, like any message they send.
-    // Called by an automation (no HA user): set up by whoever runs HA, so it sends straight away, with no private access.
-    const caller: Caller = w.user ? w.caller : { scope: { kind: "household" }, audience: "parents", channel: "ha", label: "home assistant automation" };
+    const caller = sender(w);
     const r = await agent.runTool(caller, "message_send", { to: b.to, text: b.message });
     const out: any = r.out;
     if (out?.error) throw new ModelError(400, out.error);

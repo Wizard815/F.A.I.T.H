@@ -25,6 +25,10 @@ FAITH makes the two channels (private) and opens a DM with each person.
   - A voice message in a group chat that starts with "Faith, …" counts as calling it.
 - Up to four attachments per message, up to 15 MB each (videos 50 MB).
 
+**A fresh start.** Each chat is one conversation that FAITH remembers.
+- Say **new topic** (or "start over") to put the earlier chat away. Old receipts and plans then don't mix into a new question.
+- A chat that's been quiet for 4 hours starts fresh by itself. Change it with `mattermost.new_topic_after_minutes` (0 = never).
+
 **A morning brief in each personal chat.** In the admin page, make a routine with *Runs as: each person, in their own chat* (for example the `morning-brief` skill, weekdays at 7:00).
 - It runs once per person, with that person's own tokens.
 - Each brief goes only to that person: their DM, and their phone if `ha_notify` is set. Their private things never reach anyone else.

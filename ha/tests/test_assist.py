@@ -56,3 +56,42 @@ async def test_needs_a_token(hass: HomeAssistant, aioclient_mock: AiohttpClientM
     await _setup(hass, aioclient_mock)
     client = await hass_client_no_auth()
     assert (await client.post("/api/faith/assist", json={"action": "describe"})).status == 401
+
+
+async def test_recognize_then_handle(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, hass_client) -> None:
+    """FAITH's fast path: HA's own sentence matcher says what it would do (and does nothing), then does it only if nothing changed."""
+    await _house(hass)
+    await _setup(hass, aioclient_mock)
+    client = await hass_client()
+    ask = lambda body: client.post("/api/faith/assist", json=body)  # noqa: E731
+    calls = async_mock_service(hass, "light", "turn_on")
+
+    m = (await (await ask({"action": "recognize", "text": "Turn on the kitchen light"})).json())["match"]
+    assert m["intent"] == "HassTurnOn" and m["targets"] == ["light.kitchen"]
+    assert calls == [], "recognizing changes nothing"
+    assert (await (await ask({"action": "recognize", "text": "write me a poem about the porch"})).json())["match"] is None
+
+    stale = await (await ask({"action": "handle", "text": "Turn on the kitchen light", "expect": {"intent": "HassTurnOn", "targets": ["light.porch"]}})).json()
+    assert stale == {"handled": False}, "it means something else now: not done"
+    assert calls == []
+
+    done = await (await ask({"action": "handle", "text": "Turn on the kitchen light", "expect": {"intent": m["intent"], "targets": m["targets"]}})).json()
+    await hass.async_block_till_done()
+    assert done["handled"] is True and done["speech"]
+    assert [c.data["entity_id"] for c in calls] == [["light.kitchen"]]
+
+
+async def test_all_means_every_match(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, hass_client) -> None:
+    """HA reads name "all" as every match ("unlock all the kitchen doors"), so FAITH's targets must too: else a lock would get no Yes."""
+    await _house(hass)
+    hass.states.async_set("lock.kitchen_door", "locked", {"friendly_name": "Kitchen door"})
+    from homeassistant.helpers import area_registry as ar, entity_registry as er  # noqa: PLC0415
+    kitchen = ar.async_get(hass).async_create("Kitchen")
+    entry = er.async_get(hass).async_get_or_create("lock", "test", "kd", suggested_object_id="kitchen_door")
+    er.async_get(hass).async_update_entity(entry.entity_id, area_id=kitchen.id)
+    hass.states.async_set(entry.entity_id, "locked", {"friendly_name": "Kitchen door"})
+    async_expose_entity(hass, "conversation", entry.entity_id, True)
+    await _setup(hass, aioclient_mock)
+    client = await hass_client()
+    t = await (await client.post("/api/faith/assist", json={"action": "targets", "tool": "HassTurnOff", "args": {"area": "Kitchen", "domain": "lock", "name": "all"}})).json()
+    assert t["targets"] == [entry.entity_id]

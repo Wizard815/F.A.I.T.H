@@ -5,7 +5,8 @@ FAITH runs in its own container; this integration connects the two:
   -rewards-card) that ask FAITH as the HA user who is looking,
 - Assist: FAITH is a conversation agent and knows which HA user is speaking,
 - phones: Approve / Deny on a notification becomes that person's decision,
-- actions: faith.send_message (family / parents chat, a person's chat and phone)
+- actions: faith.send_message (family / parents chat, a person's chat and phone),
+  faith.look (a camera described by FAITH's vision model, optionally sent on)
   and faith.award_points,
 - sensors with family-wide numbers (never anyone's private things),
 - a "FAITH Admin" sidebar page (HA admins only) for FAITH's own admin console.
@@ -37,7 +38,7 @@ from .const import CONF_PANEL_URL, CONF_TOKEN, CONF_URL, DOMAIN, PANEL_PATH, SCA
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CONVERSATION, Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 CARDS_URL = "/faith_static"
 
 # What the cards may ask FAITH. Every call gets the logged-in HA user added here.
@@ -116,12 +117,18 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def send_message(call: ServiceCall) -> ServiceResponse:
         return await _client(hass).request("POST", "/api/ha/send", {"to": call.data["to"], "message": call.data["message"], "user_id": call.context.user_id})
 
+    async def look(call: ServiceCall) -> ServiceResponse:
+        body = {"camera": call.data["camera"], "question": call.data.get("question", ""), "to": call.data.get("to", ""), "user_id": call.context.user_id}
+        return await _client(hass).request("POST", "/api/ha/look", body, timeout=120)  # the vision model takes a while
+
     async def award_points(call: ServiceCall) -> ServiceResponse:
         body = {"user_id": call.context.user_id, "args": {"person": call.data["person"], "points": call.data["points"], "reason": call.data["reason"]}}
         return await _client(hass).request("POST", "/api/ha/rewards/award", body)
 
     hass.services.async_register(DOMAIN, "send_message", send_message,
         schema=vol.Schema({vol.Required("to"): cv.string, vol.Required("message"): cv.string}), supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, "look", look,
+        schema=vol.Schema({vol.Required("camera"): cv.entity_id, vol.Optional("question"): cv.string, vol.Optional("to"): cv.string}), supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, "award_points", award_points,
         schema=vol.Schema({vol.Required("person"): cv.string, vol.Required("points"): vol.Coerce(float), vol.Required("reason"): cv.string}), supports_response=SupportsResponse.OPTIONAL)
 

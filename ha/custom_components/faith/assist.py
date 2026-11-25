@@ -10,6 +10,12 @@ POST /api/faith/assist
   {"action": "describe", "device_id"?, "language"?}  -> {"prompt", "tools": [{name, description, parameters}]}
   {"action": "targets", "tool", "args", "device_id"?} -> {"targets": ["light.kitchen", ...]}
   {"action": "call", "tool", "args", "device_id"?}    -> {"result": {...}}
+
+HA's own sentence matcher (the built-in "Home Assistant" agent), for FAITH's fast path:
+  {"action": "recognize", "text", "device_id"?}  -> {"match": {"intent", "args", "targets"} | null}   (nothing is done)
+  {"action": "handle", "text", "expect": {"intent", "targets"}, "device_id"?}
+      -> {"handled": bool, "speech"}: HA does it and says what it did, but only if the
+         sentence still means exactly what FAITH checked (the same intent and targets).
 """
 
 from __future__ import annotations
@@ -23,10 +29,13 @@ import voluptuous as vol
 import voluptuous_openapi
 import yaml
 
+from hassil.recognize import RecognizeResult
+
+from homeassistant.components import conversation
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import area_registry as ar, device_registry as dr, intent, llm
+from homeassistant.helpers import area_registry as ar, chat_session, device_registry as dr, intent, llm
 
 ASSISTANT = "conversation"  # the "Expose to Assist" list
 # Where someone is never leaves Home Assistant through FAITH (the same rule as FAITH's own HA tools).
@@ -69,11 +78,18 @@ def _targets(hass: HomeAssistant, tool: llm.Tool, args: dict[str, Any], device_i
         return [f"script.{tool.name.lstrip('_')}"]
     if not isinstance(tool, llm.IntentTool):
         return []
-    handler = next((h for h in intent.async_get(hass) if h.intent_type == tool.name), None)
+    return _intent_targets(hass, tool.name, args, device_id)
+
+
+def _intent_targets(hass: HomeAssistant, intent_type: str, args: dict[str, Any], device_id: str | None) -> list[str]:
+    handler = next((h for h in intent.async_get(hass) if h.intent_type == intent_type), None)
     as_list = lambda v: [v] if isinstance(v, str) else list(v) if v else None  # noqa: E731
     domains = as_list(args.get("domain")) or (list(handler.platforms) if handler and handler.platforms else None)
+    name = args.get("name")
+    if isinstance(name, str) and name.strip().lower() == "all":
+        name = None  # HA's own handlers read "all" as every match, not a device called "all"
     constraints = intent.MatchTargetsConstraints(
-        name=args.get("name"), area_name=args.get("area"), floor_name=args.get("floor"),
+        name=name, area_name=args.get("area"), floor_name=args.get("floor"),
         domains=domains, device_classes=as_list(args.get("device_class")), assistant=ASSISTANT,
     )
     preferences = None
@@ -84,6 +100,47 @@ def _targets(hass: HomeAssistant, tool: llm.Tool, args: dict[str, Any], device_i
         return []
     result = intent.async_match_targets(hass, constraints, preferences)
     return [s.entity_id for s in result.states] if result.is_match else []
+
+
+def _input(hass: HomeAssistant, request: web.Request, body: dict[str, Any], llm_context: llm.LLMContext) -> conversation.ConversationInput:
+    return conversation.ConversationInput(
+        text=str(body.get("text") or "")[:500], context=Context(user_id=request["hass_user"].id), conversation_id=None,
+        device_id=llm_context.device_id, satellite_id=None, language=llm_context.language, agent_id=conversation.HOME_ASSISTANT_AGENT,
+    )
+
+
+def _match(hass: HomeAssistant, result: RecognizeResult, device_id: str | None) -> dict[str, Any]:
+    """What HA understood: the intent, its slots as Assist tool arguments, and the entities it would touch."""
+    args = {k: e.value for k, e in result.entities.items() if isinstance(e.value, (str, int, float, bool))}
+    return {"intent": result.intent.name, "args": args, "targets": sorted(_intent_targets(hass, result.intent.name, args, device_id))}
+
+
+async def _recognize(hass: HomeAssistant, user_input: conversation.ConversationInput, device_id: str | None) -> dict[str, Any] | None:
+    agent = conversation.get_agent_manager(hass).default_agent
+    if agent is None or not user_input.text.strip():
+        return None
+    result = await agent.async_recognize_intent(user_input, strict_intents_only=True)
+    return _match(hass, result, device_id) if isinstance(result, RecognizeResult) else None
+
+
+async def _handle(hass: HomeAssistant, user_input: conversation.ConversationInput, expect: dict[str, Any], device_id: str | None) -> dict[str, Any]:
+    want = (expect.get("intent"), sorted(str(t) for t in expect.get("targets") or []))
+
+    def changed(result: RecognizeResult) -> bool:  # True: don't handle it
+        m = _match(hass, result, device_id)
+        return (m["intent"], m["targets"]) != want
+
+    with (
+        chat_session.async_get_chat_session(hass, None) as session,
+        conversation.async_get_chat_log(hass, session, user_input) as chat_log,
+    ):
+        response = await conversation.async_handle_intents(hass, user_input, chat_log, intent_filter=changed)
+    if response is None:
+        return {"handled": False}
+    speech = (response.speech.get("plain") or {}).get("speech", "")
+    if response.response_type == intent.IntentResponseType.ERROR:
+        return {"handled": False, "speech": speech, "error": str(response.error_code)}
+    return {"handled": True, "speech": speech}
 
 
 class FaithAssistView(HomeAssistantView):
@@ -110,6 +167,10 @@ class FaithAssistView(HomeAssistantView):
                     "parameters": voluptuous_openapi.convert(t.parameters, custom_serializer=api.custom_serializer),
                 } for t in api.tools]
                 return self.json({"prompt": api.api_prompt, "tools": tools})
+            if action == "recognize":
+                return self.json({"match": await _recognize(hass, _input(hass, request, body, llm_context), llm_context.device_id)})
+            if action == "handle":
+                return self.json(await _handle(hass, _input(hass, request, body, llm_context), body.get("expect") or {}, llm_context.device_id))
             tool = next((t for t in api.tools if t.name == body.get("tool")), None)
             if tool is None:
                 return self.json({"error": f"No Assist tool called {body.get('tool')}."}, HTTPStatus.NOT_FOUND)

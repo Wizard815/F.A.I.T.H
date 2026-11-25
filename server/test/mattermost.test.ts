@@ -131,6 +131,22 @@ test("a yes after the person moved on doesn't land on the older change", async (
   assert.equal(posted().message, "It's sunny.");
 });
 
+test("\"new topic\" starts a fresh chat, and so does a chat that went quiet", async () => {
+  let seen: any;
+  script = (req) => { seen = req; return { content: "Noted." }; };
+  const said = () => seen.messages.filter((m: any) => m.role === "user").map((m: any) => (typeof m.content === "string" ? m.content : m.content.find((x: any) => x.type === "text")?.text));
+  await send("sam", dmOf("sam"), "the bakery receipt was 15.75");
+  await send("sam", dmOf("sam"), "and the market one");
+  assert.deepEqual(said().slice(-2), ["the bakery receipt was 15.75", "and the market one"], "the same chat remembers");
+  await send("sam", dmOf("sam"), "New topic");
+  assert.equal(posted().message, "Okay, a fresh start. I've put our earlier chat away.");
+  await send("sam", dmOf("sam"), "what's for dinner?");
+  assert.deepEqual(said(), ["what's for dinner?"], "nothing from before the new topic");
+  A.db.prepare("UPDATE conversations SET updated_at = ? WHERE ext_id = ?").run(Date.now() - 5 * 3600_000, `mm:${dmOf("sam")}`);
+  await send("sam", dmOf("sam"), "and tomorrow?");
+  assert.deepEqual(said(), ["and tomorrow?"], "quiet for 5 hours (more than 4): a fresh chat");
+});
+
 test("photos go to the vision model; voice messages are heard through speech-to-text", async () => {
   mm.files.set("ph1", { mime: "image/jpeg", name: "fridge.jpg", bytes: Buffer.from("jpeg-bytes") });
   mm.files.set("vm1", { mime: "audio/mp4", name: "voice.m4a", bytes: Buffer.from("m4a-bytes") });

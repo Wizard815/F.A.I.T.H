@@ -59,8 +59,9 @@ export async function fakeMcp(tools: FakeTool[]) {
 }
 
 /** Enough of Home Assistant's REST API for FAITH. */
-export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[]; areas?: Record<string, string> } = {}) {
+export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[]; areas?: Record<string, string>; cameras?: Record<string, Buffer> } = {}) {
   const services: { domain: string; service: string; data: any; token: string }[] = [];
+  const recognized: string[] = [];
   const shopping = [...(opts.shopping || [])];
   const s = createServer(async (req, res) => {
     const token = String(req.headers.authorization || "").replace(/^Bearer /, "");
@@ -69,12 +70,37 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     const u = new URL(req.url!, "http://x"), b = await body(req);
     const all = () => Object.entries(states).map(([entity_id, v]) => ({ entity_id, state: v.state, attributes: v.attributes || {} }));
     if (req.method === "GET" && u.pathname === "/api/") return json({ message: "API running." });
+    const cam = u.pathname.match(/^\/api\/camera_proxy\/(.+)$/);
+    if (cam) { const pic = opts.cameras?.[decodeURIComponent(cam[1])]; if (!pic) return json({ message: "not found" }, 404); res.setHeader("content-type", "image/png"); return res.end(pic); }
     // The FAITH integration's door to HA's Assist API (assist.py): describe, targets, call.
     if (u.pathname === "/api/faith/assist") {
       const name = (e: string) => states[e]?.attributes?.friendly_name || e;
       const match = (a: any) => Object.keys(states).filter((e) => (a?.name && name(e).toLowerCase() === String(a.name).toLowerCase()) || (a?.domain && [].concat(a.domain).includes(e.split(".")[0] as never) && !a?.name));
       if (b?.action === "describe") return json({ prompt: `Static Context: An overview of the areas and the devices in this smart home:\n${Object.keys(states).map((e) => `- names: ${name(e)}\n  domain: ${e.split(".")[0]}`).join("\n")}`,
         tools: ["HassTurnOn", "HassTurnOff", "GetLiveContext"].map((t) => ({ name: t, description: `${t} tool`, parameters: { type: "object", properties: { name: { type: "string" }, domain: { type: "array", items: { type: "string" } } } } })) });
+      // HA's own sentence matcher (the fast path): a few English sentences, like HA's built-in agent.
+      const understand = (text: string) => {
+        const t = String(text || "").toLowerCase().replace(/[.!?]/g, "").trim();
+        if (t === "what time is it") return { intent: "HassGetCurrentTime", args: {}, targets: [] as string[] };
+        const sw = t.match(/^turn (on|off) the (.+)$/), un = t.match(/^(unlock|lock) the (.+)$/), st = t.match(/^is the (.+) (on|off|locked|unlocked)$/);
+        const [intent, n] = sw ? [sw[1] === "on" ? "HassTurnOn" : "HassTurnOff", sw[2]] : un ? [un[1] === "lock" ? "HassTurnOn" : "HassTurnOff", un[2]] : st ? ["HassGetState", st[1]] : [];
+        if (!intent) return null;
+        const targets = match({ name: n }).sort();
+        return targets.length ? { intent, args: { name: n }, targets } : null;
+      };
+      if (b?.action === "recognize") { recognized.push(String(b.text)); return json({ match: understand(b.text) }); }
+      if (b?.action === "handle") {
+        const m = understand(b.text);
+        if (!m || m.intent !== b.expect?.intent || JSON.stringify(m.targets) !== JSON.stringify([...(b.expect?.targets ?? [])].sort())) return json({ handled: false });
+        if (m.intent === "HassGetCurrentTime") return json({ handled: true, speech: "It's 7:15 PM" });
+        if (m.intent === "HassGetState") return json({ handled: true, speech: `${name(m.targets[0])} is ${states[m.targets[0]].state}` });
+        for (const e of m.targets) {
+          const d = e.split(".")[0], svc = d === "lock" ? (m.intent === "HassTurnOn" ? "lock" : "unlock") : m.intent === "HassTurnOn" ? "turn_on" : "turn_off";
+          services.push({ domain: d, service: svc, data: { entity_id: e, via: "sentence" }, token });
+          states[e].state = svc === "lock" ? "locked" : svc === "unlock" ? "unlocked" : svc === "turn_on" ? "on" : "off";
+        }
+        return json({ handled: true, speech: m.intent === "HassTurnOn" ? "Turned on the light" : "Turned off the light" });
+      }
       if (b?.action === "targets") return json({ targets: b.tool === "GetLiveContext" ? [] : match(b.args) });
       if (b?.action === "call") {
         if (b.tool === "GetLiveContext") return json({ result: { success: true, result: Object.entries(states).map(([e, v]) => `${name(e)}: ${v.state}`).join("\n") } });
@@ -108,7 +134,7 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     json({ message: "not found" }, 404);
   });
   const url = await listen(s);
-  return { url, services, shopping, states, close: () => s.close() };
+  return { url, services, shopping, states, recognized, close: () => s.close() };
 }
 
 /** Enough of Mattermost's REST API for the bot: users, a team, channels, members, posts. */

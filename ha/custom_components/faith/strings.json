@@ -51,6 +51,24 @@
           "description": "What for"
         }
       }
+    },
+    "look": {
+      "name": "Look through a camera",
+      "description": "FAITH's vision model says what a camera shows right now, and can send that to the family chat, the parents' chat or one person.",
+      "fields": {
+        "camera": {
+          "name": "Camera",
+          "description": "The camera to look through. It must be in FAITH's cameras list, for the parents (or household) when an automation calls it."
+        },
+        "question": {
+          "name": "Question",
+          "description": "What to look for, e.g. Who is at the door?"
+        },
+        "to": {
+          "name": "Send to",
+          "description": "family, parents, or a person's id. Leave empty to only get the answer back."
+        }
+      }
     }
   }
 }

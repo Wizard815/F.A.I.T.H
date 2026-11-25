@@ -49,6 +49,13 @@ export type HomeAssistantConnector = {
   /** Use HA's own Assist API through the FAITH integration (0.4+): its house overview, areas,
    *  aliases and intents, limited by HA's "Expose to Assist" list. Replaces home_find/state/control. */
   assist_api: boolean;
+  /** Simple commands ("turn off the kitchen light") go to HA's own sentence matcher
+   *  first, with FAITH's rules checked on what it would touch: no model, so it's instant.
+   *  Needs assist_api. Default on with it. */
+  fast_path: boolean;
+  /** Cameras FAITH may look through (camera_look), and who may ask. A camera isn't
+   *  reachable unless it's listed here. */
+  cameras: { entity: string; name: string; who: PolicyName[] }[];
   roles?: PolicyName[];
 };
 export type HermesConnector = {
@@ -126,6 +133,7 @@ export type MattermostConfig = {
   parents_channel: { name: string; display_name: string };
   answer_in_groups: "mention" | "always";   // in the two group channels: only when @mentioned (default) or every message
   manage_members: boolean;                   // add the right people and remove anyone else from the two channels
+  new_topic_after_minutes: number;           // a chat quiet this long starts fresh next time (0 = never); "new topic" does it any time
 };
 
 export class ConfigError extends Error {}
@@ -211,7 +219,15 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
         expose: { domains: ex.domains ? list(ex.domains) : ["light", "switch", "fan", "climate", "cover", "lock", "media_player", "scene", "script", "vacuum", "sensor", "binary_sensor", "weather", "person"], entities: list(ex.entities), exclude: list(ex.exclude) },
         confirm_domains: c.confirm_domains ? list(c.confirm_domains) : ["lock", "alarm_control_panel", "cover", "garage_door"],
         shopping_lists: list(c.shopping_lists), meal_calendars: list(c.meal_calendars), mealie_config_entry_id: c.mealie_config_entry_id ? str(c.mealie_config_entry_id) : undefined,
-        trust_ha_users: bool(c.trust_ha_users, true), assist_api: bool(c.assist_api, false) } as HomeAssistantConnector;
+        trust_ha_users: bool(c.trust_ha_users, true), assist_api: bool(c.assist_api, false), fast_path: bool(c.fast_path, bool(c.assist_api, false)),
+        cameras: (Array.isArray(c.cameras) ? c.cameras : []).map((k: any) => {
+          const entity = str(typeof k === "string" ? k : k?.entity);
+          if (!/^camera\.[a-z0-9_]+$/.test(entity)) throw new ConfigError(`connectors.${id}.cameras: "${entity}" isn't a camera entity (camera.front_door).`);
+          const who = (k?.who ? list(k.who) : ["admin", "adult"]) as PolicyName[];
+          const bad = who.find((w) => ![...ROLES, "household", "parents"].includes(w));
+          if (bad) throw new ConfigError(`connectors.${id}.cameras ${entity}: who "${bad}" is one of admin, adult, child, household, parents.`);
+          return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who };
+        }) } as HomeAssistantConnector;
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
     if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
@@ -265,7 +281,8 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!["mention", "always"].includes(ans)) throw new ConfigError("mattermost.answer_in_groups is mention or always.");
     mattermost = { url, token_env: str(mm.token_env, "MATTERMOST_BOT_TOKEN"), team: str(mm.team).toLowerCase(),
       family_channel: chan(mm.family_channel, "faith-family", "Family"), parents_channel: chan(mm.parents_channel, "faith-parents", "Parents"),
-      answer_in_groups: ans as MattermostConfig["answer_in_groups"], manage_members: bool(mm.manage_members, true) };
+      answer_in_groups: ans as MattermostConfig["answer_in_groups"], manage_members: bool(mm.manage_members, true),
+      new_topic_after_minutes: Math.max(0, num(mm.new_topic_after_minutes, 240)) };
   }
   const publicUrl = str(env.FAITH_PUBLIC_URL || raw.public_url).replace(/\/+$/, "");
   return {

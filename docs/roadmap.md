@@ -32,6 +32,9 @@
 - The kid's card: approved money rewards are recorded in Firefly III as transfers to the child's account, with retry and no double recording; the card balance shows on the points card ([rewards](rewards.md)).
 - Voice ID: `voiceid/` service (local, resemblyzer); FAITH keeps voiceprints and names the speaker on a shared screen.
 - Photos and videos from the phone (HA card button, Mattermost): videos become frames plus what their sound says; any change from a photo or video waits for the person's Yes.
+- The fast path: simple commands go to HA's own sentence matcher with FAITH's rules checked first; no model, under a second.
+- Cameras: "who's at the door?" through HA's cameras and the local vision model, for the people each camera lists; `faith.look` for doorbell automations.
+- Mattermost chats start fresh after 4 quiet hours or on "new topic".
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.
 
@@ -39,5 +42,5 @@
 
 1. **A run on the real Unraid HA VM** with a real satellite and real voices. Synthetic voices are easier to tell apart than family members.
 2. **"Hey Faith" everywhere.** A custom openWakeWord model for the satellites (trained once, then loaded into HA's openWakeWord).
-3. **Cameras.** "Who's at the door?": a doorbell or camera snapshot from HA (or Frigate) to the vision model, with the same view rules as everything else.
+3. **Faces at the door.** When HA's face recognition (Frigate or Double Take, as used for screen sign-in) names someone at a camera, `camera_look` says "It's Sam" instead of describing them.
 4. **Recipe from a photo.** A cookbook page or a handwritten card into Mealie.

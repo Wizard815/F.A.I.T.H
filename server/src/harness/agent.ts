@@ -3,6 +3,7 @@ import type { Db } from "../db.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Approvals } from "../approvals.js";
 import type { Tool } from "../connectors/types.js";
+import { quickRead } from "../connectors/homeassistant.js";
 import { newId } from "../secrets.js";
 import { scopeKey, speakerLabel, who, type Caller } from "../scope.js";
 import { ModelError, runLoop, type LoopEvent, type Msg } from "./llm.js";
@@ -10,7 +11,9 @@ import { systemPrompt } from "./prompt.js";
 import { ToolRouter } from "./router.js";
 
 export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
-export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[] };
+export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[];
+  /** Done by HA's own sentence matcher, without the model. */
+  quick?: boolean };
 
 const PENDING_TTL = 10 * 60_000;
 
@@ -26,10 +29,19 @@ export class Agent {
 
   ownerKey(c: Caller) { return `${scopeKey(c.scope)}${c.audience ? ":" + c.audience : ""}|${c.channel}|${c.deviceId || ""}`; }
 
-  private conversation(c: Caller, id?: string, extId?: string) {
+  /** Put a chat's conversation away, so the next message starts fresh ("new topic"). */
+  newTopic(c: Caller, extId: string) {
+    return Number(this.db.prepare("UPDATE conversations SET ext_id = ext_id || ':done:' || ? WHERE ext_id = ? AND owner_key = ?").run(String(Date.now()), extId, this.ownerKey(c)).changes) > 0;
+  }
+
+  private conversation(c: Caller, id?: string, extId?: string, freshAfterMs = 0) {
     const key = this.ownerKey(c), now = Date.now();
     let row: any = id ? this.db.prepare("SELECT id FROM conversations WHERE id = ? AND owner_key = ?").get(id, key) : undefined;
-    if (!row && extId) row = this.db.prepare("SELECT id FROM conversations WHERE ext_id = ? AND owner_key = ?").get(extId, key);
+    if (!row && extId) {
+      row = this.db.prepare("SELECT id, updated_at FROM conversations WHERE ext_id = ? AND owner_key = ?").get(extId, key);
+      // A chat that went quiet starts a new conversation: old receipts and plans don't confuse new questions.
+      if (row && freshAfterMs > 0 && now - Number(row.updated_at) > freshAfterMs) { this.newTopic(c, extId); row = undefined; }
+    }
     if (row) { this.db.prepare("UPDATE conversations SET updated_at = ? WHERE id = ?").run(now, row.id); return { id: row.id as string, fresh: false }; }
     const nid = newId();
     this.db.prepare("INSERT INTO conversations (id, owner_key, person_id, channel, ext_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -68,7 +80,7 @@ export class Agent {
    *  `media`: the turn carries a photo or video. What's in it (a note, a sign,
    *  a video's sound) can read like a request, so every change waits for the
    *  person's own Yes. That's enforced here, not left to the prompt. */
-  private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void, media = false) {
+  private wrap(c: Caller, tools: Tool[], conversationId: string, pending: TurnResult["pending"], requests: TurnResult["requests"], emit: (e: AgentEvent) => void, seen: { media: boolean } = { media: false }) {
     return tools.map((t) => ({
       name: t.name, description: t.description + (t.approval ? " (Needs a family member's approval: it's sent to them, not done straight away.)" : ""), parameters: t.parameters,
       run: async (args: any) => {
@@ -84,6 +96,7 @@ export class Agent {
           requests.push(r); emit({ type: "approval", ...r });
           return { status: "sent_for_approval", action: r.summary, note: "Nothing has happened yet. A family member has to approve it (they'll see it on their FAITH screen or phone). Tell the person that, in one sentence. Or they can sign in and do it themselves." };
         }
+        const media = seen.media;
         const summary = (await t.confirm?.(args)) || (media && t.write ? t.explain?.(args) || described(t.name, args) : null);
         if (summary && !(c.channel === "voice" && this.cfg().voice.confirm_on_voice && !media)) {
           if (!this.canConfirm(c)) return { error: `"${summary}" needs someone to tap Yes on a FAITH screen. It can't be done from here.` };
@@ -96,6 +109,7 @@ export class Agent {
         }
         try {
           const out = await t.run(args);
+          if (t.media) seen.media = true;
           if (t.write) this.audit(c, t.name, JSON.stringify(args ?? {}), !(out && typeof out === "object" && "error" in (out as any)));
           return out;
         } catch (e: any) { if (t.write) this.audit(c, t.name, `${JSON.stringify(args ?? {})} -> ${e.message}`, false); throw e; }
@@ -103,12 +117,46 @@ export class Agent {
     }));
   }
 
-  async turn(o: { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal }): Promise<TurnResult> {
+  /** HA's own sentence matcher first: "turn off the kitchen light" needs no model.
+   *  FAITH's rules are checked on what HA would touch, and it runs through wrap
+   *  (the action log) like any tool. Anything else, or any doubt: null, and the model answers. */
+  private async quick(c: Caller, text: string, conv: { id: string }, emit: (e: AgentEvent) => void): Promise<TurnResult | null> {
+    const ha = this.registry.ha;
+    if (!ha || text.length > 200 || !ha.fastOn(c) || !this.registry.allowedConnector(c, ha.id)) return null;
+    try {
+      const m = await ha.quick(c, text);
+      if (!m || !ha.quickAllowed(c, m)) return null;
+      const write = !quickRead(m.intent);
+      if (write) {
+        // The same rules as the model's own HA tools: this person has the tool, it needs no approval and no Yes.
+        const t = (await this.registry.toolsFor(c)).tools.find((x) => x.name === m.intent);
+        if (!t || t.approval || (await t.confirm?.(m.args)) || (await t.strict?.(m.args))) return null;
+      }
+      const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
+      const tool: Tool = { name: m.intent, connector: ha.id, write, description: "HA's built-in agent", parameters: {}, run: () => ha.quickRun(c, text, m) };
+      const [w] = this.wrap(c, [tool], conv.id, pending, requests, emit);
+      const out: any = await w.run(m.args);
+      if (!out?.handled || pending.length) return null;
+      emit({ type: "tool", name: m.intent });
+      const reply = out.speech || "Done.";
+      this.save(conv.id, "user", text);
+      this.save(conv.id, "assistant", reply);
+      emit({ type: "text", delta: reply });
+      return { conversationId: conv.id, text: reply, toolsUsed: [m.intent], pending, requests, quick: true };
+    } catch (e: any) {
+      if (!this.quickWarned) { this.quickWarned = true; console.warn(`HA fast path: ${e?.message || e}. Answering with the model instead (update the FAITH integration to 0.5+).`); }
+      return null;
+    }
+  }
+  private quickWarned = false;
+
+  async turn(o: { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal }): Promise<TurnResult> {
     const cfg = this.cfg(), c = o.caller, emit = o.onEvent ?? (() => {});
     const text = String(o.text || "").trim();
     if (!text) throw new ModelError(400, "Say something first.");
-    const conv = this.conversation(c, o.conversationId, o.extId);
+    const conv = this.conversation(c, o.conversationId, o.extId, o.freshAfterMs);
     emit({ type: "conversation", id: conv.id });
+    if (!o.images?.length && !o.history) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
     const set = await this.registry.toolsFor(c);
     const context = conv.fresh || o.history ? await this.context(c, set.tools) : this.lastContext.get(conv.id);
     if (context) {
@@ -128,12 +176,13 @@ export class Agent {
     // A photo goes to the vision model (Argos serves it) as an image part.
     // Up to 8: a video sends 6 frames.
     const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 8);
+    const seen = { media: images.length > 0 };   // a photo now, or a camera later in this turn
     const userMsg: Msg = images.length ? { role: "user", content: [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] } : { role: "user", content: text };
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
       messages: [{ role: "system", content: system }, ...past, userMsg],
-      tools: this.wrap(c, offered, conv.id, pending, requests, emit, images.length > 0),
-      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit, images.length > 0) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      tools: this.wrap(c, offered, conv.id, pending, requests, emit, seen),
+      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit, seen) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);

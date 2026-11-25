@@ -22,6 +22,9 @@ export type Tool = {
   selfApproves?: boolean;
   /** A plain sentence for what this call would do (approval cards); defaults to the tool name and arguments. */
   explain?: (args: any) => string;
+  /** Its result describes a picture (a camera). Like a photo the person sent, what's in it
+   *  can read like a request, so changes later in that turn wait for the person's Yes. */
+  media?: boolean;
 };
 
 export interface Connector {

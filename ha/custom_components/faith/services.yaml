@@ -11,6 +11,24 @@ send_message:
       selector:
         text:
           multiline: true
+look:
+  fields:
+    camera:
+      required: true
+      example: camera.front_door
+      selector:
+        entity:
+          domain: camera
+    question:
+      required: false
+      example: Who is at the door?
+      selector:
+        text:
+    to:
+      required: false
+      example: parents
+      selector:
+        text:
 award_points:
   fields:
     person:

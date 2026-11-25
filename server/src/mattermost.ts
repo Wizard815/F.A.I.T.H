@@ -15,6 +15,7 @@ type Log = { info: (o: any, m?: string) => void; warn: (o: any, m?: string) => v
 
 export class MattermostError extends Error {}
 
+const NEW_TOPIC = /^(new topic|new chat|new conversation|start over|start again|fresh start|\/new)[.!]*$/i;
 const YES = /^(yes|y|yep|yeah|ok|okay|sure|do it|go ahead|confirm)\b/i, NO = /^(no|n|nope|cancel|stop|don'?t)\b/i;
 const DECIDE = /^(approve|deny)\s+([A-Za-z0-9_-]{3,})\b/i;
 
@@ -222,9 +223,15 @@ export class MattermostBot {
       if (!text) return this.say(post, `Yes, ${person.name}?`);
     }
 
+    if (NEW_TOPIC.test(text) && !att.images.length) {
+      if (wait && wait.by === person.id) this.pending.delete(post.channel_id);
+      this.agent.newTopic(this.callerFor(room, person, post.channel_id), `mm:${post.channel_id}`);
+      return this.say(post, "Okay, a fresh start. I've put our earlier chat away.");
+    }
+
     const typing = setInterval(() => this.typing(post.channel_id, post.root_id), 4000); this.typing(post.channel_id, post.root_id);
     try {
-      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text: [text, ...att.notes].join("\n\n"), images: att.images, extId: `mm:${post.channel_id}` });
+      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text: [text, ...att.notes].join("\n\n"), images: att.images, extId: `mm:${post.channel_id}`, freshAfterMs: this.mm.new_topic_after_minutes * 60_000 });
       let reply = heardNote + (r.text || "Done.");
       if (r.pending.length) {
         this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });

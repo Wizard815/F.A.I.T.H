@@ -89,6 +89,11 @@ connectors:
     mealie_config_entry_id: ""     # Settings > Devices & services > Mealie > ⋮ > copy entry id
     trust_ha_users: true           # Assist from an HA user mapped above acts as that person
     assist_api: true               # HA's own Assist tools and house overview (FAITH integration 0.4+; docs/home-assistant.md)
+    fast_path: true                # simple commands go to HA's own sentence matcher first, no model (integration 0.5+)
+    cameras:                       # cameras FAITH may look through, and who may ask (docs/home-assistant.md)
+      - entity: camera.front_door
+        name: Front door
+        who: [admin, adult, parents]
 
   - id: coinpile
     type: mcp
@@ -118,6 +123,7 @@ mattermost:
   team: family                   # the team's URL name; the bot must be a member
   token_env: MATTERMOST_BOT_TOKEN
   answer_in_groups: mention      # in the two channels, only when @faith is mentioned (or "always")
+  new_topic_after_minutes: 240   # a chat quiet this long starts fresh; "new topic" does it any time (0 = never)
   manage_members: true           # add the family, remove anyone else (no children in the parents' chat)
 
 # The wall screens (paired with `faith pair <id>`).
