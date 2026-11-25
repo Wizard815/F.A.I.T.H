@@ -15,6 +15,7 @@ FAITH is the family's front-end agent: one container (server + web app) and a Ho
 | `wakeword/` | wake words for HA's voice pipeline (Wyoming, Python): any phrase (Vosk) and trained openWakeWord models | `cd wakeword && python fetch_models.py --example && python -m pytest` (needs espeak-ng, ffmpeg) |
 | `server/src/wyoming.ts` | speech-to-text for HA's voice pipeline (Wyoming), which also notes who spoke | `npm test`; HA's own client: see `docs/home-assistant.md` |
 | `android/` | the Android app ([docs/android.md](docs/android.md)), on the [clients contract](docs/clients.md) | `cd android && ./gradlew assembleDebug testDebugUnitTest` |
+| `desktop/` | the desktop app (Electron; [docs/desktop.md](docs/desktop.md)), on the clients contract; its own npm package, outside the workspaces | `cd desktop && npm ci && npm test && npm run build && xvfb-run -a npm run e2e` |
 | `server/src/mattermost.ts` | the Mattermost bot (personal, family, parents chats) | `npm test`; real Mattermost: `server/scripts/mattermost/` (see `docs/mattermost.md`) |
 
 ## Rules

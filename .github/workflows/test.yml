@@ -28,3 +28,12 @@ jobs:
         with: { python-version: "3.12" }
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends espeak-ng ffmpeg
       - run: cd wakeword && pip install --no-deps -r requirements-dev.txt && python fetch_models.py --example && python -m pytest -q
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: "package-lock.json\ndesktop/package-lock.json" }
+      - run: npm ci   # the tests run against FAITH's own server
+      - run: cd desktop && npm ci && npm test && npm run build
+      - run: cd desktop && xvfb-run -a node --import tsx --test e2e/*.test.ts

@@ -3,7 +3,7 @@
 FAITH has more than one front door: the Home Assistant cards, Mattermost, voice satellites, and its own apps:
 - **D.A.S.H**: the pocket handheld (ESP32).
 - **The Android app**: `android/` ([android.md](android.md)).
-- **A desktop app** (later).
+- **The desktop app**: `desktop/` ([desktop.md](desktop.md)), for Windows, macOS and Linux.
 
 They all follow this page, so a change to FAITH reaches every one of them the same way. Every call below is plain HTTPS to FAITH (`http://<faith>:8097` on your network) with `Authorization: Bearer <token>`.
 
@@ -104,6 +104,6 @@ What FAITH sends a person also waits in their inbox, for their apps. Examples:
 |---|---|---|---|
 | Sign in | client token (CLI) | password → client token | password → client token |
 | Ask, Yes/No, inbox | ✓ | ✓ | ✓ |
-| Voice | push-to-talk (Hermes first, FAITH as the fallback) | push-to-talk; can be the phone's **assistant** (hold home / power) | push-to-talk |
-| Photos | — | camera, and **Share → FAITH** from any app | drag and drop |
-| Notifications | buzz + card | Android notifications | tray |
+| Voice | push-to-talk (Hermes first, FAITH as the fallback) | push-to-talk; can be the phone's **assistant** (hold home / power) | click to talk; a shortcut from anywhere (Ctrl+Alt+F) |
+| Photos | — | camera, and **Share → FAITH** from any app | drag and drop, paste |
+| Notifications | buzz + card | Android notifications | tray and the computer's notifications |
