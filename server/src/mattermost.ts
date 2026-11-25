@@ -201,6 +201,8 @@ export class MattermostBot {
       try { const r = await this.agent.confirm(this.callerFor(room, by, post.channel_id), wait.id, YES.test(text)); return this.say(post, r.text); }
       catch (e: any) { return this.say(post, e.message); }
     }
+    // They moved on: a later "yes" must not land on this older change.
+    if (wait && wait.by === person.id) this.pending.delete(post.channel_id);
 
     // "approve abc12" / "deny abc12" from a grown-up (parents' chat or their own DM).
     const d = text.match(DECIDE);
@@ -226,7 +228,7 @@ export class MattermostBot {
       let reply = heardNote + (r.text || "Done.");
       if (r.pending.length) {
         this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
-        if (!/\byes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
+        if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
       }
       if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
       return this.say(post, reply);

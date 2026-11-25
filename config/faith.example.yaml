@@ -94,7 +94,7 @@ connectors:
     type: mcp
     url: http://192.168.1.5:8190/api/v1/mcp
     description: "Coinpile: this person's money (Firefly III)"
-    person_token_env: COINPILE_TOKEN_{ID}    # no household token: money is never in the shared view
+    person_token_env: COINPILE_TOKEN_{ID}    # scopes mcp + act; no household token: money is never in the shared view
     roles: [admin, adult]
 
   - id: orb

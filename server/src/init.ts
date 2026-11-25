@@ -81,7 +81,7 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
   }
   if (has("coinpile")) {
     connectors.push({ id: "coinpile", type: "mcp", url: `${found.coinpile}/api/v1/mcp`, description: "Coinpile: this person's money", person_token_env: "COINPILE_TOKEN_{ID}", roles: ["admin", "adult"] });
-    for (const p of adults) need(`COINPILE_TOKEN_${p.id.toUpperCase()}`, `in ${p.name}'s Coinpile: Settings → Home Assistant & API → a token with the mcp scope`);
+    for (const p of adults) need(`COINPILE_TOKEN_${p.id.toUpperCase()}`, `in ${p.name}'s Coinpile: Settings → Home Assistant & API → a token with the mcp and act scopes`);
   }
   if (has("orb")) {
     connectors.push({ id: "orb", type: "mcp", url: `${found.orb}/mcp`, description: "Pondering Orb: this person's dashboard, projects and journal", person_token_env: "ORB_TOKEN_{ID}", roles: ["admin", "adult"] });

@@ -118,6 +118,19 @@ test("a lock waits for yes from the same person; a child's lock request goes to 
   assert.equal(ha.states["lock.front_door"].state, "unlocked");
 });
 
+test("a yes after the person moved on doesn't land on the older change", async () => {
+  ha.states["lock.front_door"].state = "unlocked";
+  let k = 0;
+  script = () => (k++ === 0 ? { tool_calls: [{ name: "home_control", args: { entity_id: "lock.front_door", service: "lock" } }] } : { content: "Tap Yes on screen to lock it." });
+  await send("wizard", dmOf("wizard"), "lock the door");
+  assert.match(posted().message, /Reply \*\*yes\*\* to go ahead/, "the yes hint is added even when the model says \"tap Yes\"");
+  script = () => ({ content: "It's sunny." });
+  await send("wizard", dmOf("wizard"), "what's the weather?");
+  await send("wizard", dmOf("wizard"), "yes, thanks");
+  assert.equal(ha.states["lock.front_door"].state, "unlocked", "the lock waited for a yes right after it, not one later");
+  assert.equal(posted().message, "It's sunny.");
+});
+
 test("photos go to the vision model; voice messages are heard through speech-to-text", async () => {
   mm.files.set("ph1", { mime: "image/jpeg", name: "fridge.jpg", bytes: Buffer.from("jpeg-bytes") });
   mm.files.set("vm1", { mime: "audio/mp4", name: "voice.m4a", bytes: Buffer.from("m4a-bytes") });

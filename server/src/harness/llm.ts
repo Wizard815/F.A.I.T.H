@@ -7,24 +7,42 @@ export type Msg = { role: "system" | "user" | "assistant" | "tool"; content: str
 export type LoopTool = { name: string; description: string; parameters: Record<string, unknown>; run: (args: any) => Promise<unknown> };
 export type LoopEvent = { type: "text"; delta: string } | { type: "tool"; name: string } | { type: "tool_result"; name: string; ok: boolean };
 
+/** Some local models put their reasoning in the answer: <think>…</think>
+ *  (Hy4 also writes </think:id>). Keep only what comes after it. */
+export function visible(text: string) {
+  const closes = [...text.matchAll(/<\/think(?::[\w-]+)?>/gi)];
+  const last = closes.at(-1), after = last ? text.slice(last.index! + last[0].length) : text;
+  const out = after.replace(/<think(?::[\w-]+)?>[\s\S]*$/i, "");   // one still open at the end
+  return out.trim() ? out : "";
+}
+
 export class ModelError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 export type LoopOpts = {
   baseUrl: string; model: string; key?: string; temperature?: number; timeoutMs?: number;
   messages: Msg[]; tools: LoopTool[]; maxRounds: number;
-  /** Tools the caller may use that weren't offered this turn (the router's shortlist): run if the model names one anyway. */
+  /** Tools the caller may use that weren't offered this turn (the router's shortlist): run if the model names one anyway.
+   *  One a tool result names (a skill's steps, say) is offered from the next round on. */
   callable?: LoopTool[];
   onEvent?: (e: LoopEvent) => void; signal?: AbortSignal;
 };
 
 /** Run the loop, streaming text when the server streams. Servers that ignore
  *  stream:true and answer with plain JSON still work. */
-const RETRY_MS = [1500, 4000];
+const RETRY_MS = [1500, 4000], MAX_PROMOTED = 12;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, Number(process.env.FAITH_RETRY_SCALE ?? 1) * ms));
 
 export async function runLoop(o: LoopOpts): Promise<{ text: string; toolsUsed: string[] }> {
   const msgs = [...o.messages], used: string[] = []; let full = "";
-  const tools = o.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  const schema = (t: LoopTool) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } });
+  const tools = o.tools.map(schema), shown = new Set(o.tools.map((t) => t.name));
+  /** A loaded skill names the tools its steps use: offer those it names that the router left out. */
+  const offerNamed = (text: string) => {
+    for (const t of o.callable ?? []) {
+      if (shown.size >= o.tools.length + MAX_PROMOTED) break;
+      if (!shown.has(t.name) && new RegExp(`\\b${t.name.replace(/[^\w-]/g, "")}\\b`).test(text)) { shown.add(t.name); tools.push(schema(t)); }
+    }
+  };
   const emit = o.onEvent ?? (() => {});
   for (let round = 0; round < o.maxRounds; round++) {
     let res!: Response;
@@ -76,7 +94,8 @@ export async function runLoop(o: LoopOpts): Promise<{ text: string; toolsUsed: s
       }
       if (buf) line(buf + dec.decode());
     }
-    full += text;
+    const said = visible(text);
+    full += said;
     const real = calls.filter(Boolean).map((c, i) => ({ ...c, id: c.id || `call_${round}_${i}` }));
     if (!real.length) return { text: full.trim(), toolsUsed: used };
     msgs.push({ role: "assistant", content: text || null, tool_calls: real.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) });
@@ -92,9 +111,11 @@ export async function runLoop(o: LoopOpts): Promise<{ text: string; toolsUsed: s
         if (out && typeof out === "object" && "error" in (out as any)) ok = false;
       } catch (e: any) { out = { error: e?.message || String(e) }; ok = false; }
       emit({ type: "tool_result", name: c.name, ok });
-      msgs.push({ role: "tool", tool_call_id: c.id, content: (typeof out === "string" ? out : JSON.stringify(out)).slice(0, 20000) });
+      const content = (typeof out === "string" ? out : JSON.stringify(out)).slice(0, 20000);
+      msgs.push({ role: "tool", tool_call_id: c.id, content });
+      if (ok) offerNamed(content);
     }
-    if (text) { full += "\n\n"; emit({ type: "text", delta: "\n\n" }); }
+    if (said) { full += "\n\n"; emit({ type: "text", delta: "\n\n" }); }
   }
   return { text: (full + "\n\nI ran out of steps before finishing. Try asking for one thing at a time.").trim(), toolsUsed: used };
 }

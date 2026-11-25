@@ -105,6 +105,15 @@ export class McpConnector implements Connector {
     const { c, k } = this.client(token);
     let hit = this.cache.get(k);
     if (!hit || Date.now() - hit.at > this.ttlMs) { hit = { at: Date.now(), tools: await c.tools() }; this.cache.set(k, hit); }
+    // A server may say, in its own words, what a change would do: a read-only
+    // preview_change {tool, arguments} -> {what} or {error} (Coinpile's "act" tokens).
+    const previews = hit.tools.some((x) => x.name === "preview_change" && isReadOnly(x));
+    const preview = async (name: string, args: any) => {
+      let r; try { r = await c.call("preview_change", { tool: name, arguments: args && typeof args === "object" ? args : {} }); } catch { return null; }
+      let v: any = r.structured; if (v === undefined) try { v = JSON.parse(r.text || ""); } catch { v = undefined; }
+      if (v?.error) throw new ToolError(`${this.id} won't do that: ${String(v.error).slice(0, 300)}`);   // refused before anyone is asked
+      return !r.isError && typeof v?.what === "string" ? v.what.slice(0, 300) : null;
+    };
     return hit.tools
       .filter((t) => !this.cfg.tools || this.cfg.tools.some((p) => glob(p, t.name)))
       .map((t) => ({
@@ -114,7 +123,8 @@ export class McpConnector implements Connector {
         write: !isReadOnly(t),
         // Destructive tools (delete, restart, remove...) always wait for a Yes from the person asking.
         strict: t.annotations?.destructiveHint ? () => true : undefined,
-        confirm: t.annotations?.destructiveHint ? (args: any) => `${(t.description || t.name).split(/[.\n]/)[0].slice(0, 120)} (${t.name}${args && Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 160)}` : ""})` : undefined,
+        confirm: t.annotations?.destructiveHint ? async (args: any) => (previews && (await preview(t.name, args))) ||
+          `${(t.description || t.name).split(/[.\n]/)[0].slice(0, 120)} (${t.name}${args && Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 160)}` : ""})` : undefined,
         run: async (args: any) => {
           const r = await c.call(t.name, args && typeof args === "object" ? args : {});
           if (r.isError) return { error: r.text || "the tool failed" };

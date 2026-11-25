@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { runLoop } from "../src/harness/llm.js";
+import { runLoop, visible } from "../src/harness/llm.js";
 
 // A model server that's busy or swapping models (Argos/llama-swap) gets two more tries.
 test("the model answering 503 for a moment is tried again; a lasting error is reported plainly", async () => {
@@ -42,4 +42,12 @@ test("a tool the router didn't shortlist still runs when the model names it", as
     assert.deepEqual(ran, { temperature: 22 });
     assert.deepEqual(r.toolsUsed, ["HassClimateSetTemperature"]);
   } finally { s.close(); }
+});
+
+test("a model's reasoning in the answer (<think>, </think:id>) isn't shown", () => {
+  assert.equal(visible("Let me check the receipt.</think:6124c78e>I didn't change anything."), "I didn't change anything.");
+  assert.equal(visible("<think>plan</think>\n\nIt's 15.75."), "\n\nIt's 15.75.");
+  assert.equal(visible("Fish tacos."), "Fish tacos.");
+  assert.equal(visible("<think>still thinking when it stopped"), "");
+  assert.equal(visible("Done. <think>hmm"), "Done. ");
 });

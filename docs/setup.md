@@ -70,10 +70,13 @@ docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard    
 
 ## Coinpile
 
-- In Coinpile: Settings → Home Assistant & API → make a token with the **mcp** scope for each person → `COINPILE_TOKEN_<ID>`.
+- In Coinpile: Settings → Home Assistant & API → make a token with the **mcp** and **act** scopes for each person → `COINPILE_TOKEN_<ID>`.
 - Connector URL: `http://<host>:8190/api/v1/mcp`.
 - Money is never in the household view: there's no household token.
-- Coinpile's change tools only *ask*, and wait for a Yes inside Coinpile.
+- With **act**, FAITH asks for the Yes, using Coinpile's own sentence ("Record in Firefly III: paid 15.75 …"). One Yes in FAITH is enough. Each change still shows on Coinpile's Agent page, marked "Yes given in FAITH".
+- Without **act**, a change only *asks*: it waits for a second Yes on Coinpile's Agent page.
+- A change Coinpile would refuse (an unknown account, say) is refused before you're asked.
+- Receipts: send FAITH a photo of a receipt. The `receipt-to-coinpile` skill checks whether the bank already sent that payment. Cash gets recorded. A card payment waits for the bank, so it isn't counted twice. When it arrives, FAITH can set its category.
 - Coinpile withholds a linked partner's numbers from other apps over MCP, so FAITH sees only that person's own share.
 
 ## Pondering Orb
