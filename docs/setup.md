@@ -29,8 +29,15 @@ node scripts/family-setup.mjs add-shared faith FAITH   # FAITH as the family's s
 node scripts/family-setup.mjs token faith              # -> WIKI_TOKEN_HOUSEHOLD
 node scripts/family-setup.mjs token sam                # -> WIKI_TOKEN_SAM (one per member)
 node scripts/family-setup.mjs token wizard --label faith --as member   # -> WIKI_TOKEN_WIZARD (the admin: see below)
+node scripts/family-setup.mjs add-member --name Robin --role child     # children: no household/parents/
 ```
 
+- **The grown-ups' chat:** `node scripts/family-setup.mjs add-shared faith-parents "FAITH parents" --audience parents`, then `token faith-parents` → `WIKI_TOKEN_PARENTS` (`parents_token_env`). It also reads `household/parents/`, the grown-ups' shared notes; the family view and children never do.
+- **Children:** add them with `--role child` in the wiki too. FAITH refuses a child's wiki token that isn't a child's.
+- **The master key** (`token master`) reads everyone's notes and writes nothing. It's for your own tools (backups, a dashboard). FAITH never uses it.
+- **FAITH checks every token** with the wiki's `whoami` before using it, and refuses one that's wrong for the view. That view then gets no wiki at all, and the admin page's integrations watch says why:
+  - a person's token must be their own member (or child) token: not an admin token, not someone else's, not the master key;
+  - the household token must be the family's shared agent, and the parents' token a shared agent too.
 - **The admin's token goes "as member".** A plain admin token reads everyone's notes, so a search in the admin's chat, or on a screen they signed into, could turn up Sam's surprise for them. `--as member` (wiki branch with that option) sees only their own notes, like everyone else. Keep the full admin token for the wiki's own maintenance.
 
 - Connector URL: `http://<vault>:27123/family-mcp`.

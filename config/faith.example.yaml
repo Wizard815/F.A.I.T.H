@@ -64,7 +64,7 @@ connectors:
     url: http://192.168.1.5:27123/family-mcp
     description: "The family wiki (LLMWIKI): long-term memory, notes, profiles, today's notes"
     household_token_env: WIKI_TOKEN_HOUSEHOLD   # a shared_agents token: family-setup.mjs add-shared faith FAITH
-    # parents_token_env: WIKI_TOKEN_PARENTS     # optional: what the parents' Mattermost chat may see
+    # parents_token_env: WIKI_TOKEN_PARENTS     # the grown-ups' chat: add-shared faith-parents "FAITH parents" --audience parents
     person_token_env: WIKI_TOKEN_{ID}           # member tokens: family-setup.mjs token <id>
     tools: [whoami, who_is, family_members, context_for, memory_log, memory_capture, notes_search, note_read, query_wiki, conversation_log]
     always: [memory_log, notes_search]          # offered for every question: remembering and recalling

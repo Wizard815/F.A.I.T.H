@@ -42,6 +42,10 @@ export type McpConnector = {
   teller_tools?: string[];
   /** Globs of tools always offered, whatever the question (the router doesn't drop them). */
   always?: string[];
+  /** Check each token with the server's whoami before using it (the wiki: a person's view gets only
+   *  their own token, a shared view a shared agent's, never the master key). Default: whenever the
+   *  server has a whoami that says whose token it is. false turns it off; true insists on it. */
+  check_identity?: boolean;
   /** What this source returns was heard, not said to FAITH (Omi's recordings: other people, the TV).
    *  Like a video's sound, it's context: any change later in that turn waits for the person's own Yes. */
   heard?: boolean;
@@ -233,7 +237,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const roles = c.roles ? (list(c.roles) as PolicyName[]) : undefined;
     if (type === "mcp" && c.auth === "none" && !c.roles) throw new ConfigError(`connectors.${id}: with auth: none, say who may use it (roles: [admin] or [admin, parents]); a token-less source would otherwise reach the shared view too.`);
     if (type === "mcp") return { id, type, url, url_env: c.url_env ? str(c.url_env) : undefined, auth: c.auth === "none" ? "none" : "token", household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description,
-      teller_tools: c.teller_tools ? list(c.teller_tools) : undefined, always: c.always ? list(c.always) : undefined, heard: bool(c.heard, false) } as McpConnector;
+      teller_tools: c.teller_tools ? list(c.teller_tools) : undefined, always: c.always ? list(c.always) : undefined, heard: bool(c.heard, false), check_identity: c.check_identity === undefined ? undefined : bool(c.check_identity, true) } as McpConnector;
     if (type === "homeassistant") {
       const ex = c.expose || {};
       return { id, type, url, token_env: str(c.token_env, "HA_TOKEN"), person_token_env: c.person_token_env, roles,

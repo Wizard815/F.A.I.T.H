@@ -96,7 +96,47 @@ export class McpConnector implements Connector {
     const token = this.tokenFor(caller);
     if (!token) throw new ToolError("no token for this view");
     const { c, k } = this.client(token);
-    this.cache.set(k, { at: Date.now(), tools: await c.tools() });
+    const tools = await c.tools();
+    this.cache.set(k, { at: Date.now(), tools });
+    const wrong = await this.wrongToken(caller, c, k, tools);
+    if (wrong) throw new ToolError(wrong);
+  }
+
+  // ---- Is this the right token for this view? (the wiki's whoami says whose it is)
+  private identities = new Map<string, { at: number; who: { kind: string; id: string } | null }>();
+  private warned = new Set<string>();
+  /** Who the server says a token is, from whoami's first line: "You are acting for: Sam (member, id sam)."
+   *  null when the server has no whoami, or answers in another shape (then nothing is checked). */
+  private async identity(c: McpClient, k: string, tools: McpTool[]) {
+    if (this.cfg.check_identity === false || !tools.some((t) => t.name === "whoami")) return null;
+    const hit = this.identities.get(k);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.who;
+    const r = await c.call("whoami", {});
+    const m = /acting for: .*?\(([\w-]+), id ([\w-]+)\)/.exec(r.text || "");
+    const who = m ? { kind: m[1], id: m[2] } : null;
+    if (!who && this.cfg.check_identity) throw new ToolError(`${this.id} didn't say whose token this is (whoami), so FAITH won't use it.`);
+    this.identities.set(k, { at: Date.now(), who });
+    return who;
+  }
+  /** Why this token mustn't be used for this caller's view, or null. Privacy comes from tokens:
+   *  a person's view gets that person's own token, a shared view a shared agent's, and never the master key. */
+  private async wrongToken(caller: Caller, c: McpClient, k: string, tools: McpTool[]): Promise<string | null> {
+    if (this.cfg.auth === "none") return null;
+    const who = await this.identity(c, k, tools);
+    if (!who) return null;
+    const env = caller.scope.kind === "person" ? personEnv(this.cfg.person_token_env, caller.scope.person.id) : caller.audience === "parents" && this.cfg.parents_token_env ? this.cfg.parents_token_env : this.cfg.household_token_env;
+    if (who.kind === "master") return `${env} is ${this.id}'s master key, which reads everyone's notes. FAITH never uses it: give this view its own token.`;
+    if (caller.scope.kind === "person") {
+      const p = caller.scope.person;
+      if (who.kind === "admin") return `${env} is an admin token: it reads every person's notes, so ${p.name}'s chats could show someone else's. Issue it as a member (family-setup.mjs token ${p.id} --label faith --as member).`;
+      if (who.kind !== "member" && who.kind !== "child") return `${env} is a ${who.kind} token, not ${p.name}'s own. Give ${p.name} their own (family-setup.mjs token ${p.id}).`;
+      if (who.id !== p.id) return `${env} belongs to ${who.id}, not ${p.name}: ${p.name} would see ${who.id}'s notes. Give ${p.name} their own token.`;
+      if (p.role === "child" && who.kind !== "child") return `${p.name} is a child in FAITH but not in ${this.id}, so they could read the grown-ups' notes. Make them a child there (role: child).`;
+      return null;
+    }
+    if (who.kind !== "shared" && who.kind !== "shared-parents") return `${env} is ${who.kind === "member" || who.kind === "child" ? `${who.id}'s own` : `a ${who.kind}`} token, so the shared view would see private notes. Use a shared agent's token (family-setup.mjs add-shared).`;
+    if (who.kind === "shared-parents" && caller.audience !== "parents") return `${env} is the grown-ups' token, so the whole family (children too) would see the parents' notes. Use the family's shared agent here.`;
+    return null;
   }
 
   async tools(caller: Caller): Promise<Tool[]> {
@@ -105,6 +145,12 @@ export class McpConnector implements Connector {
     const { c, k } = this.client(token);
     let hit = this.cache.get(k);
     if (!hit || Date.now() - hit.at > this.ttlMs) { hit = { at: Date.now(), tools: await c.tools() }; this.cache.set(k, hit); }
+    // A token that's wrong for this view offers nothing, and says why once (the integrations watch shows it too).
+    const wrong = await this.wrongToken(caller, c, k, hit.tools);
+    if (wrong) {
+      if (!this.warned.has(k + wrong)) { this.warned.add(k + wrong); console.warn(`${this.id}: ${wrong}`); }
+      return [];
+    }
     // A server may say, in its own words, what a change would do: a read-only
     // preview_change {tool, arguments} -> {what} or {error} (Coinpile's "act" tokens).
     const previews = hit.tools.some((x) => x.name === "preview_change" && isReadOnly(x));
