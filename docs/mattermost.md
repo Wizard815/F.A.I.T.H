@@ -64,7 +64,7 @@ When a child asks for a change in the family chat, or someone asks on a shared s
    people:
      - { id: wizard, name: Wizard, role: admin, mattermost_username: wizard }
    mattermost:
-     url: http://192.168.1.5:8065    # how FAITH reaches Mattermost
+     url: http://<server-ip>:8065    # how FAITH reaches Mattermost
      team: family                     # the team's URL name
      # family_channel:  { name: faith-family,  display_name: Family }
      # parents_channel: { name: faith-parents, display_name: Parents }

@@ -92,7 +92,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
    chown -R 1000:1000 /mnt/user/appdata/faith        # the container runs as node (uid 1000)
    ```
 2. **Let FAITH find your services**, or fill the config in by hand.
-   - `docker compose build && docker compose run --rm faith faith init --hosts 192.168.1.5,192.168.1.10`
+   - `docker compose build && docker compose run --rm faith faith init --hosts <server-ip>,<ha-ip>`
    - It looks for each service on those hosts (and its usual container name) and asks who's in the family.
    - It writes `faith.yaml` with what it found, and `faith.env.todo` listing every token to make and exactly how to make it.
    - It only reads: nothing changes on your services, and it won't overwrite an existing `faith.yaml` without `--force`.

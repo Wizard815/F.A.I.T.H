@@ -2,6 +2,7 @@
 # Copy to /mnt/user/appdata/faith/config/faith.yaml (mounted at /config/faith.yaml).
 # Secrets never go in this file: it names environment variables (*_env) and the
 # values live in .env next to the compose file.
+# Replace <server-ip> (the machine running your services) and <ha-ip> (Home Assistant) with your own.
 
 name: Faith                      # what the assistant calls itself
 family_name: the Wizard household
@@ -61,7 +62,7 @@ roles:
 connectors:
   - id: wiki
     type: mcp
-    url: http://192.168.1.5:27123/family-mcp
+    url: http://<server-ip>:27123/family-mcp
     description: "The family wiki (LLMWIKI): long-term memory, notes, profiles, today's notes"
     household_token_env: WIKI_TOKEN_HOUSEHOLD   # a shared_agents token: family-setup.mjs add-shared faith FAITH
     # parents_token_env: WIKI_TOKEN_PARENTS     # the grown-ups' chat: add-shared faith-parents "FAITH parents" --audience parents
@@ -74,7 +75,7 @@ connectors:
 
   - id: allglance
     type: mcp
-    url: http://192.168.1.5:8090/mcp
+    url: http://<server-ip>:8090/mcp
     description: "ALLGlance: the family calendar, tasks, chores and life events"
     household_token_env: ALLGLANCE_TOKEN_HOUSEHOLD   # scripts/tokens.mjs add-household faith
     person_token_env: ALLGLANCE_TOKEN_{ID}           # scripts/tokens.mjs add-person <owner_id>
@@ -82,7 +83,7 @@ connectors:
 
   - id: homeassistant
     type: homeassistant
-    url: http://192.168.1.10:8123
+    url: http://<ha-ip>:8123
     token_env: HA_TOKEN            # long-lived token of a non-admin HA user called "FAITH"
     # person_token_env: HA_TOKEN_{ID}  # optional: HA's logbook then shows who did it
     expose:
@@ -104,7 +105,7 @@ connectors:
 
   - id: coinpile
     type: mcp
-    url: http://192.168.1.5:8190/api/v1/mcp
+    url: http://<server-ip>:8190/api/v1/mcp
     description: "Coinpile: this person's money (Firefly III)"
     person_token_env: COINPILE_TOKEN_{ID}    # scopes mcp + act; no household token: money is never in the shared view
     roles: [admin, adult]
@@ -120,14 +121,14 @@ connectors:
 
   - id: orb
     type: mcp
-    url: http://192.168.1.5:8095/mcp
+    url: http://<server-ip>:8095/mcp
     description: "Pondering Orb: this person's dashboard, projects and journal"
     person_token_env: ORB_TOKEN_{ID}         # one Orb per person
     roles: [admin, adult]
 
   - id: hermes
     type: hermes
-    url: http://192.168.1.5:8642
+    url: http://<server-ip>:8642
     key_env: HERMES_API_KEY_{PROFILE}       # each profile's own API_SERVER_KEY; HERMES_API_KEY_WIZARD
     model: hermes-agent
     roles: [admin, adult]
@@ -135,7 +136,7 @@ connectors:
 
 # Mattermost: a DM with each person, a family channel, a parents channel (docs/mattermost.md).
 mattermost:
-  url: http://192.168.1.5:8065
+  url: http://<server-ip>:8065
   team: family                   # the team's URL name; the bot must be a member
   token_env: MATTERMOST_BOT_TOKEN
   answer_in_groups: mention      # in the two channels, only when @faith is mentioned (or "always")

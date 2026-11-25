@@ -24,7 +24,7 @@ const HELP = `faith: set up FAITH's people, screens and tokens
   faith token list | faith token revoke <name>
   faith signout <person>                end all their sessions
   faith doctor                          check every source with every token
-  faith init [--hosts 192.168.1.5,192.168.1.10] [--person wizard:Wizard:admin ...] [--yes] [--force]
+  faith init [--hosts <server-ip>,<ha-ip>] [--person wizard:Wizard:admin ...] [--yes] [--force]
                                         find your services and write a first faith.yaml and .env checklist
 
 Reads FAITH_CONFIG (default /config/faith.yaml) and FAITH_DATA (default /data).`;

@@ -12,7 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from . import FaithAuthError, FaithClient, FaithError
 from .const import CONF_PANEL_URL, CONF_TOKEN, CONF_URL, DOMAIN
 
-SCHEMA = vol.Schema({vol.Required(CONF_URL, default="http://192.168.1.5:8097"): str, vol.Required(CONF_TOKEN): str, vol.Optional(CONF_PANEL_URL, default=""): str})
+SCHEMA = vol.Schema({vol.Required(CONF_URL, default="http://<faith-ip>:8097"): str, vol.Required(CONF_TOKEN): str, vol.Optional(CONF_PANEL_URL, default=""): str})
 
 
 class FaithConfigFlow(ConfigFlow, domain=DOMAIN):

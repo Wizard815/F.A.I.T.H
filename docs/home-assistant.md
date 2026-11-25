@@ -34,7 +34,7 @@ HA is still where the family meets FAITH: the kiosk, the voice and the automatio
 1. Copy `ha/custom_components/faith` to `/config/custom_components/faith` on the HA VM (Samba or SSH add-on), then restart HA.
 2. On Unraid, make a token: `docker exec faith faith token add ha homeassistant`.
 3. HA → Settings → Devices & services → Add → **FAITH**:
-   - **FAITH URL:** how HA reaches it, e.g. `http://192.168.1.5:8097`.
+   - **FAITH URL:** how HA reaches it, e.g. `http://<server-ip>:8097`.
    - **Token:** the one from step 2.
    - **Address for the sidebar page:** how the family's browsers reach it, e.g. `https://faith.home.lan`. Leave it empty to use the same URL.
 4. Voice: Settings → Voice assistants → your pipeline → Conversation agent → **FAITH**.
@@ -118,7 +118,7 @@ Set `assist_api: true` on the `homeassistant` connector (FAITH's HA integration 
 connectors:
   - id: homeassistant
     type: homeassistant
-    url: http://192.168.1.10:8123
+    url: http://<ha-ip>:8123
     token_env: HA_TOKEN
     assist_api: true
 ```
