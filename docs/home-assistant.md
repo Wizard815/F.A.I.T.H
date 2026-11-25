@@ -97,8 +97,24 @@ satellite (wake word) -> HA Assist pipeline -> speech-to-text -> FAITH (conversa
 - **Which room:** assign each satellite to an area in HA. FAITH looks the area up for every request, so "turn the lights off" or "it's cold in here" means that room.
   - omi-local's `omi-audio` already runs faster-whisper and Piper.
   - hermes-agent's plugin catalog has a `wyoming-voice-bridge`.
-- **Wake word:** openWakeWord in HA, with a custom "Hey Faith" model.
+- **Wake word:** FAITH's wake word service (`wakeword/`). Any phrase, as many as you like (below).
 - **On FAITH's own screen:** 🎤 records in the browser and Argos transcribes it; the reply is spoken back through Argos.
+
+### Wake words: "Hey Faith", or any phrase
+
+FAITH's wake word service (`wakeword/`, container `faith-wake`) listens for any phrases you write in a file: "hey faith", "okay faith", each child's own. All of them work at once. Details, tuning and testing with your own voice: [wakeword/README.md](../wakeword/README.md).
+
+1. **Run it** next to FAITH (`faith-wake` in `docker-compose.example.yml`, port 10400). It writes `wake_words.txt` with "hey faith" and "okay faith" on first start. Edit it: one phrase per line.
+2. **Add it to HA:** Settings → Devices & services → Add integration → **Wyoming Protocol** → host `<server-ip>`, port `10400`.
+3. **Use it in the assistant:** Settings → Voice assistants → your FAITH assistant → ⋮ → **Add streaming wake word processing**. Choose `faith-wake` and a word, or **any** to listen for all of them.
+4. **The satellites:**
+   - Home Assistant Voice PE and other ESPHome satellites: on the device's page, set **Wake word engine location** to **In Home Assistant** (where it's offered). The satellite then streams sound to HA all the time, about 32 KB/s on your network.
+   - A Raspberry Pi with `wyoming-satellite`: `--wake-uri tcp://<server-ip>:10400 --wake-word-name any` (or one `--wake-word-name` per word).
+
+**What goes wrong:**
+- It wakes on the TV or on talk: raise that word's level (`hey faith @ 0.95`), pick a longer phrase, or train a model for your main word (better at telling it from similar words; see the README).
+- It misses you: test a recording of your voice with `docker exec faith-wake python server.py --test /config/test.m4a`, then lower that word's level.
+- A new word isn't in HA's list: reload the Wyoming integration. The service itself picks new words up without a restart.
 
 **Knowing who's speaking.** HA hands conversation agents the *text*, never the audio. So FAITH can also be the pipeline's speech-to-text, which does hear the voice:
 

@@ -17,6 +17,19 @@ services:
       - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/config:/config
     networks: [ai_net]
 
+  # Wake words for HA's voice satellites: any phrase, as many as you like (wakeword/README.md).
+  # Edit ${FAITH_APPDATA}/wake/wake_words.txt; trained models go in ${FAITH_APPDATA}/wake/models.
+  faith-wake:
+    build: wakeword
+    image: faith-wake:local
+    container_name: faith-wake
+    restart: unless-stopped
+    ports:
+      - "10400:10400"   # Wyoming: add it in HA as a Wyoming Protocol integration
+    volumes:
+      - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/wake:/config
+    networks: [ai_net]
+
 networks:
   ai_net:
     external: true   # where Argos, the wiki, ALLGlance, Coinpile and Orb already are

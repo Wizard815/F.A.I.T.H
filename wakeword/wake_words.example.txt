@@ -1,0 +1,12 @@
+# FAITH's wake words: one per line. Any phrase works, and every line is a wake word.
+# Save the file and the next "listen" uses it (no restart). Reload the Wyoming
+# integration in Home Assistant to see a new word in its list.
+#
+#   hey faith                     any phrase, heard by speech recognition
+#   okay faith @ 0.95             more sure before it counts (0 to 1; default 0.9)
+#   hey jarvis = hey_jarvis.onnx  a trained openWakeWord model in the models folder:
+#                                 better at telling it from similar words
+#
+# Check it: python server.py --check   (in Docker: docker exec faith-wake python server.py --check)
+hey faith
+okay faith

@@ -1,0 +1,23 @@
+# Everyday English words the recogniser may choose instead of a wake word.
+# Speech that isn't a wake word lands on these, so it doesn't trigger one.
+# One word per line; words the model doesn't know are skipped.
+a about above after again against age ago air all almost alone along already also always am an and another any anyone anything are area around as ask at away
+baby back bad bag ball bank base bath bathe be bear beat became because bed been before began begin behind being believe best better between big bill bird bit black blue board boat body book both bottle box boy bread break bring brother brown build bus busy but buy by
+cake call came can car card care case cat catch cause change check child children city class clean clear clock close coat cold come cook cool corner could count course cup cut
+dad dark date day dear did die dinner do does dog done door down draw dream dress drink drive drop during
+each early easy eat egg eight either else end enough even evening ever every eye
+face fact fade fair fake fall family far fast fat fate father fay feel few field fight fill find fine fire first fish five floor fly food foot for found four free friend from front full fun
+game garden gate gave get girl give glad glass go god going gone good got great green ground group grow
+had hair half hall hand happy hard has hat have he head hear heart heat hello help her here hey hi high him his hold home hope horse hot hour house how
+i ice idea if in inside into is it its
+job just keep key kid kind kitchen knew know
+lady laid lake land last late later laugh lay learn least leave left leg less let letter life light like line list listen little live long look lot love low
+made make man many may maybe me mean meet men might mind minute miss mom money more morning most mother move much music must my
+name near need never new next nice night nine no not note nothing now number
+of off office often oh okay old on once one only open or order other our out over own
+page paid paint paper park part party pass past pay pen people phase phone pick picture piece place plan play please point put
+question quick quiet quite rain ran read ready real red rest right ring road room round run
+safe said sale same sat save saw say school sea second see seem self send set seven shall she ship shop short should show side since sing sister sit six sleep slow small so some something son song soon sorry sound space speak spell stand start stay still stop store story street such sun sure
+table take talk tall taste tea teach tell ten than thank that the their them then there these they thing think this those three through time to today together told too took top toward town tree true try turn two
+under until up us use very wait wake walk wall want was watch water way we wear weather week well went were what when where which while white who why will wind window with without woman word work world would write
+yard year yes yet you young your

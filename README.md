@@ -116,6 +116,8 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `server/` | Fastify + `node:sqlite` service: auth, harness, connectors, API (`npm test`) |
 | `web/` | React + Tailwind app: wall view, home, chat, apps, sign-in, approvals (design: [architecture](docs/architecture.md#the-screens)) |
 | `ha/custom_components/faith` | the Home Assistant integration (`cd ha && pytest`) |
+| `voiceid/` | telling family voices apart, for FAITH ([README](voiceid/README.md)) |
+| `wakeword/` | wake words for HA's satellites: any phrase, as many as you like ([README](wakeword/README.md)) |
 | `config/faith.example.yaml` | every setting, commented |
 | `docs/` | [brand](docs/brand.md) · [rewards](docs/rewards.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [apps](docs/clients.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
 
