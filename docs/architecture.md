@@ -40,6 +40,14 @@ A request takes one of three ways.
   - It's also in the conversation, so the HA card shows it later.
   - On the household screen nobody can be sent the answer, so it waits as before.
 
+**One person, several messages.** Each conversation takes one turn at a time, so a second message waits for the first's answer and sees it. Mattermost also handles each chat's messages in the order they came. A big job lets go of the conversation once it goes to the background, so "what time is it?" isn't stuck behind "plan the week".
+
+**Several people, one chat or device.**
+- Mattermost group chats: each person's held change (a lock, the garage) waits for *their* own yes. A child's yes counts for nothing; a grown-up may answer someone else's in a group chat, as before.
+- A voice satellite: each recognised voice has its own conversation, so Robin's question doesn't land in the middle of Sam's. An unrecognised voice gets the household's.
+- A wall tablet signed in as Sam: if voice ID hears someone else (Robin), that request gets the family's view, never Sam's things. Taps can't be told apart, so the tablet still signs Sam out after `idle_seconds`.
+- Two devices at the same time: separate conversations; both are answered, quick ones first (below). Simple commands skip the model entirely.
+
 **Several at once.** A local model answers one request at a time (`model.parallel`, default 1), so FAITH queues its model calls itself (`harness/gate.ts`).
 - A big job holds its place only while the model is answering, not while its tools run.
 - Once a job is "big", its next calls wait behind quick questions. Someone asking the time while a dinner plan is being made waits for one round at most.

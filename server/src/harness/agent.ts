@@ -14,7 +14,7 @@ import { ModelGate } from "./gate.js";
 export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
 export type TurnOpts = { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal;
   /** Set by turnOrLater: once true, this turn's model calls wait behind quick questions. */
-  job?: { background: boolean };
+  job?: { background: boolean; release?: () => void };
   /** The text was heard (an Omi recording), not said to FAITH: every change waits for the person's own Yes. */
   heard?: boolean };
 export const LATER = "This one's a bigger job. I'll send you the answer when it's done.";
@@ -189,13 +189,14 @@ export class Agent {
    *  the answer, or the error, when it's done. */
   async turnOrLater(o: TurnOpts, withinMs: number, deliver: (r: TurnResult | Error) => void | Promise<void>): Promise<TurnResult & { later?: boolean }> {
     if (!(withinMs > 0)) return this.turn(o);
-    const job = { background: false }; let conversationId = o.conversationId ?? "";
+    const job: { background: boolean; release?: () => void } = { background: false }; let conversationId = o.conversationId ?? "";
     const p = this.turn({ ...o, job, onEvent: (e) => { if (e.type === "conversation") conversationId = e.id; o.onEvent?.(e); } });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<"late">((r) => { timer = setTimeout(() => r("late"), withinMs); });
     const first = await Promise.race([p, late]).finally(() => clearTimeout(timer));
     if (first !== "late") return first;
     job.background = true;
+    job.release?.();   // the conversation is free again: the person's next question goes ahead
     p.then((r) => deliver(r), (e) => deliver(e instanceof Error ? e : new Error(String(e)))).catch((e) => console.warn(`delivering a late answer failed: ${e?.message || e}`));
     return { conversationId, text: LATER, toolsUsed: [], pending: [], requests: [], later: true };
   }
@@ -212,6 +213,27 @@ export class Agent {
     if (!text) throw new ModelError(400, "Say something first.");
     const conv = this.conversation(c, o.conversationId, o.extId, o.freshAfterMs);
     emit({ type: "conversation", id: conv.id });
+    // One turn at a time per conversation: a second message waits for the first's answer, and sees it.
+    // A big job lets go when it goes to the background, so quick questions aren't stuck behind it.
+    const release = await this.lockConversation(conv.id);
+    if (o.job) o.job.release = release;
+    try { return await this.turnIn(o, conv, text, emit); } finally { release(); }
+  }
+
+  private convQueue = new Map<string, Promise<void>>();
+  private async lockConversation(id: string): Promise<() => void> {
+    const before = this.convQueue.get(id) ?? Promise.resolve();
+    let open!: () => void;
+    const mine = new Promise<void>((r) => (open = r));
+    const tail = before.then(() => mine);
+    this.convQueue.set(id, tail);
+    await before;
+    let done = false;
+    return () => { if (done) return; done = true; open(); if (this.convQueue.get(id) === tail) this.convQueue.delete(id); };
+  }
+
+  private async turnIn(o: TurnOpts, conv: { id: string; fresh: boolean }, text: string, emit: (e: AgentEvent) => void): Promise<TurnResult> {
+    const cfg = this.cfg(), c = o.caller;
     if (!o.images?.length && !o.history && !o.heard) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
     const set = await this.registry.toolsFor(c);
     const context = await this.contextFor(c, conv.id, set.tools, conv.fresh || !!o.history);

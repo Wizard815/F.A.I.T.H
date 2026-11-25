@@ -394,7 +394,8 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     ].filter(Boolean).join("\n") || undefined;
     // A bigger job ("plan the week's dinners") says so, and its answer goes to the person's chat and phone.
     const asker = c.scope.kind === "person" ? c.scope.person : c.speaker;
-    const opts = { caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined, extraSystem: extra };
+    // Each voice on a satellite has its own conversation: Robin's question doesn't land in the middle of Sam's.
+    const opts = { caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}${speaker ? `:${speaker.id}` : ""}` : undefined, extraSystem: extra };
     const r = asker ? await agent.turnOrLater(opts, cfg().voice.answer_within_s * 1000, (late) => agent.deliverLate(asker, late)) : await agent.turn(opts);
     return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null, speaker: speaker?.id ?? null, room: room ?? null };
   });

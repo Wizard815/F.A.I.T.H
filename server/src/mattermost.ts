@@ -16,6 +16,8 @@ type Log = { info: (o: any, m?: string) => void; warn: (o: any, m?: string) => v
 export class MattermostError extends Error {}
 
 const NEW_TOPIC = /^(new topic|new chat|new conversation|start over|start again|fresh start|\/new)[.!]*$/i;
+/** Held changes are kept per chat and per person. */
+const held = (channelId: string, personId: string) => `${channelId}|${personId}`;
 const YES = /^(yes|y|yep|yeah|ok|okay|sure|do it|go ahead|confirm)\b/i, NO = /^(no|n|nope|cancel|stop|don'?t)\b/i;
 const DECIDE = /^(approve|deny)\s+([A-Za-z0-9_-]{3,})\b/i;
 
@@ -170,8 +172,19 @@ export class MattermostBot {
   }
   private approver(p: Person) { return this.cfg().approvals.approvers.includes(p.role); }
 
-  /** One message, from the websocket (or a test). Returns what FAITH posted, if anything. */
-  async handle(post: Post, channelType?: string): Promise<string | undefined> {
+  /** One message, from the websocket (or a test). Messages in the same chat are handled in the order
+   *  they came: a quick second message can't overtake the first. Returns what FAITH posted, if anything. */
+  handle(post: Post, channelType?: string): Promise<string | undefined> {
+    const before = this.inOrder.get(post.channel_id) ?? Promise.resolve();
+    const mine = before.then(() => this.handleNow(post, channelType), () => this.handleNow(post, channelType));
+    const tail = mine.catch(() => undefined);
+    this.inOrder.set(post.channel_id, tail);
+    void tail.then(() => { if (this.inOrder.get(post.channel_id) === tail) this.inOrder.delete(post.channel_id); });
+    return mine;
+  }
+  private inOrder = new Map<string, Promise<unknown>>();
+
+  private async handleNow(post: Post, channelType?: string): Promise<string | undefined> {
     if (!this.me || post.user_id === this.me.id || (post.type && post.type !== "")) return;
     const room = this.rooms.get(post.channel_id), person = this.users.get(post.user_id);
     if (!room) {
@@ -193,17 +206,22 @@ export class MattermostBot {
     if (!text && att.problems.length) return this.say(post, att.problems.join(" "));
     if (!text) return att.skipped.length ? this.say(post, `I can read photos, videos and voice messages, not ${att.skipped.join(", ")}.`) : undefined;
 
-    // "yes" / "no" to something waiting for a confirmation in this chat.
-    const wait = this.pending.get(post.channel_id);
+    // "yes" / "no" to something waiting for a confirmation: their own first. Each person in a chat has
+    // their own, so Sam's held lock and Wizard's held garage don't replace each other.
+    let waitKey = held(post.channel_id, person.id), wait = this.pending.get(waitKey);
+    if (!wait && (YES.test(text) || NO.test(text))) {
+      // Someone else's in this chat: a grown-up may answer it in a group chat (as before); anyone else's yes counts for nothing.
+      const other = [...this.pending.entries()].reverse().find(([k]) => k.startsWith(`${post.channel_id}|`));
+      if (other) { if (!(room.kind !== "personal" && this.approver(person))) return; [waitKey, wait] = other; }
+    }
     if (wait && (YES.test(text) || NO.test(text))) {
-      if (wait.by !== person.id && !(room.kind !== "personal" && this.approver(person))) return;
-      this.pending.delete(post.channel_id);
+      this.pending.delete(waitKey);
       const by = this.cfg().people.find((p) => p.id === wait.by) ?? person;
       try { const r = await this.agent.confirm(this.callerFor(room, by, post.channel_id), wait.id, YES.test(text)); return this.say(post, r.text); }
       catch (e: any) { return this.say(post, e.message); }
     }
     // They moved on: a later "yes" must not land on this older change.
-    if (wait && wait.by === person.id) this.pending.delete(post.channel_id);
+    if (wait && wait.by === person.id) this.pending.delete(waitKey);
 
     // "approve abc12" / "deny abc12" from a grown-up (parents' chat or their own DM).
     const d = text.match(DECIDE);
@@ -224,7 +242,7 @@ export class MattermostBot {
     }
 
     if (NEW_TOPIC.test(text) && !att.images.length) {
-      if (wait && wait.by === person.id) this.pending.delete(post.channel_id);
+      this.pending.delete(held(post.channel_id, person.id));
       this.agent.newTopic(this.callerFor(room, person, post.channel_id), `mm:${post.channel_id}`);
       return this.say(post, "Okay, a fresh start. I've put our earlier chat away.");
     }
@@ -234,7 +252,7 @@ export class MattermostBot {
       const finish = (r: TurnResult, note = "") => {
         let reply = note + (r.text || "Done.");
         if (r.pending.length) {
-          this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
+          this.pending.set(held(post.channel_id, person.id), { id: r.pending.at(-1)!.id, by: person.id });
           if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
         }
         if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
@@ -259,7 +277,7 @@ export class MattermostBot {
     if (!r.pending.length && /^\W*nothing\W*$/i.test(r.text.trim())) return undefined;
     let reply = r.text || "Done.";
     if (r.pending.length) {
-      this.pending.set(channel, { id: r.pending.at(-1)!.id, by: person.id });
+      this.pending.set(held(channel, person.id), { id: r.pending.at(-1)!.id, by: person.id });
       if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
     }
     await this.post(channel, reply);

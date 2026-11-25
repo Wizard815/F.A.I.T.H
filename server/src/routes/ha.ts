@@ -105,9 +105,14 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
       const audio = Buffer.from(String(b.audio), "base64"), mime = String(b.mime || "audio/webm");
       heard = await transcribe(x.cfg(), x.env, audio, mime); text = heard;
       // On a shared screen with nobody signed in, a known voice says who's talking.
-      if (caller.scope.kind === "household" && voices.enabled()) {
+      if ((caller.scope.kind === "household" || w.hub) && voices.enabled()) {
         const m = await voices.identify(audio, mime).catch(() => undefined);
-        if (m) { speaker = m.person; if (cfg().voice_id?.trust_for_changes !== false) caller = { ...caller, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen || "HA"}` }; }
+        if (m && caller.scope.kind === "household") { speaker = m.person; if (cfg().voice_id?.trust_for_changes !== false) caller = { ...caller, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen || "HA"}` }; }
+        // Signed in as Sam, but that's Robin talking: Robin gets the family's view, never Sam's things.
+        else if (m && w.hub && m.person.id !== w.hub.person.id) {
+          speaker = m.person;
+          caller = { scope: { kind: "household" }, channel: "ha", deviceId: caller.deviceId, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen} while ${w.hub.person.id} is signed in` };
+        }
       }
     }
     // Photos (the card already shrank them) and a video (frames plus what its sound says).
