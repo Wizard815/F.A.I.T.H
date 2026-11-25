@@ -7,6 +7,7 @@ description: "A short good-morning summary of the day ahead, for a person or the
 2. Look at today's meals with meals, and the weather with home_find (domain weather) if it's available.
 3. Check chores still to do with allglance_list_chores.
 4. If anything is waiting for approval, mention how many (approvals are on the family's screens and in the parents' chat).
+5. For one person: their open follow-ups from the wiki are in what you know about them (context_for). Mention the one or two that matter today. If you don't have it, call context_for with their id.
 
 Write it like a friendly note on the fridge:
 - Start with "Good morning" and the person's name (or "everyone").

@@ -66,6 +66,10 @@ connectors:
     # parents_token_env: WIKI_TOKEN_PARENTS     # optional: what the parents' Mattermost chat may see
     person_token_env: WIKI_TOKEN_{ID}           # member tokens: family-setup.mjs token <id>
     tools: [whoami, who_is, family_members, context_for, memory_log, memory_capture, notes_search, note_read, query_wiki, conversation_log]
+    always: [memory_log, notes_search]          # offered for every question: remembering and recalling
+    teller_tools: [memory_log, memory_capture, memory_add_source]   # a note goes in the teller's own notes
+    # For the admin, issue the token "as member" (family-setup.mjs token <id> --label faith --as member):
+    # an admin token reads everyone's notes, and FAITH also answers on shared screens.
 
   - id: allglance
     type: mcp
@@ -104,6 +108,15 @@ connectors:
     person_token_env: COINPILE_TOKEN_{ID}    # scopes mcp + act; no household token: money is never in the shared view
     roles: [admin, adult]
 
+  - id: omi                                  # each person's own Omi (docs/omi.md)
+    type: mcp
+    url: http://192.168.1.5:8000/v1/mcp
+    description: "Omi: this person's recorded conversations and memories"
+    person_token_env: OMI_TOKEN_{ID}         # their own read-only key; no household token
+    tools: ["get_*", "search_*"]
+    heard: true                              # what Omi heard is context: changes after it wait for a Yes
+    roles: [admin, adult]
+
   - id: orb
     type: mcp
     url: http://192.168.1.5:8095/mcp
@@ -126,6 +139,7 @@ mattermost:
   token_env: MATTERMOST_BOT_TOKEN
   answer_in_groups: mention      # in the two channels, only when @faith is mentioned (or "always")
   new_topic_after_minutes: 240   # a chat quiet this long starts fresh; "new topic" does it any time (0 = never)
+                                 # the chat put away is filed in that person's wiki folder (memory.file_conversations)
   manage_members: true           # add the family, remove anyone else (no children in the parents' chat)
 
 # The wall screens (paired with `faith pair <id>`).
@@ -146,6 +160,9 @@ hub:
 personal:
   idle_days: 14
   max_days: 30
+
+memory:
+  file_conversations: true       # a person's chat, once put away, is filed in their own wiki folder for Ingest
 
 voice:
   confirm_on_voice: false        # locks etc. by voice need a screen unless this is true

@@ -36,6 +36,8 @@
 - Cameras: "who's at the door?" through HA's cameras and the local vision model, for the people each camera lists; `faith.look` for doorbell automations; HA's face recognition (Frigate, Double Take) names who it is.
 - Quick, small and big requests: a big job says so and sends its answer when done; a model queue puts quick questions first.
 - Mattermost chats start fresh after 4 quiet hours or on "new topic".
+- The wiki as memory: notes go to whoever said them (in code), recall searches older notes, context for group chats and voices, finished chats filed for Ingest.
+- Omi: each person's recordings, read with their own key; what Omi heard is context, so changes after it wait for a Yes.
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.
 

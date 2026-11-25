@@ -157,6 +157,7 @@ FAITH ties these together. Each is its own repository:
 | [Wizard815/hermes-agent](https://github.com/Wizard815/hermes-agent) | big jobs, run in each person's own Hermes profile |
 | [Wizard815/hermes-studio](https://github.com/Wizard815/hermes-studio) | each person's Hermes chats and jobs |
 | [Wizard815/coinpile](https://github.com/Wizard815/coinpile) | money, only in a person's own view |
+| [Wizard815/omi-local](https://github.com/Wizard815/omi-local) | each person's recorded conversations, read with their own key ([omi.md](docs/omi.md)) |
 | [Wizard815/pondering-orb](https://github.com/Wizard815/pondering-orb) | Wizard's own dashboard; FAITH's agent loop started from Orb's |
 | [Wizard815/omi-local](https://github.com/Wizard815/omi-local) | Omi memories, through ALLGlance |
 | [Wizard815/plaid-firefly-connector](https://github.com/Wizard815/plaid-firefly-connector) and [Wizard815/firefly-iii](https://github.com/Wizard815/firefly-iii) | the kid's card: approved money rewards are recorded as transfers to the child's account ([how](docs/rewards.md)) |

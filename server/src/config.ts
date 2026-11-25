@@ -35,6 +35,15 @@ export type McpConnector = {
   roles?: PolicyName[];          // who gets this connector at all (default: everyone)
   prefix?: string;               // tool name prefix (default "<id>_", skipped when the name already has it)
   description?: string;          // one line for the model: what this source is
+  /** Tools whose `person` argument FAITH sets to whoever is telling it (the signed-in person, or the
+   *  speaker in a group chat or by voice), e.g. the wiki's memory_log: a note goes in the teller's own
+   *  notes, never someone else's. "household" is kept. */
+  teller_tools?: string[];
+  /** Globs of tools always offered, whatever the question (the router doesn't drop them). */
+  always?: string[];
+  /** What this source returns was heard, not said to FAITH (Omi's recordings: other people, the TV).
+   *  Like a video's sound, it's context: any change later in that turn waits for the person's own Yes. */
+  heard?: boolean;
 };
 export type HomeAssistantConnector = {
   id: string; type: "homeassistant"; url: string;
@@ -128,6 +137,8 @@ export type Config = {
   voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
   /** FAITH as a Wyoming speech-to-text service for HA's voice pipeline (and voice ID on satellites). */
   wyoming?: { port: number; host: string; languages: string[]; allow_from: string[] };
+  /** A person's chat, once put away ("new topic" or quiet), is filed in their own wiki folder for Ingest (the wiki's conversation_log). */
+  memory: { file_conversations: boolean };
   rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
   notifications: { approvals_push: boolean };
   /** Checking every source on a schedule and telling the parents when one goes down (health.ts). 0 = off. */
@@ -220,7 +231,8 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!/^https?:\/\//.test(url)) throw new ConfigError(`connectors.${id}.url must start with http:// or https://.`);
     const roles = c.roles ? (list(c.roles) as PolicyName[]) : undefined;
     if (type === "mcp" && c.auth === "none" && !c.roles) throw new ConfigError(`connectors.${id}: with auth: none, say who may use it (roles: [admin] or [admin, parents]); a token-less source would otherwise reach the shared view too.`);
-    if (type === "mcp") return { id, type, url, url_env: c.url_env ? str(c.url_env) : undefined, auth: c.auth === "none" ? "none" : "token", household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description } as McpConnector;
+    if (type === "mcp") return { id, type, url, url_env: c.url_env ? str(c.url_env) : undefined, auth: c.auth === "none" ? "none" : "token", household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description,
+      teller_tools: c.teller_tools ? list(c.teller_tools) : undefined, always: c.always ? list(c.always) : undefined, heard: bool(c.heard, false) } as McpConnector;
     if (type === "homeassistant") {
       const ex = c.expose || {};
       return { id, type, url, token_env: str(c.token_env, "HA_TOKEN"), person_token_env: c.person_token_env, roles,
@@ -309,6 +321,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     hub: { idle_seconds: num(h.idle_seconds, 120), away_seconds: num(h.away_seconds, 45), max_idle_seconds: num(h.max_idle_seconds, 900), max_hours: num(h.max_hours, 8),
       show_people_to_unpaired: bool(h.show_people_to_unpaired, false), pin_on_personal_devices: bool(h.pin_on_personal_devices, false), devices },
     personal: { idle_days: num(raw.personal?.idle_days, 14), max_days: num(raw.personal?.max_days, 30) },
+    memory: { file_conversations: bool(raw.memory?.file_conversations, true) },
     voice: { confirm_on_voice: bool(raw.voice?.confirm_on_voice, false), stt_model: str(raw.voice?.stt_model, "whisper"), tts_model: str(raw.voice?.tts_model, "tts"), tts_voice: str(raw.voice?.tts_voice, ""), speak_replies: bool(raw.voice?.speak_replies, false), answer_within_s: Math.max(0, num(raw.voice?.answer_within_s, 10)) },
     dashboard: { entities: list(d.entities), cards },
     apps, approvals: { approvers, ttl_hours: num(ap.ttl_hours, 24) },

@@ -125,8 +125,14 @@ export class McpConnector implements Connector {
         strict: t.annotations?.destructiveHint ? () => true : undefined,
         confirm: t.annotations?.destructiveHint ? async (args: any) => (previews && (await preview(t.name, args))) ||
           `${(t.description || t.name).split(/[.\n]/)[0].slice(0, 120)} (${t.name}${args && Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 160)}` : ""})` : undefined,
+        always: this.cfg.always?.some((p) => glob(p, t.name)) || undefined,
+        media: this.cfg.heard || undefined,   // heard (Omi): what comes back is context, never a request
         run: async (args: any) => {
-          const r = await c.call(t.name, args && typeof args === "object" ? args : {});
+          args = args && typeof args === "object" ? { ...args } : {};
+          // A note goes in the notes of whoever is telling FAITH, whatever the model chose.
+          const teller = caller.speaker?.id ?? (caller.scope.kind === "person" ? caller.scope.person.id : undefined);
+          if (teller && this.cfg.teller_tools?.some((p) => glob(p, t.name)) && String(args.person ?? "").toLowerCase() !== "household") args.person = teller;
+          const r = await c.call(t.name, args);
           if (r.isError) return { error: r.text || "the tool failed" };
           return r.structured ?? r.text;
         },

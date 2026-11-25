@@ -27,12 +27,21 @@ The wiki already has exactly this model (`schema/agents.md` → Family). On the 
 ```bash
 node scripts/family-setup.mjs add-shared faith FAITH   # FAITH as the family's shared agent
 node scripts/family-setup.mjs token faith              # -> WIKI_TOKEN_HOUSEHOLD
-node scripts/family-setup.mjs token wizard             # -> WIKI_TOKEN_WIZARD (one per member)
+node scripts/family-setup.mjs token sam                # -> WIKI_TOKEN_SAM (one per member)
+node scripts/family-setup.mjs token wizard --label faith --as member   # -> WIKI_TOKEN_WIZARD (the admin: see below)
 ```
+
+- **The admin's token goes "as member".** A plain admin token reads everyone's notes, so a search in the admin's chat, or on a screen they signed into, could turn up Sam's surprise for them. `--as member` (wiki branch with that option) sees only their own notes, like everyone else. Keep the full admin token for the wiki's own maintenance.
 
 - Connector URL: `http://<vault>:27123/family-mcp`.
 - The shared-agent token reads `household/` and each profile's "Shared with the family" section, never private notes. A member's token reads their own root as well.
 - **Check first:** the wiki's own note says `/family-mcp` still needs checking on RaidLab after the bridge is deployed. `faith doctor` calls `wiki_whoami` with each token.
+- **How FAITH uses it as memory:**
+  - **Whoever is talking gets their context** at the start of a chat, again every 15 minutes, and when the day changes. In a group chat or by voice that's the speaker, through the shared token: only what they share with the family.
+  - **"Remember that…"** goes to `memory_log`, under "Decisions / facts worth keeping", in the notes of **whoever said it**. FAITH sets that in code (`teller_tools`), not only in the prompt. If Sam says "remember Wizard's present is a watch" in the family chat, it lands in Sam's notes, not Wizard's. Only `household` is kept as the model gave it.
+  - **Recall.** The context is only today's note, so FAITH searches the person's notes before answering about something they told it before. `always: [memory_log, notes_search]` keeps those offered for every question.
+  - **Finished chats are filed.** When a personal chat is put away ("new topic", or 4 quiet hours), it goes to that person's `raw/sources/` as a source for the wiki's Ingest (`memory.file_conversations`). Group chats and shared screens aren't filed.
+  - The morning brief mentions the person's follow-ups; the evening wrap-up asks what's worth remembering.
 - The wiki's rule is that personal roots are read only by local models. Argos is local, so FAITH follows it; don't point `model.base_url` at a cloud API.
 
 ## ALLGlance

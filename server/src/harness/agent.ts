@@ -36,7 +36,28 @@ export class Agent {
 
   /** Put a chat's conversation away, so the next message starts fresh ("new topic"). */
   newTopic(c: Caller, extId: string) {
-    return Number(this.db.prepare("UPDATE conversations SET ext_id = ext_id || ':done:' || ? WHERE ext_id = ? AND owner_key = ?").run(String(Date.now()), extId, this.ownerKey(c)).changes) > 0;
+    const row = this.db.prepare("SELECT id FROM conversations WHERE ext_id = ? AND owner_key = ?").get(extId, this.ownerKey(c)) as any;
+    if (!row) return false;
+    this.db.prepare("UPDATE conversations SET ext_id = ext_id || ':done:' || ? WHERE id = ?").run(String(Date.now()), row.id);
+    this.filing = this.fileConversation(c, row.id).catch((e) => console.warn(`filing a chat in the wiki failed: ${e?.message || e}`));
+    return true;
+  }
+  /** The last chat filing (tests wait for it). */
+  filing: Promise<unknown> = Promise.resolve();
+
+  /** A person's finished chat, filed in their own wiki folder as a source for Ingest (conversation_log),
+   *  with their own token and through wrap (the action log). Group chats and shared screens aren't filed. */
+  private async fileConversation(c: Caller, conversationId: string) {
+    if (c.scope.kind !== "person" || c.audience || !this.cfg().memory.file_conversations) return;
+    const person = c.scope.person;
+    const rows = this.db.prepare("SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id").all(conversationId) as any[];
+    if (rows.filter((r) => r.role === "user").length < 2) return;   // a question or two isn't worth filing
+    const t = (await this.registry.toolsFor(c)).tools.find((x) => /(^|_)conversation_log$/.test(x.name));
+    if (!t || t.approval) return;
+    const [w] = this.wrap(c, [t], conversationId, [], [], () => {});
+    const day = new Date(Number(rows[0].created_at)).toISOString().slice(0, 10);
+    await w.run({ title: `Chat with ${this.cfg().name} (${c.channel})`, date: day, source: `faith-${c.channel}`, id: `faith-${conversationId}`,
+      segments: rows.map((r) => r.role === "user" ? { text: String(r.content), person: person.id } : { text: String(r.content), speaker: this.cfg().name }) });
   }
 
   private conversation(c: Caller, id?: string, extId?: string, freshAfterMs = 0) {
@@ -66,13 +87,12 @@ export class Agent {
     this.db.prepare("INSERT INTO audit (at, who, channel, tool, summary, ok) VALUES (?, ?, ?, ?, ?, ?)").run(Date.now(), by, c.channel, tool, summary.slice(0, 500), ok ? 1 : 0);
   }
 
-  /** The person's context from the wiki (profile, today's note, inbox), once per conversation. */
-  private async context(c: Caller, tools: Tool[]) {
-    if (c.scope.kind !== "person") return undefined;
+  /** One person's (or the household's) context from the wiki: profile, today's note, follow-ups. */
+  private async context(c: Caller, tools: Tool[], person: string) {
     const t = tools.find((x) => /(^|_)context_for$/.test(x.name));
     if (!t) return undefined;
     try {
-      const out = await t.run({ person: c.scope.person.id });
+      const out = await t.run({ person });
       const text = typeof out === "string" ? out : JSON.stringify(out);
       const max = this.cfg().model.context_chars;
       return text.length > max ? text.slice(0, max) + " …" : text;
@@ -187,16 +207,12 @@ export class Agent {
     emit({ type: "conversation", id: conv.id });
     if (!o.images?.length && !o.history) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
     const set = await this.registry.toolsFor(c);
-    const context = conv.fresh || o.history ? await this.context(c, set.tools) : this.lastContext.get(conv.id);
-    if (context) {
-      this.lastContext.set(conv.id, context);
-      if (this.lastContext.size > 200) this.lastContext.delete(this.lastContext.keys().next().value!);
-    }
+    const context = await this.contextFor(c, conv.id, set.tools, conv.fresh || !!o.history);
     const sources = this.registry.describe(set.sources) + (set.problems.length ? `\n(Not reachable right now: ${set.problems.map((p) => p.split(":")[0]).join(", ")}.)` : "");
     // HA's own overview of the house (areas, devices, aliases), when the Assist API is on.
     const house = this.registry.ha && this.registry.allowedConnector(c, this.registry.ha.id) ? await this.registry.ha.houseContext(c) : undefined;
     const extra = [o.extraSystem, house && `How the house is set up (from Home Assistant):\n${house}`].filter(Boolean).join("\n\n") || undefined;
-    const system = systemPrompt(cfg, c, sources, { context, extra, home: this.homeLine?.() });
+    const system = systemPrompt(cfg, c, sources, { context: context?.text, contextAbout: context?.about, extra, home: this.homeLine?.() });
     const past = o.history ?? this.history(conv.id);
     const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
     // Many tools (ha-mcp alone has 86): offer the ones this question needs. The previous question counts too.
@@ -218,7 +234,19 @@ export class Agent {
     this.save(conv.id, "assistant", result.text);
     return { conversationId: conv.id, text: result.text, toolsUsed: result.toolsUsed, pending, requests };
   }
-  private lastContext = new Map<string, string>();
+  private lastContext = new Map<string, { at: number; day: string; text?: string; about: string }>();
+  /** What the wiki says about whoever is asking: on a new conversation, then again every 15 minutes
+   *  or when the day changes. In a group chat or by voice that's the speaker (the wiki gives a shared
+   *  token only what they share); on the household screen, the household's day. */
+  private async contextFor(c: Caller, conversationId: string, tools: Tool[], fresh: boolean) {
+    const about = c.scope.kind === "person" ? c.scope.person : c.speaker;
+    const key = `${conversationId}|${about?.id ?? "household"}`, day = new Date().toDateString(), hit = this.lastContext.get(key);
+    if (!fresh && hit && hit.day === day && Date.now() - hit.at < 15 * 60_000) return hit;
+    const v = { at: Date.now(), day, text: await this.context(c, tools, about?.id ?? "household"), about: about?.name ?? "the household" };
+    this.lastContext.set(key, v);
+    if (this.lastContext.size > 300) this.lastContext.delete(this.lastContext.keys().next().value!);
+    return v;
+  }
 
   /** Run one tool directly (a card's button), through the same approval,
    *  confirmation and logging as a chat turn. */
