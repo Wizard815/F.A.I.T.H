@@ -18,6 +18,7 @@ export const SERVICES: Service[] = [
   { id: "orb", port: 8095, path: "/mcp", kind: "mcp", what: "Pondering Orb" },
   { id: "hermes", port: 8642, path: "/v1/models", kind: "http", what: "Hermes", keyed: true },
   { id: "studio", port: 6060, path: "/", kind: "http", what: "Hermes Studio" },
+  { id: "mealie", port: 9000, path: "/api/app/about", kind: "http", what: "Mealie (recipes)", names: ["mealie"] },
   { id: "mattermost", port: 8065, path: "/api/v4/system/ping", kind: "http", what: "Mattermost", names: ["mattermost"] },
   { id: "voiceid", port: 8099, path: "/health", kind: "http", what: "voice ID (FAITH's voiceid service)", names: ["voiceid"] },
   { id: "hamcp", port: 9584, path: "/", kind: "http", what: "ha-mcp (Home Assistant for agents)" },
@@ -94,6 +95,10 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
   if (has("studio")) {
     connectors.push({ id: "studio", type: "studio", url: found.studio, user_env: "STUDIO_USER_{ID}", password_env: "STUDIO_PASSWORD_{ID}", roles: ["admin", "adult"] });
     for (const p of adults) { need(`STUDIO_USER_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio user name`); need(`STUDIO_PASSWORD_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio password`); }
+  }
+  if (has("mealie")) {
+    connectors.push({ id: "mealie", type: "mealie", url: found.mealie, token_env: "MEALIE_TOKEN" });
+    need("MEALIE_TOKEN", "in Mealie: your profile → API Tokens (for adding recipes; the meal plan and shopping lists go through HA's Mealie integration)");
   }
   if (has("hamcp")) {
     connectors.push({ id: "hamcp", type: "mcp", url_env: "HA_MCP_URL", auth: "none", roles: ["admin"], prefix: "", description: "ha-mcp: Home Assistant's configuration (automations, scripts, dashboards, history)" });

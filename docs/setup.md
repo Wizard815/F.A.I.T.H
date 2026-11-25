@@ -82,7 +82,29 @@ docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard    
    - Each Mealie shopping list becomes a `todo.*` entity: list them in `shopping_lists`.
    - The meal plan becomes `calendar.mealie_*` entities: list them in `meal_calendars`. FAITH can then read and change both, and changes reach Mealie.
    - For `meal_plan` and `recipes_search`, set `mealie_config_entry_id`: Settings → Devices & services → Mealie → ⋮ → Copy entry ID.
+   - **Adding recipes** (from a photo of a cookbook page or a card, or a link) needs Mealie itself, because HA can't add one. Add a `mealie` connector (below).
 3. **The other direction (HA → FAITH)** is the integration: see [home-assistant.md](home-assistant.md).
+
+## Mealie (adding recipes)
+
+HA's Mealie integration reads recipes and changes the meal plan and lists. Adding a recipe needs Mealie's own API:
+
+```yaml
+connectors:
+  - id: mealie
+    type: mealie
+    url: http://<server-ip>:9000
+    token_env: MEALIE_TOKEN   # Mealie: your profile → API Tokens
+```
+
+- Then show FAITH a cookbook page or a recipe card ("put this in Mealie"), or send a recipe link. FAITH reads it, shows what it will add, and adds it after your Yes.
+- Grown-ups, the parents chat and the shared screens get it. Add `roles: [admin, adult, child, parents, household]` to let children add recipes too.
+- Needs Mealie 1.10 or newer.
+
+**What goes wrong:**
+- "Mealie refused the token": make a new API token in Mealie and put it in `MEALIE_TOKEN`.
+- A handwritten amount it can't read: FAITH asks instead of guessing. Check the recipe in Mealie afterwards anyway.
+- The photo isn't kept with the recipe. Add it in Mealie if you want the original card there.
 
 ## Coinpile
 

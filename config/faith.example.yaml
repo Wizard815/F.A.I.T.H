@@ -95,6 +95,7 @@ connectors:
     shopping_lists: [todo.mealie_shopping_list]
     meal_calendars: [calendar.mealie_breakfast, calendar.mealie_lunch, calendar.mealie_dinner]
     mealie_config_entry_id: ""     # Settings > Devices & services > Mealie > ⋮ > copy entry id
+                                   # adding recipes (from a photo or a link) is the mealie connector below
     trust_ha_users: true           # Assist from an HA user mapped above acts as that person
     assist_api: true               # HA's own Assist tools and house overview (FAITH integration 0.4+; docs/home-assistant.md)
     fast_path: true                # simple commands go to HA's own sentence matcher first, no model (integration 0.5+)
@@ -102,6 +103,11 @@ connectors:
       - entity: camera.front_door
         name: Front door
         who: [admin, adult, parents]
+
+  - id: mealie                               # adding recipes from a photo or a link (HA can't add them)
+    type: mealie
+    url: http://<server-ip>:9000
+    token_env: MEALIE_TOKEN                  # Mealie: your profile > API Tokens
 
   - id: coinpile
     type: mcp

@@ -86,7 +86,12 @@ export type StudioConnector = {
   password_env: string;          // e.g. STUDIO_PASSWORD_{ID}
   roles?: PolicyName[];
 };
-export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector;
+export type MealieConnector = {
+  id: string; type: "mealie"; url: string;
+  token_env: string;             // a Mealie API token (profile > API Tokens), e.g. MEALIE_TOKEN
+  roles?: PolicyName[];
+};
+export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector | MealieConnector;
 
 /** An app on the family homepage (the launcher). */
 export type AppLink = { id: string; name: string; url: string; icon?: string; who: "anyone" | "person"; roles?: PolicyName[]; people?: string[] };
@@ -257,8 +262,9 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
         }) } as HomeAssistantConnector;
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
+    if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "adult", "parents", "household"] } as MealieConnector;
     if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
-    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes or studio.`);
+    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio or mealie.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
   if (dupC) throw new ConfigError(`Two connectors have the id "${dupC}".`);
