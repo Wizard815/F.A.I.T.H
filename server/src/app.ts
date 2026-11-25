@@ -25,6 +25,7 @@ import { registerHaRoutes } from "./routes/ha.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { Health } from "./health.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
+import { registerOmiRoutes } from "./routes/omi.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -375,6 +376,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   registerHaRoutes(app, ctx);
   registerAdminRoutes(app, ctx);
   registerMcpRoutes(app, { agent, registry, apiCaller, name: () => cfg().name });
+  const omi = registerOmiRoutes(app, { cfg, db, auth, notifier });
 
   // ---------- the web app ----------
   if (opts.webDir && existsSync(opts.webDir)) {
@@ -390,5 +392,5 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   sweeper.unref();
   app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); });
 
-  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health };
+  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health, omi };
 }

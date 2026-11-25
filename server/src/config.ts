@@ -16,6 +16,7 @@ export type Person = {
   allglance_owner_id?: string; // ALLGlance roster id (allglance_list_users), if it differs from id
   ha_user_id?: string;         // Home Assistant user id: Assist requests from this HA user act as this person
   face_names?: string[];       // names a camera face-recognition sensor reports for this person
+  omi_uid?: string;            // their Omi account's uid: only their own Omi's webhook is accepted for them
   hermes_profile?: string;     // Hermes profile to use for this person (defaults to id)
   firefly_account?: string;    // the kid's card: their Firefly III asset account (id or exact name)
   ha_person?: string;          // their HA person entity, for who's home (default person.<id>; "" turns it off)
@@ -204,7 +205,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const role = str(p.role, "adult") as Role;
     if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
-      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined, ha_person: p.ha_person != null ? str(p.ha_person) : undefined,
+      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), omi_uid: p.omi_uid ? str(p.omi_uid) : undefined, hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined, ha_person: p.ha_person != null ? str(p.ha_person) : undefined,
       mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined,
       ha_notify: list(p.ha_notify).map((n) => (n.includes(".") ? n : `notify.${n}`)), cards: p.cards ? list(p.cards) : undefined };
   });

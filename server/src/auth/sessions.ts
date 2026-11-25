@@ -134,6 +134,7 @@ export class Auth {
       this.db.prepare("UPDATE api_tokens SET last_used = ? WHERE name = ?").run(this.now(), row.name);
       const person = personById(cfg, row.person_id);
       if (row.kind === "person" && !person) return null; // the person was removed from the config
+      if (row.kind === "omi") return null; // an Omi webhook token opens only its webhook (Omi keeps it in plain text)
       return { scope: person ? { kind: "person", person } : { kind: "household" }, channel: row.kind === "ha" ? "voice" : "api", label: `token:${row.name}`, apiKind: row.kind };
     }
     const device = this.device(opts.deviceToken);
@@ -179,13 +180,21 @@ export class Auth {
   }
 
   // ---------- API tokens (Home Assistant, Omi, scripts) ----------
-  addToken(kind: "household" | "person" | "ha", name: string, personId?: string) {
+  addToken(kind: "household" | "person" | "ha" | "omi", name: string, personId?: string) {
     if (!/^[a-z0-9][a-z0-9_.-]{0,40}$/.test(name)) throw new AuthError(400, "Token names are lowercase letters, digits, ., - or _.");
-    if (kind === "person" && !personById(this.cfg(), personId)) throw new AuthError(400, `No person "${personId}" in the config.`);
+    if ((kind === "person" || kind === "omi") && !personById(this.cfg(), personId)) throw new AuthError(400, `No person "${personId}" in the config.`);
+    if (kind === "omi" && personById(this.cfg(), personId)!.role === "child") throw new AuthError(400, "Omi suggestions are for grown-ups: a child's recordings don't go to FAITH.");
     if (this.db.prepare("SELECT 1 FROM api_tokens WHERE name = ?").get(name)) throw new AuthError(409, `A token named ${name} exists. Revoke it first.`);
-    const token = newToken(kind === "ha" ? "fha_" : "faith_");
-    this.db.prepare("INSERT INTO api_tokens (name, token_hash, kind, person_id, created_at) VALUES (?, ?, ?, ?, ?)").run(name, sha256(token), kind, kind === "person" ? personId! : null, this.now());
+    const token = newToken(kind === "ha" ? "fha_" : kind === "omi" ? "fomi_" : "faith_");
+    this.db.prepare("INSERT INTO api_tokens (name, token_hash, kind, person_id, created_at) VALUES (?, ?, ?, ?, ?)").run(name, sha256(token), kind, kind === "person" || kind === "omi" ? personId! : null, this.now());
     return token;
+  }
+  /** The person behind an Omi webhook token (only that kind), or null. */
+  omiPerson(token: string) {
+    const row = this.db.prepare("SELECT name, person_id FROM api_tokens WHERE token_hash = ? AND kind = 'omi'").get(sha256(String(token || ""))) as any;
+    if (!row) return null;
+    this.db.prepare("UPDATE api_tokens SET last_used = ? WHERE name = ?").run(this.now(), row.name);
+    return personById(this.cfg(), row.person_id) ?? null;
   }
   tokens() { return this.db.prepare("SELECT name, kind, person_id, created_at, last_used FROM api_tokens ORDER BY name").all() as any[]; }
   revokeToken(name: string) { return Number(this.db.prepare("DELETE FROM api_tokens WHERE name = ?").run(name).changes) > 0; }

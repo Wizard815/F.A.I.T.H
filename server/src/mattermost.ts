@@ -249,6 +249,23 @@ export class MattermostBot {
     } finally { clearInterval(typing); }
   }
 
+  /** FAITH starts a message in a person's own chat (an Omi recording's suggestions). The text is
+   *  context FAITH was handed, not something they said: every change waits for their yes here.
+   *  Returns what was posted, or undefined when there was nothing worth saying. */
+  async proactive(person: Person, text: string, extraSystem: string) {
+    const channel = this.dmOf(person.id), room = channel ? this.rooms.get(channel) : undefined;
+    if (!channel || !room) throw new Error(`${person.name} has no chat with FAITH in Mattermost yet.`);
+    const r = await this.agent.turn({ caller: this.callerFor(room, person, channel), text, extraSystem, heard: true, extId: `mm:${channel}`, freshAfterMs: this.mm.new_topic_after_minutes * 60_000 });
+    if (!r.pending.length && /^\W*nothing\W*$/i.test(r.text.trim())) return undefined;
+    let reply = r.text || "Done.";
+    if (r.pending.length) {
+      this.pending.set(channel, { id: r.pending.at(-1)!.id, by: person.id });
+      if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
+    }
+    await this.post(channel, reply);
+    return reply;
+  }
+
   private async say(post: Post, message: string) { await this.post(post.channel_id, message, post.root_id || undefined); return message; }
 
   private typing(channelId: string, parentId?: string) {

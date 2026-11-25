@@ -31,6 +31,7 @@ people:
     ha_user_id: ""               # Home Assistant user id: Assist from this HA user acts as Wizard
     face_names: [Wizard]         # what a face-recognition sensor calls him
     mattermost_username: wizard  # his DMs with FAITH in Mattermost act as him
+    # omi_uid: "<uid>"            # their Omi account: only its webhook is accepted for them (docs/omi.md)
   - id: partner
     name: Partner
     role: adult

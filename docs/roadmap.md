@@ -37,7 +37,7 @@
 - Quick, small and big requests: a big job says so and sends its answer when done; a model queue puts quick questions first.
 - Mattermost chats start fresh after 4 quiet hours or on "new topic".
 - The wiki as memory: notes go to whoever said them (in code), recall searches older notes, context for group chats and voices, finished chats filed for Ingest.
-- Omi: each person's recordings, read with their own key; what Omi heard is context, so changes after it wait for a Yes.
+- Omi: each person's recordings, read with their own key; what Omi heard is context, so changes after it wait for a Yes. Each kept conversation can come to FAITH (a webhook), which suggests a few things in that person's chat, each waiting for their yes.
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.
 

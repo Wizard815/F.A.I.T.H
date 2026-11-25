@@ -14,7 +14,9 @@ import { ModelGate } from "./gate.js";
 export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
 export type TurnOpts = { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal;
   /** Set by turnOrLater: once true, this turn's model calls wait behind quick questions. */
-  job?: { background: boolean } };
+  job?: { background: boolean };
+  /** The text was heard (an Omi recording), not said to FAITH: every change waits for the person's own Yes. */
+  heard?: boolean };
 export const LATER = "This one's a bigger job. I'll send you the answer when it's done.";
 export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[];
   /** Done by HA's own sentence matcher, without the model. */
@@ -205,7 +207,7 @@ export class Agent {
     if (!text) throw new ModelError(400, "Say something first.");
     const conv = this.conversation(c, o.conversationId, o.extId, o.freshAfterMs);
     emit({ type: "conversation", id: conv.id });
-    if (!o.images?.length && !o.history) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
+    if (!o.images?.length && !o.history && !o.heard) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
     const set = await this.registry.toolsFor(c);
     const context = await this.contextFor(c, conv.id, set.tools, conv.fresh || !!o.history);
     const sources = this.registry.describe(set.sources) + (set.problems.length ? `\n(Not reachable right now: ${set.problems.map((p) => p.split(":")[0]).join(", ")}.)` : "");
@@ -221,7 +223,7 @@ export class Agent {
     // A photo goes to the vision model (Argos serves it) as an image part.
     // Up to 8: a video sends 6 frames.
     const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 8);
-    const seen = { media: images.length > 0 };   // a photo now, or a camera later in this turn
+    const seen = { media: images.length > 0 || !!o.heard };   // a photo or a recording now, or a camera later in this turn
     const userMsg: Msg = images.length ? { role: "user", content: [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] } : { role: "user", content: text };
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
