@@ -2,7 +2,7 @@ import { envValue, type Config, type Person } from "../config.js";
 import type { Db } from "../db.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Approvals } from "../approvals.js";
-import type { Tool } from "../connectors/types.js";
+import type { PhotoRef, Tool } from "../connectors/types.js";
 import { quickRead } from "../connectors/homeassistant.js";
 import { newId } from "../secrets.js";
 import { scopeKey, speakerLabel, who, type Caller } from "../scope.js";
@@ -11,7 +11,8 @@ import { systemPrompt } from "./prompt.js";
 import { ToolRouter } from "./router.js";
 import { ModelGate } from "./gate.js";
 
-export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
+export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string }
+  | { type: "photos"; items: PhotoRef[] };
 export type TurnOpts = { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal;
   /** Set by turnOrLater: once true, this turn's model calls wait behind quick questions. */
   job?: { background: boolean; release?: () => void };
@@ -19,6 +20,8 @@ export type TurnOpts = { caller: Caller; text: string; images?: string[]; conver
   heard?: boolean };
 export const LATER = "This one's a bigger job. I'll send you the answer when it's done.";
 export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[];
+  /** Photos a tool showed the person (the latest show wins), for apps that draw them. */
+  photos?: PhotoRef[];
   /** Done by HA's own sentence matcher, without the model. */
   quick?: boolean };
 
@@ -144,6 +147,8 @@ export class Agent {
         try {
           const out = await t.run(args);
           if (t.media) seen.media = true;
+          const pics = t.show?.(args, out);
+          if (pics?.length) emit({ type: "photos", items: pics });
           if (t.write) this.audit(c, t.name, JSON.stringify(args ?? {}), !(out && typeof out === "object" && "error" in (out as any)));
           return out;
         } catch (e: any) { if (t.write) this.audit(c, t.name, `${JSON.stringify(args ?? {})} -> ${e.message}`, false); throw e; }
@@ -254,16 +259,18 @@ export class Agent {
     const images = (o.images || []).filter((u) => /^data:image\/(png|jpe?g|webp|gif);base64,/.test(u)).slice(0, 8);
     const seen = { media: images.length > 0 || !!o.heard };   // a photo or a recording now, or a camera later in this turn
     const userMsg: Msg = images.length ? { role: "user", content: [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))] } : { role: "user", content: text };
+    let photos: PhotoRef[] | undefined;
+    const shows = (e: AgentEvent) => { if (e.type === "photos") photos = e.items; emit(e); };
     const result = await runLoop({
       baseUrl: cfg.model.base_url, model: images.length && cfg.model.vision_model ? cfg.model.vision_model : cfg.model.model, key: envValue(cfg.model.api_key_env, this.env), temperature: cfg.model.temperature, timeoutMs: cfg.model.timeout_s * 1000,
       messages: [{ role: "system", content: system }, ...past, userMsg],
-      tools: this.wrap(c, offered, conv.id, pending, requests, emit, seen),
-      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit, seen) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      tools: this.wrap(c, offered, conv.id, pending, requests, shows, seen),
+      callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, shows, seen) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
       gate: this.gate, background: () => !!o.job?.background,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);
-    return { conversationId: conv.id, text: result.text, toolsUsed: result.toolsUsed, pending, requests };
+    return { conversationId: conv.id, text: result.text, toolsUsed: result.toolsUsed, pending, requests, ...(photos ? { photos } : {}) };
   }
   private contextWarned = new Set<string>();
   private lastContext = new Map<string, { at: number; day: string; text?: string; about: string }>();
@@ -278,6 +285,13 @@ export class Agent {
     this.lastContext.set(key, v);
     if (this.lastContext.size > 300) this.lastContext.delete(this.lastContext.keys().next().value!);
     return v;
+  }
+
+  /** A photo's small picture, through the source that found it, with this caller's own key. */
+  async photo(c: Caller, source: string, id: string): Promise<{ bytes: Buffer; mime: string }> {
+    const src = this.registry.connectors.find((x) => x.id === source) as { thumbnail?: (c: Caller, id: string) => Promise<{ bytes: Buffer; mime: string }> } | undefined;
+    if (!src?.thumbnail || !this.registry.allowedConnector(c, source)) throw new ModelError(404, "Photos aren't available here.");
+    try { return await src.thumbnail(c, id); } catch (e: any) { throw new ModelError(404, e?.message || "That photo isn't there."); }
   }
 
   /** Run one tool directly (a card's button), through the same approval,

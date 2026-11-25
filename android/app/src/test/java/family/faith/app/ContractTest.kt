@@ -26,10 +26,21 @@ class ContractTest {
         assertEquals(6L, FaithApi.parseInbox(JSONObject("{\"items\":[]}"), 6).second)
     }
 
+    @Test fun photosFaithShowed() {
+        val e = JSONObject("""{"type":"photos","items":[{"source":"photos","id":"00000000-0000-4000-8000-000000000001","kind":"photo","taken":"2026-07-04 10:00","place":"Holland, USA","people":["Robin"],"link":"https://photos.example.org/photos/x"},
+            {"source":"photos","id":"","kind":"video","taken":""}]}""")
+        val p = FaithApi.parsePhotos(e)
+        assertEquals(1, p.size)
+        assertEquals("Photo from 2026-07-04 in Holland, USA with Robin", p[0].label)
+        assertEquals("https://photos.example.org/photos/x", p[0].link)
+        assertEquals(emptyList<Shown>(), FaithApi.parsePhotos(JSONObject("{\"type\":\"photos\"}")))
+    }
+
     @Test fun toolNamesInPlainWords() {
         assertEquals("checking the calendar", ChatModel.friendlyTool("allglance_get_day"))
         assertEquals("checking the house", ChatModel.friendlyTool("HassTurnOff"))
         assertEquals("checking your notes", ChatModel.friendlyTool("wiki_notes_search"))
+        assertEquals("looking through photos", ChatModel.friendlyTool("photos_search"))
         assertEquals("checking", ChatModel.friendlyTool("something_else"))
     }
 }

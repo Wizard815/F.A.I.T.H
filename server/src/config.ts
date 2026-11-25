@@ -17,6 +17,7 @@ export type Person = {
   ha_user_id?: string;         // Home Assistant user id: Assist requests from this HA user act as this person
   face_names?: string[];       // names a camera face-recognition sensor reports for this person
   omi_uid?: string;            // their Omi account's uid: only their own Omi's webhook is accepted for them
+  immich_user?: string;        // their Immich account's email: FAITH checks IMMICH_KEY_<ID> is that account
   hermes_profile?: string;     // Hermes profile to use for this person (defaults to id)
   firefly_account?: string;    // the kid's card: their Firefly III asset account (id or exact name)
   ha_person?: string;          // their HA person entity, for who's home (default person.<id>; "" turns it off)
@@ -91,7 +92,16 @@ export type MealieConnector = {
   token_env: string;             // a Mealie API token (profile > API Tokens), e.g. MEALIE_TOKEN
   roles?: PolicyName[];
 };
-export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector | MealieConnector;
+export type ImmichConnector = {
+  id: string; type: "immich"; url: string;
+  public_url?: string;           // Immich's address for people (links), e.g. https://photos.example.org
+  person_key_env: string;        // each person's own Immich API key, e.g. IMMICH_KEY_{ID}
+  household_key_env?: string;    // a family account's key for the shared screens (none: no photos there)
+  parents_key_env?: string;      // the parents chat's (default: household_key_env)
+  share_days: number;            // how long a share link works by default
+  roles?: PolicyName[];
+};
+export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector | MealieConnector | ImmichConnector;
 
 /** An app on the family homepage (the launcher). */
 export type AppLink = { id: string; name: string; url: string; icon?: string; who: "anyone" | "person"; roles?: PolicyName[]; people?: string[] };
@@ -221,7 +231,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     const role = str(p.role, "adult") as Role;
     if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
-      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), omi_uid: p.omi_uid ? str(p.omi_uid) : undefined, hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined, ha_person: p.ha_person != null ? str(p.ha_person) : undefined,
+      ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), omi_uid: p.omi_uid ? str(p.omi_uid) : undefined, immich_user: p.immich_user ? str(p.immich_user).trim() : undefined, hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined, ha_person: p.ha_person != null ? str(p.ha_person) : undefined,
       mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined,
       ha_notify: list(p.ha_notify).map((n) => (n.includes(".") ? n : `notify.${n}`)), cards: p.cards ? list(p.cards) : undefined };
   });
@@ -270,8 +280,11 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
     if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "adult", "parents", "household"] } as MealieConnector;
+    if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
+      household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
+      share_days: Math.min(30, Math.max(1, num(c.share_days, 7))), roles } as ImmichConnector;
     if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
-    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio or mealie.`);
+    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie or immich.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
   if (dupC) throw new ConfigError(`Two connectors have the id "${dupC}".`);

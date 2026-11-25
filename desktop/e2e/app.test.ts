@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseConfig } from "../../server/src/config.js";
 import { buildApp, type App } from "../../server/src/app.js";
-import { fakeHa, fakeModel } from "../../server/test/fakes.js";
+import { fakeHa, fakeImmich, fakeModel } from "../../server/test/fakes.js";
 
 // The real app (Electron) against a real FAITH with fakes. Needs a display: on Linux run it
 // under xvfb-run (Playwright drives Electron itself: no browsers to download).
@@ -14,24 +14,28 @@ const require = createRequire(import.meta.url);
 const { _electron } = require("playwright");
 const SHOTS = process.env.FAITH_DESKTOP_SHOTS;
 
+let immich: Awaited<ReturnType<typeof fakeImmich>>;
 let ha: Awaited<ReturnType<typeof fakeHa>>, model: Awaited<ReturnType<typeof fakeModel>>, A: App, url = "";
 let app: any, page: any;
 before(async () => {
   ha = await fakeHa({ "lock.front_door": { state: "locked", attributes: { friendly_name: "Front door" } } });
   model = await fakeModel((req) => {
     const last = req.messages?.at(-1);
-    if (last?.role === "tool") return { content: String(last.content).includes("waiting_for_confirmation") ? "I'll unlock it as soon as you say **yes**." : "Done." };
+    if (last?.role === "tool") return { content: String(last.content).includes("waiting_for_confirmation") ? "I'll unlock it as soon as you say **yes**." : String(last.content).includes("photos") ? "Two from the beach." : "Done." };
     const q = String(typeof last?.content === "string" ? last.content : last?.content?.[0]?.text || "");
+    if (/photos/.test(q)) return { tool_calls: [{ name: "photos_search", args: { query: "beach" } }] };
     if (/unlock/.test(q)) return { tool_calls: [{ name: "home_control", args: { entity_id: "lock.front_door", service: "unlock" } }] };
     return { content: "Tonight is **fish tacos**.\n- tortillas\n- limes" };
   });
+  const P = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
+  immich = await fakeImmich({ "k-sam": { email: "sam@example.org", name: "Sam", photos: [{ id: P(1), what: "beach sunset", city: "Holland", date: "2026-07-04" }, { id: P(2), what: "beach towels", date: "2026-07-05" }] } });
   const cfg = parseConfig({
     model: { base_url: model.url },
     people: [{ id: "sam", name: "Sam", role: "adult", color: "#A0522D" }],
-    connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", expose: { domains: ["lock"] } }],
+    connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", expose: { domains: ["lock"] } }, { id: "photos", type: "immich", url: immich.url }],
     dashboard: { entities: ["lock.front_door"] },
   }, {});
-  A = await buildApp({ config: () => cfg, dataFile: ":memory:", env: { HA: "ha" } });
+  A = await buildApp({ config: () => cfg, dataFile: ":memory:", env: { HA: "ha", IMMICH_KEY_SAM: "k-sam" } });
   A.auth.setPassword("sam", "correct horse battery");
   url = await A.app.listen({ port: 0, host: "127.0.0.1" });
   app = await _electron.launch({
@@ -42,7 +46,7 @@ before(async () => {
   page = await app.firstWindow();
   await page.setViewportSize({ width: 480, height: 760 }).catch(() => {});
 });
-after(async () => { await app?.close(); await A?.app.close(); ha?.close(); model?.close(); });
+after(async () => { await app?.close(); await A?.app.close(); ha?.close(); model?.close(); immich?.close(); });
 const shot = async (name: string) => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${name}.png`) }); };
 
 test("sign in: a wrong password says so; the right one opens FAITH", async () => {
@@ -70,6 +74,18 @@ test("ask: the answer is written out, with its bold and list", async () => {
   await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
   await shot("2-answer-dark");
   await page.emulateMedia({ colorScheme: "light" });
+});
+
+test("photos: an answer shows the photos FAITH found", async () => {
+  await page.getByLabel("Your question").fill("beach photos");
+  await page.keyboard.press("Enter");
+  await page.getByText("Two from the beach.").waitFor();
+  const pics = page.getByRole("button", { name: /^Photo from 2026-07-0/ });
+  await pics.first().waitFor();
+  assert.equal(await pics.count(), 2);
+  assert.match(await pics.first().getAttribute("aria-label"), /in Holland, USA/);
+  await page.locator("img[src^='data:image/jpeg']").nth(1).waitFor({ state: "attached" });
+  await shot("2b-photos");
 });
 
 test("a held lock: Yes on this computer unlocks it", async () => {

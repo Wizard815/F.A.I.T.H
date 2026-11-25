@@ -3,6 +3,7 @@ import type { Db } from "./db.js";
 import type { Agent, TurnResult } from "./harness/agent.js";
 import { Approvals, type ApprovalEvent } from "./approvals.js";
 import type { Caller } from "./scope.js";
+import type { PhotoRef } from "./connectors/types.js";
 import { transcribe } from "./speech.js";
 import { MediaError, photo, video } from "./media.js";
 
@@ -159,8 +160,25 @@ export class MattermostBot {
   /** A person's DM channel with FAITH, if they're on Mattermost. */
   dmOf(personId: string) { for (const [id, r] of this.rooms) if (r.kind === "personal" && r.person.id === personId) return id; return undefined; }
 
-  async post(channelId: string, message: string, rootId?: string) {
-    return this.api("POST", "/posts", { channel_id: channelId, message, ...(rootId ? { root_id: rootId } : {}) });
+  async post(channelId: string, message: string, rootId?: string, fileIds?: string[]) {
+    return this.api("POST", "/posts", { channel_id: channelId, message, ...(rootId ? { root_id: rootId } : {}), ...(fileIds?.length ? { file_ids: fileIds } : {}) });
+  }
+  /** Photos an answer showed (Immich), uploaded to the chat so everyone there sees them.
+   *  Fetched with the chat's own key (a person's in their DM, the family's in a group chat). */
+  private async upload(channelId: string, caller: Caller, photos: PhotoRef[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const p of photos.slice(0, 5)) {
+      try {
+        const pic = await this.agent.photo(caller, p.source, p.id);
+        const form = new FormData();
+        form.append("channel_id", channelId);
+        form.append("files", new Blob([new Uint8Array(pic.bytes)], { type: pic.mime }), `${p.taken.slice(0, 10) || "photo"}-${p.id.slice(0, 8)}.jpg`);
+        const r = await fetch(`${this.mm.url}/api/v4/files`, { method: "POST", body: form, signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${this.token()}`, "X-Requested-With": "XMLHttpRequest" } });
+        const d: any = await r.json().catch(() => ({}));
+        if (r.ok && d?.file_infos?.[0]?.id) ids.push(String(d.file_infos[0].id));
+      } catch { /* a photo that can't be fetched or uploaded is left out; the answer still says what was found */ }
+    }
+    return ids;
   }
 
   // ---------------- messages ----------------
@@ -256,6 +274,7 @@ export class MattermostBot {
           if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
         }
         if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
+        if (r.photos?.length) return this.upload(post.channel_id, this.callerFor(room, person, post.channel_id), r.photos).then((ids) => this.say(post, reply, ids));
         return this.say(post, reply);
       };
       // A bigger job says so now and posts its answer here when it's done; quick questions meanwhile go first.
@@ -284,7 +303,7 @@ export class MattermostBot {
     return reply;
   }
 
-  private async say(post: Post, message: string) { await this.post(post.channel_id, message, post.root_id || undefined); return message; }
+  private async say(post: Post, message: string, fileIds?: string[]) { await this.post(post.channel_id, message, post.root_id || undefined, fileIds); return message; }
 
   private typing(channelId: string, parentId?: string) {
     if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ action: "user_typing", seq: this.seq++, data: { channel_id: channelId, parent_id: parentId || "" } }));

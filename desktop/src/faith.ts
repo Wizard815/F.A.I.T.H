@@ -16,8 +16,11 @@ export type ChatEvent =
   | { type: "tool"; name: string }
   | { type: "confirm"; id: string; summary: string }
   | { type: "approval"; id: string; summary: string }
+  | { type: "photos"; items: PhotoRef[] }
   | { type: "done"; text: string }
   | { type: "error"; message: string };
+/** A photo FAITH showed (from Immich); its picture is at /api/photos/<source>/<id>. */
+export type PhotoRef = { source: string; id: string; kind: "photo" | "video"; taken: string; place?: string; people?: string[]; caption?: string; link?: string };
 export type InboxItem = { id: number; at: number; kind: "message" | "approval"; title: string; text: string; ref: string | null };
 
 /** "http://faith:8097/" or "faith:8097" -> "http://faith:8097". */
@@ -44,6 +47,7 @@ export function friendlyTool(name: string): string {
   if (name.startsWith("Hass") || name.startsWith("home_") || name.includes("camera")) return "checking the house";
   if (/notes|wiki|memory|context/.test(name)) return "checking your notes";
   if (name.startsWith("coinpile")) return "checking money";
+  if (name.startsWith("photos_")) return "looking through photos";
   return "checking";
 }
 
@@ -95,6 +99,12 @@ export class Faith {
   async transcribe(audio: Uint8Array, mime: string): Promise<string> {
     const r = await this.req("POST", "/api/voice/transcribe", { body: new Blob([new Uint8Array(audio)]), type: mime.split(";")[0] || "audio/webm", timeoutMs: 120_000 });
     return String(((await r.json()) as any).text || "").trim();
+  }
+  /** A photo's small picture, as a data URL the page can draw. */
+  async photo(source: string, id: string): Promise<string> {
+    const r = await this.req("GET", `/api/photos/${encodeURIComponent(source)}/${encodeURIComponent(id)}`, { timeoutMs: 60_000 });
+    const type = r.headers.get("content-type") || "image/jpeg";
+    return `data:${type};base64,${Buffer.from(await r.arrayBuffer()).toString("base64")}`;
   }
   async speak(text: string): Promise<Uint8Array> {
     const r = await this.req("POST", "/api/voice/speak", { json: { text }, timeoutMs: 120_000 });

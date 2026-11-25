@@ -38,10 +38,12 @@ An app signs in as **one person** and counts as **their own screen**:
 | `{"type":"tool","name":"…"}` | FAITH is looking something up (show "checking the calendar…"). |
 | `{"type":"confirm","id":"…","summary":"unlock Front door"}` | A change waits for this person's **Yes** (section 4). |
 | `{"type":"approval","id":"…","summary":"…"}` | A change was sent to a grown-up to approve. |
+| `{"type":"photos","items":[…]}` | Photos to show with this answer (from Immich). Each item: `source`, `id`, `kind` (`photo` or `video`), `taken`, `place`?, `people`?, `link`? (opens it in Immich). |
 | `{"type":"done","text":"…"}` | The whole answer. |
 | `{"type":"error","message":"…"}` | Show the message as it is: it's written for people. |
 
 - `GET /api/chat/latest`: the last conversation's messages, to show when the app opens.
+- `GET /api/photos/<source>/<id>`: a shown photo's picture (a JPEG), fetched with this person's own Immich key. Show the photos small, and open `link` on a tap. Ignore event types you don't know.
 - A bigger job ("plan the week's dinners") can take a while. Keep the stream open; its answer also arrives in the inbox (section 5).
 - Photos: shrink to 1600 px JPEG first; at most 4.
 

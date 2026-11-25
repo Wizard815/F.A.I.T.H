@@ -10,6 +10,11 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
 
+/** A photo FAITH showed. Its picture comes from /api/photos/<source>/<id>; `link` opens it in Immich. */
+data class Shown(val source: String, val id: String, val kind: String, val taken: String, val place: String?, val people: List<String>, val link: String?) {
+    val label: String get() = listOfNotNull(if (kind == "video") "Video" else "Photo", taken.take(10).ifBlank { null }?.let { "from $it" }, place?.let { "in $it" }, people.takeIf { it.isNotEmpty() }?.let { "with " + it.joinToString(", ") }).joinToString(" ")
+}
+
 /** A message for people: shown as it is. */
 class FaithError(message: String) : Exception(message)
 
@@ -105,6 +110,12 @@ class FaithApi(baseUrl: String, private val token: String?) {
         } finally { c.disconnect() }
     }
 
+    /** A photo's picture (a JPEG), from the source that found it, with this phone's key. */
+    fun photo(source: String, id: String): ByteArray {
+        val c = open("/api/photos/" + URLEncoder.encode(source, "UTF-8") + "/" + URLEncoder.encode(id, "UTF-8"), "GET")
+        try { return c.inputStream.readBytes() } finally { c.disconnect() }
+    }
+
     /** The answer in FAITH's voice: MP3 bytes. */
     fun speak(text: String): ByteArray {
         val c = open("/api/voice/speak", "POST", "application/json", readTimeoutMs = 120_000)
@@ -121,6 +132,18 @@ class FaithApi(baseUrl: String, private val token: String?) {
     }
 
     companion object {
+        /** A `photos` event: the photos FAITH showed (from Immich). */
+        fun parsePhotos(e: JSONObject): List<Shown> {
+            val a = e.optJSONArray("items") ?: return emptyList()
+            return (0 until a.length()).mapNotNull { i ->
+                val p = a.optJSONObject(i) ?: return@mapNotNull null
+                val people = p.optJSONArray("people")
+                Shown(p.optString("source"), p.optString("id"), p.optString("kind", "photo"), p.optString("taken"),
+                    p.optString("place").ifBlank { null }, if (people == null) emptyList() else (0 until people.length()).map { people.optString(it) },
+                    p.optString("link").ifBlank { null })
+            }.filter { it.id.isNotBlank() && it.source.isNotBlank() }
+        }
+
         fun parseInbox(d: JSONObject, after: Long): Pair<List<InboxItem>, Long> {
             val a = d.optJSONArray("items") ?: JSONArray()
             val items = (0 until a.length()).map { i ->

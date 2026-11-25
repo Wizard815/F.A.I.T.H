@@ -8,6 +8,7 @@ FAITH on your computer (Windows, macOS, Linux): ask, talk, drop in a photo, say 
 - **Ask**, typed or by voice: click 🎙, talk, then click it again to send. The answer is written as it comes, with what FAITH is checking ("checking the calendar…").
 - **Yes / No** for held changes (a lock, the garage), on your own computer, by you.
 - **Photos:** drag them onto the window, paste them, or use the photo button. Up to 4, made 1600 px JPEGs first and turned upright.
+- **Your photo library:** "show me photos of Robin at the beach" shows them in the answer, from your own Immich account. Click one to open it in Immich.
 - **Read aloud:** each answer has *Read aloud*, or turn on *Read answers aloud* in Settings. It uses FAITH's own voice (Argos).
 - **Today:** FAITH's day cards, the same as the Home Assistant card. Grown-ups approve or decline the household's requests there.
 - **Inbox and notifications:** a bigger job's answer, the doorbell, approvals to decide. The app keeps a connection to FAITH open from the tray (a long poll) and shows a normal notification. Nothing goes through Google's, Apple's or Microsoft's push services.

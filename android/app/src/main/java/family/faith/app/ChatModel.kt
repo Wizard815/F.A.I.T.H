@@ -7,6 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import android.graphics.BitmapFactory
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -14,7 +18,8 @@ import kotlinx.coroutines.withContext
 
 /** One line in the chat. `confirm`: a change waiting for this person's Yes. */
 data class Line(val text: String, val me: Boolean = false, val checking: List<String> = emptyList(),
-                val confirm: Confirm? = null, val fromInbox: Boolean = false, val photo: Boolean = false)
+                val confirm: Confirm? = null, val fromInbox: Boolean = false, val photo: Boolean = false,
+                val shown: List<Shown> = emptyList())
 data class Confirm(val id: String, val summary: String, val state: String = "waiting")   // waiting | yes | no | done | failed
 
 /** The chat: asking (streamed), Yes/No, push-to-talk, and the inbox while the app is open. */
@@ -42,16 +47,18 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val checking = mutableListOf<String>()
             var answer = ""
+            var shown = emptyList<Shown>()
             try {
                 io {
                     store.api().chat(q.ifEmpty { "What's in this photo?" }, store.conversationId, listOfNotNull(photo)) { e ->
                         when (e.optString("type")) {
                             "conversation" -> store.conversationId = e.optString("id")
-                            "text" -> { answer += e.optString("delta"); update(Line(answer.ifBlank { "…" }, checking = checking.toList())) }
-                            "tool" -> { checking += friendlyTool(e.optString("name")); update(Line(answer.ifBlank { "…" }, checking = checking.toList())) }
+                            "text" -> { answer += e.optString("delta"); update(Line(answer.ifBlank { "…" }, checking = checking.toList(), shown = shown)) }
+                            "tool" -> { checking += friendlyTool(e.optString("name")); update(Line(answer.ifBlank { "…" }, checking = checking.toList(), shown = shown)) }
+                            "photos" -> { shown = FaithApi.parsePhotos(e); shown.forEach { thumb(it) }; update(Line(answer.ifBlank { "…" }, checking = checking.toList(), shown = shown)) }
                             "confirm" -> ui { lines.add(Line("", confirm = Confirm(e.optString("id"), e.optString("summary")))) }
                             "approval" -> ui { lines.add(Line("Sent to a grown-up to approve: ${e.optString("summary")}")) }
-                            "done" -> { answer = e.optString("text", answer); update(Line(answer, checking = checking.toList())) }
+                            "done" -> { answer = e.optString("text", answer); update(Line(answer, checking = checking.toList(), shown = shown)) }
                             "error" -> throw FaithError(e.optString("message"))
                         }
                     }
@@ -68,6 +75,16 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
     private fun ui(block: () -> Unit) = viewModelScope.launch(Dispatchers.Main) { block() }
 
     /** Replace the last FAITH line (the one being written). */
+    /** Pictures of the photos FAITH showed, fetched through FAITH with this phone's key. */
+    val thumbs = mutableStateMapOf<String, ImageBitmap>()
+    fun thumb(p: Shown) {
+        if (thumbs.containsKey(p.id)) return
+        viewModelScope.launch {
+            val bmp = io { try { store.api().photo(p.source, p.id).let { BitmapFactory.decodeByteArray(it, 0, it.size) } } catch (_: Exception) { null } }
+            if (bmp != null) thumbs[p.id] = bmp.asImageBitmap()
+        }
+    }
+
     private fun update(l: Line) = ui {
         val i = lines.indexOfLast { !it.me && it.confirm == null && !it.fromInbox }
         if (i >= 0) lines[i] = l else lines += l
@@ -144,6 +161,7 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
             name.startsWith("Hass") || name.startsWith("home_") || name.contains("camera") -> "checking the house"
             name.contains("notes") || name.contains("wiki") || name.contains("memory") || name.contains("context") -> "checking your notes"
             name.startsWith("coinpile") -> "checking money"
+            name.startsWith("photos_") -> "looking through photos"
             else -> "checking"
         }
     }

@@ -106,6 +106,38 @@ connectors:
 - A handwritten amount it can't read: FAITH asks instead of guessing. Check the recipe in Mealie afterwards anyway.
 - The photo isn't kept with the recipe. Add it in Mealie if you want the original card there.
 
+## Immich (the photo library)
+
+FAITH searches each person's own Immich library: "photos of Robin at the beach last summer", "the birthday cake", "videos from the snow day". It shows the photos in the answer (the HA card, the apps, Mattermost), looks closely at them when asked, puts them in albums, and makes share links.
+
+```yaml
+connectors:
+  - id: photos
+    type: immich
+    url: http://<server-ip>:2283
+    public_url: https://photos.example.org   # optional: share links that work outside the house
+    person_key_env: IMMICH_KEY_{ID}
+people:
+  - id: sam
+    immich_user: sam@example.org            # Sam's Immich account (its email)
+```
+
+1. **Bind each person to their own Immich account.** In Immich, sign in as that person: Account settings → API keys → New API key. Give it these permissions (or "all"): `asset.read`, `asset.view`, `person.read`, `user.read`, `album.read`, `album.create`, `albumAsset.create`, `sharedLink.create`. Put it in `IMMICH_KEY_SAM`.
+2. **Set `immich_user`** on each person to their Immich email. Before using a key, FAITH asks Immich whose account it is. A key for someone else's account is refused, and the admin page says why. Without `immich_user`, FAITH still refuses a key that is another family member's account.
+3. **The shared screens** (the kitchen, the family chat) get no photos unless you set `household_key_env` to a family account's key, such as an account the family's shared albums are shared with. A person's own key is refused there.
+4. Children with their own Immich account get their own photos. Leave their key unset if they shouldn't.
+
+- Each person sees what their Immich account sees: their own photos, a partner's (Immich's partner sharing) and albums shared with them. Immich decides, not FAITH.
+- Searching for what's in a photo needs Immich's smart search (Administration → Machine learning). Names of people come from Immich's People page.
+- A share link lets anyone who has it see those photos until it expires (`share_days`, at most 30). FAITH always asks for the person's own Yes first, with how many photos and for how long.
+
+**What goes wrong:**
+- "Immich refused this API key": it was deleted or mistyped. Make a new one.
+- "Immich's API key can't do this": give the key the permissions above.
+- "IMMICH_KEY_SAM is the Immich account …, not Sam's": the key was made while signed in as someone else.
+- No photos in the answer on the kitchen screen: there's no family key (step 3). That's on purpose.
+- Share links that don't open outside the house: set `public_url`.
+
 ## Coinpile
 
 - In Coinpile: Settings → Home Assistant & API → make a token with the **mcp** and **act** scopes for each person → `COINPILE_TOKEN_<ID>`.

@@ -18,6 +18,7 @@ export const SERVICES: Service[] = [
   { id: "orb", port: 8095, path: "/mcp", kind: "mcp", what: "Pondering Orb" },
   { id: "hermes", port: 8642, path: "/v1/models", kind: "http", what: "Hermes", keyed: true },
   { id: "studio", port: 6060, path: "/", kind: "http", what: "Hermes Studio" },
+  { id: "immich", port: 2283, path: "/api/server/ping", kind: "http", what: "Immich (photos)", names: ["immich_server", "immich"] },
   { id: "mealie", port: 9000, path: "/api/app/about", kind: "http", what: "Mealie (recipes)", names: ["mealie"] },
   { id: "mattermost", port: 8065, path: "/api/v4/system/ping", kind: "http", what: "Mattermost", names: ["mattermost"] },
   { id: "voiceid", port: 8099, path: "/health", kind: "http", what: "voice ID (FAITH's voiceid service)", names: ["voiceid"] },
@@ -99,6 +100,10 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
   if (has("mealie")) {
     connectors.push({ id: "mealie", type: "mealie", url: found.mealie, token_env: "MEALIE_TOKEN" });
     need("MEALIE_TOKEN", "in Mealie: your profile → API Tokens (for adding recipes; the meal plan and shopping lists go through HA's Mealie integration)");
+  }
+  if (has("immich")) {
+    connectors.push({ id: "photos", type: "immich", url: found.immich, person_key_env: "IMMICH_KEY_{ID}" });
+    for (const p of people) need(`IMMICH_KEY_${p.id.toUpperCase()}`, `in ${p.name}'s own Immich account: Account settings → API keys (and add immich_user: their Immich email to ${p.id} in faith.yaml)`);
   }
   if (has("hamcp")) {
     connectors.push({ id: "hamcp", type: "mcp", url_env: "HA_MCP_URL", auth: "none", roles: ["admin"], prefix: "", description: "ha-mcp: Home Assistant's configuration (automations, scripts, dashboards, history)" });

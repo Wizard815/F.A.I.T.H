@@ -29,6 +29,10 @@ export type FaithBridge = {
   dashboard(): Promise<{ cards: any[] }>;
   transcribe(audio: ArrayBuffer, mime: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;
+  /** A photo's picture (data URL), fetched by the main process with this computer's key. */
+  photo(source: string, id: string): Promise<string>;
+  /** Open a photo in Immich, in the browser. */
+  openLink(url: string): Promise<void>;
   inbox(): Promise<InboxItem[]>;
   markRead(): Promise<void>;
   onChat(cb: (id: string, e: ChatEvent) => void): () => void;
@@ -43,5 +47,5 @@ export type FaithBridge = {
 
 export const CHANNELS = [
   "state", "signIn", "signOut", "setSettings", "ask", "stop", "newTopic", "latest", "confirm", "approvals", "decide",
-  "dashboard", "transcribe", "speak", "inbox", "markRead",
+  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead",
 ] as const;
