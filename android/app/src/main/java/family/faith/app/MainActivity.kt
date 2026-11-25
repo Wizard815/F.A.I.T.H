@@ -12,7 +12,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,7 +28,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -178,7 +186,7 @@ fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> 
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (chat.lines.isEmpty()) item { Text("Ask anything, or hold the mic and talk.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
-            itemsIndexed(chat.lines) { _, l -> LineView(l) { yes -> l.confirm?.let { chat.answer(it, yes) } } }
+            itemsIndexed(chat.lines) { _, l -> LineView(l, chat.thumbs) { yes -> l.confirm?.let { chat.answer(it, yes) } } }
         }
         Text(chat.status.value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
             modifier = Modifier.padding(horizontal = 16.dp).semantics { liveRegion = LiveRegionMode.Polite })
@@ -201,7 +209,7 @@ fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> 
 }
 
 @Composable
-fun LineView(l: Line, answer: (Boolean) -> Unit) {
+fun LineView(l: Line, thumbs: Map<String, ImageBitmap> = emptyMap(), answer: (Boolean) -> Unit) {
     val c = l.confirm
     if (c != null) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth()) {
@@ -225,6 +233,23 @@ fun LineView(l: Line, answer: (Boolean) -> Unit) {
             if (l.photo) Text("📷 photo", color = if (l.me) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Text(l.text.replace("**", ""), color = if (l.me) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
             if (l.checking.isNotEmpty()) Text(l.checking.distinct().joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            if (l.shown.isNotEmpty()) ShownPhotos(l.shown, thumbs)
+        }
+    }
+}
+
+/** Photos an answer showed: a tap opens the photo in Immich. */
+@Composable
+fun ShownPhotos(photos: List<Shown>, thumbs: Map<String, ImageBitmap>) {
+    val ctx = LocalContext.current
+    Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        photos.take(8).forEach { p ->
+            Box(Modifier.size(88.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(enabled = p.link != null, onClickLabel = "Open in Immich") { p.link?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
+                .semantics { contentDescription = p.label }) {
+                thumbs[p.id]?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                if (p.kind == "video") Text("Video", fontSize = 11.sp, color = Color.White, modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).background(Color(0x99000000), RoundedCornerShape(8.dp)).padding(horizontal = 6.dp))
+            }
         }
     }
 }

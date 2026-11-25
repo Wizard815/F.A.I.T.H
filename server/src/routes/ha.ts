@@ -143,7 +143,13 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     // A bigger job says so; its answer goes to the person's chat and phone (and stays in this conversation).
     const asker = caller.scope.kind === "person" ? caller.scope.person : caller.speaker;
     const r = asker ? await agent.turnOrLater(opts, cfg().model.answer_within_s * 1000, (late) => agent.deliverLate(asker, late)) : await agent.turn(opts);
-    return { text: r.text, heard, speaker: speaker ? pub(speaker) : null, own_view: !!caller.byVoiceAndFace, conversation_id: r.conversationId, confirms: r.pending, approvals: r.requests, tools: [...new Set(events.map((e: any) => e.name))] };
+    return { text: r.text, heard, speaker: speaker ? pub(speaker) : null, own_view: !!caller.byVoiceAndFace, photos: r.photos ?? [], conversation_id: r.conversationId, confirms: r.pending, approvals: r.requests, tools: [...new Set(events.map((e: any) => e.name))] };
+  });
+  // A photo the answer showed, as a data URL (the card can't send FAITH's token with an <img>).
+  app.post("/api/ha/photo", async (req) => {
+    const w = who(req), b: any = req.body || {};
+    const pic = await agent.photo(w.caller, String(b.source || ""), String(b.id || ""));
+    return { data_url: `data:${pic.mime};base64,${pic.bytes.toString("base64")}` };
   });
   app.post("/api/ha/chat/history", async (req) => {
     const c = who(req).caller, id = agent.latest(c);

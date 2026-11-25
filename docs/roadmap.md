@@ -41,6 +41,7 @@
 - Omi: each person's recordings, read with their own key; what Omi heard is context, so changes after it wait for a Yes. Each kept conversation can come to FAITH (a webhook), which suggests a few things in that person's chat, each waiting for their yes.
 - FAITH's apps share one contract ([clients.md](clients.md)): client sign-in that counts as the person's own screen, and an inbox for notifications. The Android app (`android/`): sign in once, ask, talk, photos (share to FAITH), Yes/No, notifications, the phone's assistant. The desktop app (`desktop/`, Windows, macOS, Linux): the same, with photos by drag and drop, notifications from the tray and a shortcut from anywhere.
 - Wake words (`wakeword/`): any phrase, as many as you like, for HA's satellites (Wyoming). Trained openWakeWord models for the main word, in the same list.
+- Photos (Immich): each person searches their own library with their own Immich account (FAITH checks whose key it is); photos show in the HA card, the apps and Mattermost; albums, and share links after a Yes.
 - A recipe from a photo (`recipe-from-photo` skill): a cookbook page, a card or a link into Mealie, after a Yes (the `mealie` connector).
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.

@@ -300,6 +300,12 @@ skills:
 - **Only the relevant tools.** Above `tools.max` (32) tools, FAITH offers the model the ones that fit the question. It ranks them with Argos embeddings when `model.embed_model` is set, else by shared words. FAITH's own tools are always offered, as is anything in `tools.always`.
 - **The best-practices skill.** homeassistant-ai's pack teaches the model how to write good automations: native triggers before templates, entity ids not device ids, the right mode. FAITH loads it, and its reference files, only when an HA job needs it.
 
+## Photos
+
+With the Immich connector ([setup.md](setup.md#immich-the-photo-library)), "show me photos from the beach" shows them in the FAITH chat card and on the wall screen. A tap opens the photo in Immich.
+- Signed in on the wall screen (or an HA user mapped to a person): that person's own Immich library.
+- Nobody signed in: only a family account's photos, if you set `household_key_env`. Otherwise none.
+
 ## Mealie
 
 FAITH reads and changes Mealie through HA's Mealie integration (shopping lists as to-do entities, the meal plan as calendars, plus Mealie's actions). That's two-way, unlike Mealie's own CalDAV. Setup is in [setup.md](setup.md#home-assistant-and-mealie-through-it).

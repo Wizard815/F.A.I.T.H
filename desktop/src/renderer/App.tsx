@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, Check, CloudSun, FolderKanban, LayoutDashboard, Newspaper, NotebookPen, Server, Sparkles, ImagePlus, Loader2, MessageCircle, Mic, RotateCcw, Send, Settings, Square, Volume2, X } from "lucide-react";
 import { Avatar, Card, Empty, ErrorText, Sheet, cn, niceTime } from "@web/ui";
-import type { Board as BoardData, ChatEvent, InboxItem } from "../faith";
+import type { Board as BoardData, ChatEvent, InboxItem, PhotoRef } from "../faith";
 import type { FaithBridge, State } from "../shared";
 
 declare global { interface Window { faith: FaithBridge } }
@@ -112,7 +112,7 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
 
 // ---------------------------------------------------------------- ask
 
-type Line = { id: string; who: "me" | "faith"; text: string; images?: string[]; checking?: string[]; confirm?: { id: string; summary: string; answer?: string }; note?: string; error?: boolean; busy?: boolean };
+type Line = { id: string; who: "me" | "faith"; text: string; images?: string[]; photos?: PhotoRef[]; checking?: string[]; confirm?: { id: string; summary: string; answer?: string }; note?: string; error?: boolean; busy?: boolean };
 let seq = 0;
 const lineId = () => `l${++seq}`;
 
@@ -139,6 +139,7 @@ const friendly = (name: string) => {
   if (name.startsWith("Hass") || name.startsWith("home_") || name.includes("camera")) return "checking the house";
   if (/notes|wiki|memory|context/.test(name)) return "checking your notes";
   if (name.startsWith("coinpile")) return "checking money";
+  if (name.startsWith("photos_")) return "looking through photos";
   return "checking";
 };
 
@@ -150,6 +151,30 @@ async function shrink(file: Blob): Promise<string> {
   c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", 0.85);
+}
+
+/** Photos an answer showed (Immich). A click opens the photo in Immich, in the browser. */
+function Photos({ photos }: { photos: PhotoRef[] }) {
+  const [src, setSrc] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    for (const p of photos) api.photo(p.source, p.id).then((u) => live && setSrc((m) => ({ ...m, [p.id]: u }))).catch(() => {});
+    return () => { live = false; };
+  }, [photos.map((p) => p.id).join()]);
+  const label = (p: PhotoRef) => [p.kind === "video" ? "Video" : "Photo", p.taken && `from ${p.taken.slice(0, 10)}`, p.place && `in ${p.place}`, p.people?.length && `with ${p.people.join(", ")}`].filter(Boolean).join(" ");
+  return (
+    <ul className="mt-3 grid w-72 max-w-full grid-cols-3 gap-2" aria-label={`${photos.length} photo${photos.length > 1 ? "s" : ""}`}>
+      {photos.map((p) => (
+        <li key={p.id}>
+          <button type="button" className="relative block aspect-square w-full overflow-hidden rounded-input bg-surface-2" title={label(p)}
+            aria-label={`${label(p)}${p.link ? ". Opens in Immich." : ""}`} onClick={() => p.link && api.openLink(p.link)}>
+            {src[p.id] && <img src={src[p.id]} alt="" className="h-full w-full object-cover" />}
+            {p.kind === "video" && <span className="absolute bottom-1 left-1 rounded-full bg-black/60 px-2 text-[11px] text-white">Video</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Ask({ st }: { st: State }) {
@@ -189,6 +214,7 @@ function Ask({ st }: { st: State }) {
     const L = cur.line;
     if (e.type === "text") { cur.answer += e.delta; update(L, (l) => ({ ...l, text: cur.answer })); }
     else if (e.type === "tool") { const w = friendly(e.name); setStatus(`FAITH is ${w}…`); update(L, (l) => ({ ...l, checking: [...new Set([...(l.checking || []), w])] })); }
+    else if (e.type === "photos") update(L, (l) => ({ ...l, photos: e.items }));
     else if (e.type === "confirm") setLines((ls) => [...ls, { id: lineId(), who: "faith", text: "", confirm: { id: e.id, summary: e.summary } }]);
     else if (e.type === "approval") setLines((ls) => [...ls, { id: lineId(), who: "faith", text: "", note: `Sent to a grown-up to approve: ${e.summary}` }]);
     else if (e.type === "done") {
@@ -267,6 +293,7 @@ function Ask({ st }: { st: State }) {
               {l.checking?.length ? <p className="mb-1 text-[13px] text-muted">{l.checking.join(", ")}…</p> : null}
               {l.busy && !l.text ? <span className="inline-flex items-center gap-2 text-muted"><Loader2 size={16} className="animate-spin" />Thinking…</span> : null}
               {l.text && (l.who === "faith" && !l.error ? <Rich text={l.text} /> : <p className="whitespace-pre-wrap">{l.text}</p>)}
+              {l.photos?.length ? <Photos photos={l.photos} /> : null}
               {l.note && <p>{l.note}</p>}
               {l.confirm && (
                 <div>

@@ -109,6 +109,14 @@ connectors:
     url: http://<server-ip>:9000
     token_env: MEALIE_TOKEN                  # Mealie: your profile > API Tokens
 
+  - id: photos                               # Immich: each person's own photo library (docs/setup.md)
+    type: immich
+    url: http://<server-ip>:2283
+    public_url: ""                           # Immich's address outside the house, for share links (https://photos.example.org)
+    person_key_env: IMMICH_KEY_{ID}          # each person's own Immich account's API key
+    # household_key_env: IMMICH_KEY_FAMILY   # a family account for the shared screens; none: no photos there
+    share_days: 7
+
   - id: coinpile
     type: mcp
     url: http://<server-ip>:8190/api/v1/mcp

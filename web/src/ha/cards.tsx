@@ -270,9 +270,10 @@ function WhoCard({ api }: { api: Api; config: CardConfig }) {
 }
 
 // ------------------------------------------------------------------ talking to FAITH (chat card and hub card)
-type Line = { me?: boolean; text: string; tools?: string[]; confirm?: { id: string; summary: string; done?: string }; waiting?: string };
+type Photo = { source: string; id: string; kind: "photo" | "video"; taken: string; place?: string; people?: string[]; link?: string };
+type Line = { me?: boolean; text: string; tools?: string[]; confirm?: { id: string; summary: string; done?: string }; waiting?: string; photos?: Photo[] };
 const FRIENDLY: [RegExp, string][] = [[/get_day|tasks/, "Checked the calendar"], [/chores/, "Looked at chores"], [/^meals$|meal_plan/, "Meal plan"], [/recipe/, "Recipes"], [/shopping/, "Shopping list"],
-  [/home_/, "The house"], [/memory_|context_for|wiki|notes/, "The wiki"], [/points|reward/, "Points"], [/skill_load/, "Used a skill"], [/message_send/, "Sent a message"], [/hermes|studio/, "Hermes"], [/coinpile/, "Money"]];
+  [/home_/, "The house"], [/memory_|context_for|wiki|notes/, "The wiki"], [/points|reward/, "Points"], [/skill_load/, "Used a skill"], [/message_send/, "Sent a message"], [/hermes|studio/, "Hermes"], [/coinpile/, "Money"], [/^photos_/, "Photos"]];
 const friendly = (t: string) => FRIENDLY.find(([r]) => r.test(t))?.[1] ?? t.replace(/_/g, " ");
 
 let audioCtx: AudioContext | undefined;
@@ -309,7 +310,7 @@ function useChat(api: Api, speak: boolean) {
       const r: any = await api.call("/api/ha/chat", { ...body, conversation_id: conv.current });
       conv.current = r.conversation_id;
       setLines((l) => [...l.slice(0, -1), ...(r.heard ? [{ me: true, text: r.heard + (r.speaker ? ` (${r.speaker.name}${r.own_view ? ", known by voice and face: their own view" : ""})` : "") }] : []),
-        ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools }]);
+        ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools, photos: r.photos?.length ? r.photos : undefined }]);
       setSaid(Date.now());
       if (speak && r.text) say(r.text);
     } catch (e: any) { setLines((l) => [...l.slice(0, -1), { text: plain(e.message) === e.message ? `Sorry, that didn't work: ${e.message}` : plain(e.message) }]); }
@@ -335,6 +336,27 @@ function useChat(api: Api, speak: boolean) {
   const state: EmblemState = rec ? "listening" : busy ? "thinking" : talking || (!speak && Date.now() - said < 3000) ? "speaking" : "idle";
   const fresh = () => { conv.current = null; setLines([]); };
   return { lines, busy, rec, state, level, send, mic, answer, fresh };
+}
+
+/** Photos an answer showed (Immich), fetched through FAITH with the asker's own key.
+ *  A tap opens the photo in Immich. */
+function Photos({ api, photos }: { api: Api; photos: Photo[] }) {
+  const [src, setSrc] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    for (const p of photos) api.call<{ data_url: string }>("/api/ha/photo", { source: p.source, id: p.id }).then((r) => live && setSrc((m) => ({ ...m, [p.id]: r.data_url }))).catch(() => {});
+    return () => { live = false; };
+  }, [photos.map((p) => p.id).join()]);
+  const label = (p: Photo) => [p.kind === "video" ? "Video" : "Photo", p.taken && `from ${p.taken.slice(0, 10)}`, p.place && `in ${p.place}`, p.people?.length && `with ${p.people.join(", ")}`].filter(Boolean).join(" ");
+  return (
+    <div className="photos">
+      {photos.map((p) => (
+        <a key={p.id} href={p.link} target="_blank" rel="noreferrer" aria-label={`${label(p)}. Opens in Immich.`} title={label(p)}>
+          {src[p.id] ? <img src={src[p.id]} alt="" /> : <span className="ph" />}{p.kind === "video" && <span className="vid">Video</span>}
+        </a>
+      ))}
+    </div>
+  );
 }
 
 function Held({ l, answer }: { l: Line; answer: (id: string, ok: boolean) => void }) {
@@ -407,6 +429,7 @@ function ChatCard({ api, config }: { api: Api; config: CardConfig }) {
         {c.lines.map((l, i) => l.confirm || l.waiting ? <Held key={i} l={l} answer={c.answer} /> : (
           <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: l.me ? "flex-end" : "flex-start" }}>
             <div className={`msg ${l.me ? "me" : "faith"}`}>{l.me ? l.text : <Md text={l.text} />}</div>
+            {!!l.photos?.length && <Photos api={api} photos={l.photos} />}
             {!!l.tools?.length && <div className="chips">{[...new Set(l.tools.map(friendly))].map((t) => <span key={t} className="chip">{t}</span>)}</div>}
           </div>
         ))}
@@ -464,7 +487,7 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
         </button>
         {hint && <div className="hint">{hint}</div>}
         {heard && !c.rec && <div className="heard">“{heard.text}”</div>}
-        <div aria-live="polite">{last && last.text !== "…" && <div className="reply"><Md text={last.text} /></div>}</div>
+        <div aria-live="polite">{last && last.text !== "…" && <div className="reply"><Md text={last.text} />{!!last.photos?.length && <Photos api={api} photos={last.photos.slice(0, 6)} />}</div>}</div>
         {held.map((l, i) => <Held key={i} l={l} answer={c.answer} />)}
       </div>
       {config.show_input !== false && <AskBar c={c} placeholder="Or type to FAITH" />}

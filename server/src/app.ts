@@ -309,6 +309,13 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   });
 
   // ---------- chat on the screen (server-sent events) ----------
+  // A photo a tool showed (Immich), with the asker's own key: the apps draw these.
+  app.get("/api/photos/:source/:id", async (req, reply) => {
+    const c = need(req), p = req.params as any;
+    const pic = await agent.photo(c, String(p.source), String(p.id));
+    reply.header("Content-Type", pic.mime).header("Cache-Control", "private, max-age=3600");
+    return reply.send(pic.bytes);
+  });
   app.get("/api/chat/latest", async (req) => {
     const c = need(req), id = agent.latest(c);
     return { conversation_id: id ?? null, messages: id ? agent.messages(c, id).slice(-30) : [] };

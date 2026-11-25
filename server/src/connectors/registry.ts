@@ -3,6 +3,7 @@ import { policyOf, type Caller } from "../scope.js";
 import { Hermes } from "./hermes.js";
 import { HomeAssistant } from "./homeassistant.js";
 import { McpConnector } from "./mcp.js";
+import { Immich } from "./immich.js";
 import { Mealie } from "./mealie.js";
 import { Studio } from "./studio.js";
 import type { Connector, Tool } from "./types.js";
@@ -27,6 +28,7 @@ export class Registry {
       else if (c.type === "hermes") this.connectors.push(new Hermes(c, env));
       else if (c.type === "studio") this.connectors.push(new Studio(c, env));
       else if (c.type === "mealie") this.connectors.push(new Mealie(c, env));
+      else if (c.type === "immich") this.connectors.push(new Immich(c, cfg, env));
     }
   }
 

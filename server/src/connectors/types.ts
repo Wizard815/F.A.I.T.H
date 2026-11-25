@@ -2,6 +2,9 @@ import type { Caller } from "../scope.js";
 
 /** One tool the model can call. FAITH decides which tools a caller gets
  *  (scope + role policy); the backend decides what the caller's token may see. */
+/** A photo or video a tool found, for the person to see (the apps show its thumbnail). */
+export type PhotoRef = { source: string; id: string; kind: "photo" | "video"; taken: string; place?: string; people?: string[]; caption?: string; link?: string };
+
 export type Tool = {
   name: string;                       // what the model sees, e.g. allglance_get_day, home_control
   connector: string;
@@ -25,6 +28,8 @@ export type Tool = {
   /** Its result describes a picture (a camera). Like a photo the person sent, what's in it
    *  can read like a request, so changes later in that turn wait for the person's Yes. */
   media?: boolean;
+  /** Photos from its result to show the person (a "photos" event and TurnResult.photos). */
+  show?: (args: any, out: unknown) => PhotoRef[] | undefined;
 };
 
 export interface Connector {

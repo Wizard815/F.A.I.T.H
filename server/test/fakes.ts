@@ -146,7 +146,7 @@ export async function fakeMattermost(usernames: string[]) {
   const users = usernames.map((u) => ({ id: `u_${u}`, username: u }));
   const team = { id: "team1", name: "family" };
   const channels = new Map<string, { id: string; name: string; type: string; members: Set<string>; delete_at: number }>();
-  const posts: { channel_id: string; message: string; root_id?: string }[] = [];
+  const posts: { channel_id: string; message: string; root_id?: string; file_ids?: string[] }[] = [];
   const files = new Map<string, { mime: string; name: string; bytes: Buffer }>(), downloads: string[] = [];
   const s = createServer(async (req, res) => {
     const u = new URL(req.url!, "http://x"), p = u.pathname.replace(/^\/api\/v4/, "");
@@ -157,6 +157,18 @@ export async function fakeMattermost(usernames: string[]) {
       if (!f) { res.statusCode = 404; return res.end(JSON.stringify({ message: "no file" })); }
       if (m0[2]) return res.end(JSON.stringify({ id: m0[1], name: f.name, mime_type: f.mime, size: f.bytes.length }));
       downloads.push(m0[1]); return res.end(f.bytes);
+    }
+    if (p === "/files" && req.method === "POST" && req.headers.authorization === "Bearer mm-token") {
+      // A multipart upload: keep each file's bytes under a new id.
+      const chunks: Buffer[] = []; for await (const c of req) chunks.push(c as Buffer);
+      const raw = Buffer.concat(chunks), boundary = String(req.headers["content-type"]).split("boundary=")[1];
+      const infos: { id: string; name: string }[] = [];
+      for (const part of raw.toString("latin1").split(`--${boundary}`)) {
+        const name = /filename="([^"]+)"/.exec(part)?.[1]; if (!name) continue;
+        const start = part.indexOf("\r\n\r\n") + 4, mime = /Content-Type: ([^\r]+)/.exec(part)?.[1] || "application/octet-stream";
+        const id = `up${files.size + 1}`; files.set(id, { mime, name, bytes: Buffer.from(part.slice(start, part.length - 2), "latin1") }); infos.push({ id, name });
+      }
+      res.statusCode = 201; res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ file_infos: infos }));
     }
     const b = await body(req);
     const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(v)); };
@@ -224,4 +236,48 @@ export async function fakeFirefly(accounts: { id: string; name: string; balance:
   });
   const url = await listen(s);
   return { url, txs, accounts, mode, close: () => s.close() };
+}
+
+/** Enough of Immich's API: accounts by API key, faces, smart and metadata search, thumbnails,
+ *  albums and share links. Each account sees only its own photos, as Immich does. */
+export async function fakeImmich(accounts: Record<string, { email: string; name: string; photos: { id: string; what: string; people?: string[]; city?: string; date: string; video?: boolean }[] }>) {
+  const seen: { key: string; path: string; body: any }[] = [];
+  const albums: { id: string; albumName: string; key: string; assets: string[] }[] = [], links: { key: string; assetIds: string[]; expiresAt: string; by: string }[] = [];
+  let smartOn = true;
+  const asset = (p: any) => ({ id: p.id, type: p.video ? "VIDEO" : "IMAGE", localDateTime: `${p.date}T10:00:00.000Z`, fileCreatedAt: `${p.date}T10:00:00.000Z`,
+    exifInfo: { city: p.city ?? null, country: p.city ? "USA" : null, dateTimeOriginal: `${p.date}T10:00:00.000Z`, description: null }, people: (p.people || []).map((name: string) => ({ name })) });
+  const s = createServer(async (req, res) => {
+    const u = new URL(req.url!, "http://x"), p = u.pathname.replace(/^\/api/, ""), key = String(req.headers["x-api-key"] || "");
+    const b = req.method === "GET" ? null : await body(req);
+    seen.push({ key, path: `${req.method} ${p}${u.search}`, body: b });
+    const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(v)); };
+    const acct = accounts[key];
+    if (!acct) return json({ message: "Invalid API key" }, 401);
+    const mine = acct.photos;
+    let m;
+    if (p === "/users/me") return json({ id: `user-${acct.name.toLowerCase()}`, email: acct.email, name: acct.name });
+    if (p === "/search/person") { const n = String(u.searchParams.get("name") || "").toLowerCase(); const names = [...new Set(mine.flatMap((x) => x.people || []))]; return json(names.filter((x) => x.toLowerCase().startsWith(n)).map((name) => ({ id: `person-${name.toLowerCase()}`, name }))); }
+    if (p === "/people") return json({ people: [...new Set(mine.flatMap((x) => x.people || []))].map((name) => ({ id: `person-${name.toLowerCase()}`, name })) });
+    if (p === "/search/smart" || p === "/search/metadata") {
+      if (p === "/search/smart" && !smartOn) return json({ message: "Smart search is not enabled" }, 400);
+      const words = String(b.query || "").toLowerCase().split(/\W+/).filter((w) => w.length > 2 && w !== "in");
+      const hits = mine.filter((x) => (!words.length || words.some((w) => x.what.includes(w) || (x.city || "").toLowerCase().includes(w)))
+        && (!b.personIds?.length || b.personIds.every((id: string) => (x.people || []).some((n) => `person-${n.toLowerCase()}` === id)))
+        && (!b.takenAfter || `${x.date}T10:00:00.000Z` >= b.takenAfter) && (!b.takenBefore || `${x.date}T10:00:00.000Z` <= b.takenBefore)
+        && (!b.type || (b.type === "VIDEO") === !!x.video));
+      return json({ albums: { items: [] }, assets: { items: hits.slice(0, b.size || 100).map(asset), count: hits.length, nextPage: null } });
+    }
+    if ((m = p.match(/^\/assets\/([0-9a-f-]{36})\/thumbnail$/))) {
+      if (!mine.some((x) => x.id === m![1])) return json({ message: "Not found or no asset.view access" }, 400);
+      res.setHeader("content-type", "image/jpeg"); return res.end(Buffer.from(`jpeg:${m[1]}`));
+    }
+    if ((m = p.match(/^\/assets\/([0-9a-f-]{36})$/))) { const x = mine.find((y) => y.id === m![1]); return x ? json(asset(x)) : json({ message: "Not found or no asset.read access" }, 400); }
+    if (p === "/albums" && req.method === "GET") return json(albums.filter((a) => a.key === key).map(({ id, albumName }) => ({ id, albumName })));
+    if (p === "/albums" && req.method === "POST") { const a = { id: `album-${albums.length + 1}`, albumName: b.albumName, key, assets: b.assetIds || [] }; albums.push(a); return json({ id: a.id, albumName: a.albumName }, 201); }
+    if ((m = p.match(/^\/albums\/([^/]+)\/assets$/))) { const a = albums.find((x) => x.id === m![1] && x.key === key); if (!a) return json({ message: "no album" }, 400); a.assets.push(...b.ids); return json(b.ids.map((id: string) => ({ id, success: true }))); }
+    if (p === "/shared-links" && req.method === "POST") { const l = { key: `share${links.length + 1}`, assetIds: b.assetIds, expiresAt: b.expiresAt, by: key }; links.push(l); return json({ id: l.key, key: l.key }, 201); }
+    json({ message: `fake immich has no ${req.method} ${p}` }, 404);
+  });
+  const url = await listen(s);
+  return { url, seen, albums, links, smart: (on: boolean) => { smartOn = on; }, close: () => s.close() };
 }

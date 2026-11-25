@@ -10,6 +10,7 @@ FAITH on your phone: ask, talk, show it a photo, say Yes to a held change, and g
 - **Photos.** The 📷 button picks one, or **Share → FAITH** from any app (Photos, the browser). It's made a 1600 px JPEG on the phone first.
 - **Notifications** from FAITH's inbox: a bigger job's answer, the doorbell, approvals to decide. Checked every 15 minutes in the background (Android's shortest), and live while the app is open. No Google push: nothing goes through the cloud.
 - **The phone's assistant.** Settings → Apps → Default apps → **Digital assistant app** → FAITH. Long-press home (or power, on some phones) opens FAITH listening.
+- **Photos from your library:** "show me photos of Robin at the beach" shows them in the answer, from your own Immich account. Tap one to open it in Immich.
 - **New topic** starts a fresh conversation.
 - **Board**, the second tab: the info board ([dashboard.md](dashboard.md)). Your morning brief (*Write it now*), the weather, FAITH's day cards, your projects (tap the status to move one), your log (*Log it*), news, and for admins uptime and FAITH's server. Bringing projects over from Pondering Orb is on the desktop app.
 

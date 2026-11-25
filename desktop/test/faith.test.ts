@@ -5,27 +5,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseConfig } from "../../server/src/config.js";
 import { buildApp, type App } from "../../server/src/app.js";
-import { fakeHa, fakeModel } from "../../server/test/fakes.js";
+import { fakeHa, fakeImmich, fakeModel } from "../../server/test/fakes.js";
 import { cleanUrl, Faith, FaithError, friendlyTool, NOT_ANSWERING, parseSse, SignedOut, type ChatEvent } from "../src/faith.js";
 import { Store } from "../src/store.js";
 import { InboxWatch } from "../src/watch.js";
 
 // The desktop app's side of docs/clients.md, against a real FAITH (fake model and HA).
+const PHOTO = "00000000-0000-4000-8000-000000000001";
+let immich: Awaited<ReturnType<typeof fakeImmich>>;
 let ha: Awaited<ReturnType<typeof fakeHa>>, model: Awaited<ReturnType<typeof fakeModel>>, A: App, url = "";
 let script: (req: any) => any = () => ({ content: "ok" });
 before(async () => {
   ha = await fakeHa({ "lock.front_door": { state: "locked", attributes: { friendly_name: "Front door" } } });
   model = await fakeModel((req) => script(req));
+  immich = await fakeImmich({ "k-sam": { email: "sam@example.org", name: "Sam", photos: [{ id: PHOTO, what: "beach sunset", date: "2026-07-04" }] } });
   const cfg = parseConfig({
     model: { base_url: model.url },
     people: [{ id: "wizard", name: "Wizard", role: "admin" }, { id: "sam", name: "Sam", role: "adult", color: "#A0522D" }],
-    connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", expose: { domains: ["lock"] } }],
+    connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", expose: { domains: ["lock"] } }, { id: "photos", type: "immich", url: immich.url }],
   }, {});
-  A = await buildApp({ config: () => cfg, dataFile: ":memory:", env: { HA: "ha" } });
+  A = await buildApp({ config: () => cfg, dataFile: ":memory:", env: { HA: "ha", IMMICH_KEY_SAM: "k-sam" } });
   A.auth.setPassword("sam", "correct horse battery");
   url = await A.app.listen({ port: 0, host: "127.0.0.1" });
 });
-after(async () => { await A.app.close(); ha.close(); model.close(); });
+after(async () => { await A.app.close(); ha.close(); model.close(); immich.close(); });
 
 test("addresses, stream lines and tool names", () => {
   assert.equal(cleanUrl(" faith:8097/ "), "http://faith:8097");
@@ -91,6 +94,18 @@ test("a photo goes with the question", async () => {
   const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
   assert.equal(await f.chat({ text: "what's this?", images: [png] }, () => {}), "A cat.");
   assert.ok(seen.messages.at(-1).content.some((p: any) => p.type === "image_url"));
+});
+
+test("photos: the answer shows them, and their pictures come through FAITH", async () => {
+  const f = new Faith(url);
+  await f.signIn("sam", "correct horse battery", "laptop");
+  let k = 0;
+  script = () => (k++ === 0 ? { tool_calls: [{ name: "photos_search", args: { query: "beach" } }] } : { content: "Here's the beach." });
+  const events: ChatEvent[] = [];
+  await f.chat({ text: "beach photos" }, (e) => events.push(e));
+  const shown = events.find((e) => e.type === "photos") as Extract<ChatEvent, { type: "photos" }>;
+  assert.deepEqual(shown.items.map((p) => p.id), [PHOTO]);
+  assert.equal(await f.photo("photos", PHOTO), `data:image/jpeg;base64,${Buffer.from(`jpeg:${PHOTO}`).toString("base64")}`);
 });
 
 test("voice: speech to text, and the answer read aloud", async () => {

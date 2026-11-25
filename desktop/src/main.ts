@@ -172,6 +172,8 @@ function registerIpc() {
   handle("importOrb", () => guarded((f) => f.importOrb()));
   handle("transcribe", (audio: ArrayBuffer, mime: string) => guarded((f) => f.transcribe(new Uint8Array(audio), mime)));
   handle("speak", (text: string) => guarded(async (f) => (await f.speak(text)).buffer));
+  handle("photo", (source: string, id: string) => guarded((f) => f.photo(source, id)));
+  handle("openLink", (url: string) => { if (/^https?:\/\//.test(url)) return shell.openExternal(url); });
   handle("inbox", () => inbox);
   handle("markRead", () => { unread = 0; setTray(); });
 }
