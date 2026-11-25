@@ -12,10 +12,18 @@ export function useNow(everyMs = 15000) {
 
 /** A person's face tile: a hexagon, one cell of the hive. */
 export const HEX = "polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%)";
+/** Initials that read on a person's colour: dark on a light colour, cream on a dark one. */
+export function inkOn(hex?: string) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return "#fffaf0";
+  const lin = (i: number) => { const c = parseInt(m[1].slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const l = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+  return (l + 0.05) / 0.0625 > 1.05 / (l + 0.05) ? "#2b1e15" : "#fffaf0";
+}
+
 export function Avatar({ name, color, size = 36 }: { name: string; color?: string; size?: number }) {
   return (
-    <span className="inline-grid shrink-0 place-items-center font-semibold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.36, background: color || "rgb(var(--primary))", clipPath: HEX }}>{initials(name)}</span>
+    <span className="inline-grid shrink-0 place-items-center font-semibold"
+      style={{ width: size, height: size, fontSize: size * 0.36, background: color || "rgb(var(--primary))", color: inkOn(color), clipPath: HEX }}>{initials(name)}</span>
   );
 }
 

@@ -1,6 +1,6 @@
 /* FAITH cards follow the Home Assistant theme (its fonts, light or dark) with FAITH's gold as the accent.
    Set --faith-accent in an HA theme to change it; ha/themes/faith.yaml is the full brass-and-honey look. */
-:host { --fc-text: var(--primary-text-color, #2b1e15); --fc-muted: var(--secondary-text-color, #786350); --fc-accent: var(--faith-accent, #b8862f);
+:host { --fc-text: var(--primary-text-color, #2b1e15); --fc-muted: var(--secondary-text-color, #786350); --fc-accent: var(--faith-accent, #86601d); --fc-ink: var(--faith-accent-ink, color-mix(in srgb, var(--fc-accent) 65%, var(--fc-text)));
   --fc-line: var(--divider-color, rgba(0,0,0,.12)); --fc-bg2: var(--secondary-background-color, rgba(0,0,0,.04)); --fc-ok: var(--success-color, #43a047); --fc-err: var(--error-color, #db4437);
   --fc-soft: color-mix(in srgb, var(--fc-accent) 14%, transparent); display: block;
   --fc-hex: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%); --fc-serif: var(--faith-serif, "Fraunces Variable", Georgia, "Iowan Old Style", serif); }
@@ -12,11 +12,11 @@ ha-card { padding: 16px; color: var(--fc-text); }
 .head .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .eyebrow { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--fc-muted); }
 .hello { font-family: var(--fc-serif); margin: 2px 0 14px; font-size: 1.6rem; font-weight: 600; line-height: 1.15; }
-.hello em { color: var(--fc-accent); font-style: italic; }
+.hello em { color: var(--fc-ink); font-style: italic; }
 .section { padding: 12px 0; border-top: 1px solid var(--fc-line); }
 .section:first-of-type { border-top: 0; padding-top: 0; }
 .section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1rem; font-weight: 600; }
-.section h3 ha-icon { --mdc-icon-size: 20px; color: var(--fc-accent); }
+.section h3 ha-icon { --mdc-icon-size: 20px; color: var(--fc-ink); }
 .count { background: var(--fc-bg2); color: var(--fc-muted); border-radius: 999px; padding: 0 8px; font-size: .8rem; font-weight: 500; }
 ul { list-style: none; margin: 0; padding: 0; }
 .row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--fc-line); }
@@ -27,6 +27,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 .label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--fc-muted); }
 .check { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--fc-line); flex: none; }
 .check.done { background: var(--fc-ok); border-color: var(--fc-ok); }
+button.tick { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0; margin: -10px 0 -10px -12px; background: transparent; border: 0; }
+button.tick .check { border-color: var(--fc-muted); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .tile { background: var(--fc-bg2); border-radius: 12px; padding: 10px 12px; }
 .tile .v { font-size: 1.15rem; font-weight: 600; text-transform: capitalize; }
@@ -62,10 +64,10 @@ input:focus { outline: 2px solid var(--fc-accent); outline-offset: -1px; }
 .box { border: 1px solid var(--fc-accent); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .box.wait { border-style: dashed; }
 .big { font-size: 2.6rem; font-weight: 700; line-height: 1; }
-.pill { background: var(--fc-soft); color: var(--fc-accent); border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: .85rem; white-space: nowrap; }
+.pill { background: var(--fc-soft); color: var(--fc-ink); border-radius: 999px; padding: 2px 10px; font-weight: 600; font-size: .85rem; white-space: nowrap; }
 .toast { color: var(--fc-muted); font-size: .85rem; } .toast:empty, .err:empty { display: none; }
 .apps { display: flex; gap: 8px; flex-wrap: wrap; }
-.apps a { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px; border: 1px solid var(--fc-line); border-radius: 12px; padding: 6px 12px 6px 8px; }
+.apps a { text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px; border: 1px solid var(--fc-line); border-radius: 12px; padding: 6px 12px 6px 8px; min-height: 44px; }
 .emblem { flex: none; margin: -6px -2px -6px -6px; }
 
 /* points in a honeycomb cell */

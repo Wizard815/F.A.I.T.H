@@ -27,9 +27,18 @@ const ICON: Record<string, string> = { today: "mdi:calendar-today", meals: "mdi:
 const initials = (n: string) => n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 /** A person's face tile: a hexagon, one cell of the hive. */
 const Avatar = ({ p, size = 40, ring }: { p: Person; size?: number; ring?: boolean }) => {
-  const face = <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.36, background: p.color || "var(--fc-accent)" }}>{initials(p.name)}</span>;
+  const face = <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.36, background: p.color || "var(--fc-accent)", color: inkOn(p.color) }}>{initials(p.name)}</span>;
   return ring ? <span className="hexring">{face}</span> : face;
 };
+/** Initials that read on a person's colour: dark on a light colour, cream on a dark one. */
+function inkOn(hex?: string) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return undefined;
+  const lin = (i: number) => { const c = parseInt(m[1].slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const l = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+  return (l + 0.05) / 0.0625 > 1.05 / (l + 0.05) ? "#2b1e15" : "#fffaf0";   // whichever contrasts more
+}
+/** An error as a family member should read it. */
+const plain = (e: string) => (/couldn.t reach|cannot connect|econnrefused|timed out|failed to fetch|networkerror/i.test(e) ? "FAITH isn't answering. Check that its container is running." : e);
 function niceTime(t?: string) {
   if (!t) return "";
   if (/^\d{2}:\d{2}$/.test(t)) { const [h, m] = t.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
@@ -80,9 +89,8 @@ function useView<T>(api: Api, path: string, body: Record<string, unknown> = {}, 
 }
 
 // ------------------------------------------------------------------ faith-card
-function Approvals({ api, items, can, onDone }: { api: Api; items: NonNullable<CardData["approvals"]>; can: boolean; onDone: () => void }) {
-  const [msg, setMsg] = useState("");
-  const decide = (id: string, approve: boolean) => api.call(`/api/ha/approvals/${id}`, { approve }).then((r: any) => { setMsg(r.text); onDone(); }).catch((e) => setMsg(e.message));
+function Approvals({ api, items, can, onDone, say }: { api: Api; items: NonNullable<CardData["approvals"]>; can: boolean; onDone: () => void; say: (m: string) => void }) {
+  const decide = (id: string, approve: boolean) => api.call(`/api/ha/approvals/${id}`, { approve }).then((r: any) => { say(r.text); onDone(); }).catch((e) => say(plain(e.message)));
   return (<>
     <ul>{items.map((a) => (
       <li key={a.id} className="row">
@@ -91,20 +99,21 @@ function Approvals({ api, items, can, onDone }: { api: Api; items: NonNullable<C
       </li>))}
     </ul>
     {!can && <div className="meta">A grown-up approves these (signed in here, or on their phone).</div>}
-    <div className="toast" role="status">{msg}</div>
   </>);
 }
 
-function Section({ c, api, can, reload }: { c: CardData; api: Api; can: boolean; reload: () => void }) {
+function Section({ c, api, can, reload, say }: { c: CardData; api: Api; can: boolean; reload: () => void; say: (m: string) => void }) {
+  const tick = (item: string) => api.call("/api/ha/shopping/done", { args: { item } })
+    .then((r: any) => { say(r.approval ? `Asked a grown-up to tick ${item} off.` : `Ticked ${item} off.`); reload(); }).catch((e) => say(plain(e.message)));
   const items = c.items ?? [];
   let body: ReactNode;
-  if (c.error) body = <div className="err">{c.error}</div>;
+  if (c.error) body = <div className="err">{plain(c.error)}</div>;
   else if (c.empty) body = <div className="empty">{c.empty}</div>;
   else if (c.kind === "schedule") body = <ul>{items.map((i, n) => <li key={n} className="row"><span className="time">{niceTime(i.time)}</span><div className="grow"><div>{i.title}</div>{i.meta && <div className="meta">{i.meta}</div>}</div></li>)}</ul>;
   else if (c.kind === "meals") body = <ul>{items.map((i, n) => <li key={n} className="row"><span className="label grow">{i.label}{i.time && niceTime(i.time) !== "Today" ? ` · ${niceTime(i.time)}` : ""}</span><span>{i.title}</span></li>)}</ul>;
-  else if (c.kind === "checklist" || c.kind === "list") body = <ul>{items.map((i, n) => <li key={n} className="row">{c.kind === "checklist" && <span className={`check ${i.done ? "done" : ""}`} />}<span className="grow">{i.label && <span className="label">{i.label} </span>}{i.title}</span>{(i.meta || i.time) && <span className="meta">{i.meta || niceTime(i.time)}</span>}</li>)}</ul>;
+  else if (c.kind === "checklist" || c.kind === "list") body = <ul>{items.map((i, n) => <li key={n} className="row">{c.kind === "checklist" && <button className="tick" aria-label={`Tick ${i.title} off the list`} onClick={() => tick(i.title)}><span className={`check ${i.done ? "done" : ""}`} /></button>}<span className="grow">{i.label && <span className="label">{i.label} </span>}{i.title}</span>{(i.meta || i.time) && <span className="meta">{i.meta || niceTime(i.time)}</span>}</li>)}</ul>;
   else if (c.kind === "entities") body = <div className="tiles">{(c.entities ?? []).map((e) => <div key={e.entity_id} className="tile"><div className="meta">{e.name}</div><div className="v">{e.state}</div></div>)}</div>;
-  else if (c.kind === "approvals") body = <Approvals api={api} items={c.approvals ?? []} can={can} onDone={reload} />;
+  else if (c.kind === "approvals") body = <Approvals api={api} items={c.approvals ?? []} can={can} onDone={reload} say={say} />;
   else body = <div style={{ whiteSpace: "pre-wrap" }}>{c.text}</div>;
   const n = c.kind === "checklist" ? items.length : c.kind === "approvals" ? c.approvals?.length : undefined;
   return (<div className="section"><h3><ha-icon icon={ICON[c.id] || "mdi:note-text-outline"} />{c.title}{n ? <span className="count">{n}</span> : null}</h3>{body}</div>);
@@ -138,8 +147,8 @@ function Arrange({ api, layout, onDone }: { api: Api; layout: Layout; onDone: ()
 
 function FaithCard({ api, config }: { api: Api; config: CardConfig }) {
   const { data, err, load } = useView<View>(api, "/api/ha/view", config.cards ? { cards: config.cards } : {});
-  const [arranging, setArranging] = useState(false);
-  if (err) return <ha-card><div className="err">{err}</div></ha-card>;
+  const [arranging, setArranging] = useState(false), [msg, setMsg] = useState("");
+  if (err) return <ha-card><div className="err" role="alert">{plain(err)}</div></ha-card>;
   if (!data) return <ha-card><div className="empty">Loading…</div></ha-card>;
   const who = data.person ? `${data.person.name}'s` : "The family's";
   if (arranging && data.layout) return <ha-card><Arrange api={api} layout={data.layout} onDone={() => { setArranging(false); load(); }} /></ha-card>;
@@ -151,8 +160,9 @@ function FaithCard({ api, config }: { api: Api; config: CardConfig }) {
         <div className="hello">{config.title ?? <>{who} <em>day</em>, at a glance.</>}</div>
       </>}
       {config.show_apps !== false && data.apps.length > 0 && <div className="section"><div className="apps">{data.apps.map((a) => <a key={a.id} href={a.url} target="_blank" rel="noreferrer"><span>{a.icon || "↗"}</span>{a.name}</a>)}</div></div>}
-      {data.cards.map((c) => <Section key={c.id} c={c} api={api} can={data.can_approve} reload={load} />)}
+      {data.cards.map((c) => <Section key={c.id} c={c} api={api} can={data.can_approve} reload={load} say={setMsg} />)}
       {!data.cards.length && <div className="empty">Nothing to show yet.</div>}
+      <div className="toast" role="status">{msg}</div>
     </ha-card>
   );
 }
@@ -221,20 +231,29 @@ function useHubKeepAlive(api: Api, data: View | null) {
   }, [data?.hub?.person.id]);
   useEffect(() => { if (data && !data.hub && data.household && api.screen && hubSession(api.screen)) setHubSession(api.screen, null); }, [data]);
 }
+/** Seconds until a shared screen signs its person out, counted down live, and a Stay that keeps them. */
+function useSignOutIn(api: Api, data: View | null | undefined, reload: () => void) {
+  const [until, setUntil] = useState(0), [, tick] = useState(0);
+  useEffect(() => { setUntil(data?.hub ? Date.now() + data.hub.remaining_seconds * 1000 : 0); }, [data?.hub?.remaining_seconds, data?.hub?.person.id]);
+  useEffect(() => { if (!until) return; const i = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(i); }, [until]);
+  const left = until ? Math.max(0, Math.round((until - Date.now()) / 1000)) : Infinity;
+  return { soon: left <= 20, left, stay: () => api.call("/api/ha/hub/activity").then(reload).catch(() => {}) };
+}
 const signOut = async (api: Api) => { await api.call("/api/ha/hub/signout").catch(() => {}); setHubSession(api.screen!, null); };
 
 // ------------------------------------------------------------------ faith-who-card
 function WhoCard({ api }: { api: Api; config: CardConfig }) {
-  const { data, err } = useView<View>(api, "/api/ha/view", { cards: [] }, 10_000);
+  const { data, err, load } = useView<View>(api, "/api/ha/view", { cards: [] }, 10_000);
   const [people, setPeople] = useState<People | null>(null), [pick, setPick] = useState<Person | null>(null), [msg, setMsg] = useState("");
   useHubKeepAlive(api, data);
+  const leaving = useSignOutIn(api, data, load);
   if (!api.screen) return <ha-card><div className="err">Give this card the screen it's on: <code>screen: kitchen</code></div></ha-card>;
-  if (err) return <ha-card><div className="err">{err}</div></ha-card>;
+  if (err) return <ha-card><div className="err" role="alert">{plain(err)}</div></ha-card>;
   if (!data) return <ha-card><div className="empty">…</div></ha-card>;
 
   if (data.hub) return (
-    <ha-card><div className="head"><Avatar p={data.hub.person} size={44} /><div><h2>{data.hub.person.name}</h2><div className="sub">Signed in on this screen{data.hub.remaining_seconds < 60 ? ` · signing out in ${data.hub.remaining_seconds}s` : ""}</div></div>
-      <div className="right"><button onClick={() => signOut(api)}>Sign out</button></div></div></ha-card>
+    <ha-card><div className="head"><Avatar p={data.hub.person} size={44} /><div><h2>{data.hub.person.name}</h2><div className="sub" role="status">Signed in on this screen{leaving.soon ? ` · signing out in ${leaving.left}s` : ""}</div></div>
+      <div className="right">{leaving.soon && <button className="primary" onClick={leaving.stay}>Stay</button>}<button onClick={() => signOut(api)}>Sign out</button></div></div></ha-card>
   );
   if (data.person) return <ha-card><div className="head"><Avatar p={data.person} size={44} /><div><h2>{data.person.name}</h2><div className="sub">Your own Home Assistant account</div></div></div></ha-card>;
   if (data.pair_needed) return <ha-card><PairForm api={api} /></ha-card>;
@@ -293,7 +312,7 @@ function useChat(api: Api, speak: boolean) {
         ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools }]);
       setSaid(Date.now());
       if (speak && r.text) say(r.text);
-    } catch (e: any) { setLines((l) => [...l.slice(0, -1), { text: `Sorry, that didn't work: ${e.message}` }]); }
+    } catch (e: any) { setLines((l) => [...l.slice(0, -1), { text: plain(e.message) === e.message ? `Sorry, that didn't work: ${e.message}` : plain(e.message) }]); }
     finally { setBusy(false); }
   };
   const mic = async () => {
@@ -408,11 +427,11 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
   const c = useChat(api, config.speak !== false);
   const [now, setNow] = useState(new Date());
   const [people, setPeople] = useState<People | null>(null), [pick, setPick] = useState<Person | null>(null);
-  useEffect(() => { const i = setInterval(() => setNow(new Date()), 10_000); return () => clearInterval(i); }, []);
+  useEffect(() => { const i = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(i); }, []);
   useHubKeepAlive(api, data);
+  const leaving = useSignOutIn(api, data, load);
   const shared = !!api.screen && !!data && !data.person;
   useEffect(() => { if (shared && data?.can_sign_in) loadPeople(api).then(setPeople).catch(() => {}); }, [shared, data?.can_sign_in, data?.hub?.person.id]);
-  if (err) return <ha-card class="hub"><div className="err">{err}</div></ha-card>;
 
   const me = data?.hub?.person ?? data?.person ?? null;
   const last = [...c.lines].reverse().find((l) => !l.me && !l.confirm && !l.waiting);
@@ -431,9 +450,12 @@ function HubCard({ api, config }: { api: Api; config: CardConfig }) {
         </div>
         <div className="right">
           {!!data?.pending_approvals && <span className="pill">{data.pending_approvals} waiting for approval</span>}
+          {data?.hub && leaving.soon && <span className="pill" role="status">Signing out {data.hub.person.name} in {leaving.left}s</span>}
+          {data?.hub && leaving.soon && <button className="primary" onClick={leaving.stay}>Stay</button>}
           {data?.hub && <button onClick={() => signOut(api).then(load)}>Sign out {data.hub.person.name}</button>}
         </div>
       </div>
+      {err && <div className="err" role="alert">{plain(err)}</div>}
       <div className="hub-mid">
         <div className="hello">{greeting(now)}, <em>{me ? me.name : "everyone"}</em>.</div>
         {(next || !!data?.home?.length) && <div className="meta">{[next ? `Next: ${niceTime(next.time)} ${next.title}` : "", data?.home?.length ? `Home now: ${data.home.map((p) => p.name).join(", ")}` : ""].filter(Boolean).join(" · ")}</div>}
@@ -467,7 +489,7 @@ function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
   const { data, err, load } = useView<RewardsView>(api, "/api/ha/rewards");
   const [msg, setMsg] = useState("");
   const act = (path: string, args: Record<string, unknown>, ok: string) => api.call(path, { args }).then((r: any) => { setMsg(r.approval ? `${ok} A grown-up will approve it.` : ok); load(); }).catch((e) => setMsg(e.message));
-  if (err) return <ha-card><div className="err">{err}</div></ha-card>;
+  if (err) return <ha-card><div className="err" role="alert">{plain(err)}</div></ha-card>;
   if (!data) return <ha-card><div className="empty">Loading…</div></ha-card>;
   const pts = (n: number) => `${n} pt${n === 1 ? "" : "s"}`;
   return (
@@ -475,9 +497,9 @@ function RewardsCard({ api, config }: { api: Api; config: CardConfig }) {
       <div className="head"><ha-icon icon="mdi:star-circle-outline" /><h2>{config.title ?? "Points & rewards"}</h2></div>
       {data.me ? (<>
         <div className="section mine"><div className="honey"><span className="big">{data.me.points}</span><span className="label">points</span></div><div><div className="eyebrow">{data.me.name}'s points</div><div className="meta">Do jobs, ask a grown-up, and spend them on rewards.</div>{data.me.card && <div className="cardbal"><ha-icon icon="mdi:credit-card-outline" />My card: <b>{money(data.me.card)}</b></div>}</div></div>
-        <div className="section"><h3>Jobs</h3><ul>{data.activities.filter((a) => a.kids_can_claim).map((a) => (
+        <div className="section"><h3>Jobs</h3>{!data.activities.some((a) => a.kids_can_claim) && <div className="empty">No jobs to claim yet. A grown-up adds them in FAITH's admin page.</div>}<ul>{data.activities.filter((a) => a.kids_can_claim).map((a) => (
           <li key={a.id} className="row"><span className="grow">{a.name}</span><span className="pill">+{pts(a.points)}</span><button onClick={() => act("/api/ha/rewards/claim", { activity: a.id }, `Asked for ${pts(a.points)} for "${a.name}".`)}>I did it</button></li>))}</ul></div>
-        <div className="section"><h3>Rewards</h3><ul>{data.rewards.map((r) => (
+        <div className="section"><h3>Rewards</h3>{!data.rewards.length && <div className="empty">No rewards yet. A grown-up adds them in FAITH's admin page.</div>}<ul>{data.rewards.map((r) => (
           <li key={r.id} className="row"><span className="grow">{r.name}{r.kind === "money" && r.amount && data.me!.card && !/card/i.test(r.name) ? <span className="meta"> · onto your card</span> : null}</span><span className="pill">{pts(r.cost)}</span><button className="primary" disabled={data.me!.points < r.cost} onClick={() => act("/api/ha/rewards/redeem", { reward: r.id }, `Asked for "${r.name}".`)}>Get it</button></li>))}</ul></div>
       </>) : (<>
         {!data.kids.length && <div className="empty">No children in FAITH's family list yet.</div>}

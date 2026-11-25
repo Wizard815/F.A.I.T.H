@@ -26,9 +26,9 @@ export function People({ me, passkeys }: { me: string; passkeys: boolean }) {
         <Panel key={p.id}>
           <div className="mb-4 flex items-center gap-3"><Avatar name={p.name} color={p.color} size={48} /><div><div className="font-serif text-[20px] font-semibold">{p.name}</div><div className="text-[14px] text-muted">{p.role} · id {p.id}{p.role === "child" ? ` · ${p.points} points` : ""}</div></div></div>
           <div className="mb-4 flex flex-wrap gap-2">
-            <Badge ok={p.methods.pin}>PIN</Badge><Badge ok={p.methods.password}>password</Badge><Badge ok={p.methods.passkey}>Face ID</Badge>
+            <Badge ok={p.methods.pin}>{p.methods.pin ? "PIN set" : "no PIN"}</Badge><Badge ok={p.methods.password}>{p.methods.password ? "password set" : "no password"}</Badge><Badge ok={p.methods.passkey}>{p.methods.passkey ? "Face ID set" : "no Face ID"}</Badge>
             <Badge ok={p.voice_samples >= 3 ? true : p.voice_samples ? null : false}>voice: {p.voice_samples} sample{p.voice_samples === 1 ? "" : "s"}</Badge>
-            <Badge ok={!!p.ha_user_id}>HA user</Badge><Badge ok={!!p.mattermost_username}>Mattermost</Badge><Badge ok={!!p.ha_notify?.length}>phone pushes</Badge>
+            <Badge ok={!!p.ha_user_id}>{p.ha_user_id ? "HA user linked" : "no HA user"}</Badge><Badge ok={!!p.mattermost_username}>{p.mattermost_username ? "Mattermost linked" : "no Mattermost"}</Badge><Badge ok={!!p.ha_notify?.length}>{p.ha_notify?.length ? "phone pushes on" : "no phone pushes"}</Badge>
           </div>
           <div className="flex flex-wrap gap-2">
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = (e.currentTarget.elements.namedItem("pin") as HTMLInputElement).value; go(api(`/api/admin/people/${p.id}/pin`, { method: "PUT", body: { pin: v } }), `PIN set for ${p.name}.`); e.currentTarget.reset(); }}>

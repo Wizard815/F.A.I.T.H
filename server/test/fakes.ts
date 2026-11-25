@@ -128,6 +128,7 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
       services.push({ domain: m[1], service: m[2], data: b, token });
       if (m[1] === "todo" && m[2] === "get_items") return json({ changed_states: [], service_response: { [b.entity_id]: { items: shopping.map((x) => ({ summary: x, status: "needs_action" })) } } });
       if (m[1] === "todo" && m[2] === "add_item") { shopping.push(b.item); return json([]); }
+      if (m[1] === "todo" && m[2] === "update_item" && b.status === "completed") { const i = shopping.indexOf(b.item); if (i >= 0) shopping.splice(i, 1); return json([]); }
       if (states[b?.entity_id] && /turn_on|unlock|open/.test(m[2])) states[b.entity_id].state = m[2] === "unlock" ? "unlocked" : "on";
       if (states[b?.entity_id] && /turn_off|lock$/.test(m[2])) states[b.entity_id].state = m[2] === "lock" ? "locked" : "off";
       return json([]);

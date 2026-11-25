@@ -80,7 +80,8 @@ class FaithClient:
                     raise FaithError((data or {}).get("error", f"HTTP {resp.status}"))
                 return data or {}
         except (aiohttp.ClientError, TimeoutError) as err:
-            raise FaithError(f"Couldn't reach FAITH: {err}") from err
+            _LOGGER.warning("Couldn't reach FAITH at %s: %s", self.url, err)
+            raise FaithError("FAITH isn't answering. Check that its container is running and the address in the FAITH integration.") from err
 
     async def summary(self) -> dict[str, Any]:
         return await self.request("GET", "/api/ha/summary")

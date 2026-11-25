@@ -73,7 +73,7 @@ export async function dashboard(cfg: Config, registry: Registry, caller: Caller,
     if (card.who === "household" && caller.scope.kind !== "household") return null;
     if (card.people && !(caller.scope.kind === "person" && card.people.includes(caller.scope.person.id))) return null;
     if (card.roles && !card.roles.includes(policyOf(caller))) return null;
-    const kind: CardOut["kind"] = card.builtin === "today" ? "schedule" : card.builtin === "meals" ? "meals" : card.builtin === "shopping" || card.builtin === "chores" ? "checklist" : "list";
+    const kind: CardOut["kind"] = card.builtin === "today" ? "schedule" : card.builtin === "meals" ? "meals" : card.builtin === "shopping" ? "checklist" : "list";   // chores are logged in lastGLANCE, not ticked here
     const base = { id: card.id, title: card.title, kind };
     try {
       let out: Item[] | string | undefined;

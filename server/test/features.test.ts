@@ -442,3 +442,16 @@ test("a change that comes out of a photo or video waits for the person's own Yes
   assert.equal(t.confirms.length, 0);
   assert.equal(ha.states["light.kitchen"].state, "on");
 });
+
+test("cards: an item ticked off the shopping list goes through shopping_done; chores aren't tickable", async () => {
+  ha.shopping.push("Milk");
+  const sam = (await H("/api/ha/view", { user_id: "ha-sam" })).json();
+  const shop = sam.cards.find((c: any) => c.id === "shopping");
+  assert.equal(shop?.kind, "checklist");
+  assert.ok(shop.items.some((i: any) => i.title === "Milk"));
+  const chores = sam.cards.find((c: any) => c.id === "chores");
+  if (chores) assert.notEqual(chores.kind, "checklist", "chores are logged in lastGLANCE, not here");
+  const r = await H("/api/ha/shopping/done", { user_id: "ha-sam", args: { item: "Milk" } });
+  assert.equal(r.statusCode, 200, r.body);
+  assert.ok(!ha.shopping.includes("Milk"), "ticked off in HA");
+});

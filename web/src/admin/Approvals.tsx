@@ -14,8 +14,8 @@ export function Approvals() {
       <Table head={["Asked", "What", "By", "Status", ""]}>{reqs.map((r) => (
         <tr key={r.id}><Td>{when(r.requested_at)}</Td><Td>{r.summary}</Td><Td>{r.requested_by}</Td>
           <Td><Badge ok={r.status === "approved" ? true : r.status === "pending" ? null : false}>{r.status}{r.decided_by ? ` by ${r.decided_by}` : ""}{r.overruled ? " (overruled)" : ""}</Badge></Td>
-          <Td>{r.status === "pending" ? <div className="flex gap-2"><button className="btn-primary min-h-[34px]" onClick={() => decide(r.id, true)}>Approve</button><button className="btn-soft min-h-[34px]" onClick={() => decide(r.id, false)}>Deny</button></div>
-            : r.status === "denied" ? <button className="btn-soft min-h-[34px]" onClick={() => decide(r.id, true)}>Overrule</button> : null}</Td></tr>))}</Table>
+          <Td>{r.status === "pending" ? <div className="flex gap-2"><button className="btn-primary" onClick={() => decide(r.id, true)}>Approve</button><button className="btn-soft" onClick={() => decide(r.id, false)}>Deny</button></div>
+            : r.status === "denied" ? <button className="btn-soft" onClick={() => decide(r.id, true)}>Overrule</button> : null}</Td></tr>))}</Table>
       {!reqs.length && <p className="text-muted">Nothing asked in the last day.</p>}
     </Panel>
     <div className="mt-5"><Panel title="What FAITH changed">

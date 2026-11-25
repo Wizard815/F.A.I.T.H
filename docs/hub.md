@@ -7,14 +7,14 @@ FAITH works like a home hub: a shared screen that anyone can use, and that one p
 | Where | How | Lasts |
 |---|---|---|
 | A paired wall screen, nobody signed in | nothing: the household view | until someone signs in |
-| A paired wall screen | tap *Sign in*, their face tile, then a PIN, Face ID, password, or the camera | until they leave (below) or tap *Sign out* |
-| Their own phone or computer | password or Face ID | `personal.idle_days` without use, at most `personal.max_days` |
+| A paired wall screen (FAITH's hub or who card in HA) | tap their face tile, then their PIN; or the camera (below) | until they leave (below) or tap *Sign out* |
+| Their own phone or computer | their own Home Assistant account (mapped with `ha_user_id`); FAITH's own page takes a password or Face ID (the admin console) | `personal.idle_days` without use, at most `personal.max_days` |
 | Home Assistant Assist | the HA user's mapped person, or household | one request |
 | Another app | a `faith token` (household or one person) | until revoked |
 
 **PINs only work on paired screens** (`hub.pin_on_personal_devices: false`). A PIN is short, so it's only accepted from a screen that's physically in the house. Five wrong tries lock that person for five minutes.
 
-**Face ID** is a passkey. Each person adds it from Settings on each device (a wall iPad, their phone), and FAITH stores only the public key.
+**Face ID** is a passkey for FAITH's own page (the admin console), not the HA cards. Each person adds it on each device, and FAITH stores only the public key.
 - Browsers allow passkeys only over https, so serve FAITH through your reverse proxy (e.g. `https://faith.home.lan`) and set `public_url`.
 - Over plain http the Face ID buttons don't show; PINs and passwords still work.
 
@@ -25,12 +25,12 @@ FAITH works like a home hub: a shared screen that anyone can use, and that one p
 ## Pairing a screen
 
 ```bash
-docker exec faith faith pair kitchen      # or Settings → Screens as an admin
+docker exec faith faith pair kitchen      # or Tokens & screens on FAITH's admin page
 ```
 
-On the tablet, open FAITH, choose *Pair this screen* and type the 6-digit code (one use, 10 minutes). The screen keeps a long-lived device cookie.
+On the tablet, the FAITH card in HA asks for the 6-digit code (one use, 10 minutes). The tablet keeps the pairing.
 - Pairing again replaces it.
-- `faith unpair kitchen` or Settings removes it.
+- `faith unpair kitchen` or Tokens & screens removes it.
 
 ## Signing out by itself
 
@@ -41,7 +41,7 @@ On the tablet, open FAITH, choose *Pair this screen* and type the 6-digit code (
 | Presence sensor, someone stays | after `max_idle_seconds` (default 900) without a tap anyway |
 | Any screen | after `max_hours` (default 8) |
 
-- The last 20 seconds show "Signing *name* out · tap to stay".
+- The last 20 seconds count down on the hub and who cards ("Signing out *name* in 12s") with a **Stay** button. Any tap on the screen also keeps them.
 - A background sweep ends sessions on time even if nobody is polling.
 - Signing someone else in on the same screen signs the previous person out.
 - `faith signout <person>` ends all of a person's sessions everywhere.

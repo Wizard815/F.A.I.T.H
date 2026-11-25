@@ -5,11 +5,11 @@
 # then pick "FAITH" under your profile (or set it per dashboard view / with
 # frontend.set_theme in an automation for the kiosk).
 FAITH:
-  faith-accent: "#B8862F"
+  faith-accent: "#86601D"
   faith-accent-text: "#FFFAF0"
   modes:
     light:
-      primary-color: "#9A6B1F"
+      primary-color: "#86601D"
       accent-color: "#DEB25A"
       text-primary-color: "#FFFAF0"
       primary-text-color: "#2B1E15"
@@ -27,14 +27,14 @@ FAITH:
       sidebar-background-color: "#F1E8DA"
       sidebar-text-color: "#2B1E15"
       sidebar-icon-color: "#786350"
-      sidebar-selected-text-color: "#9A6B1F"
-      sidebar-selected-icon-color: "#9A6B1F"
-      state-icon-color: "#9A6B1F"
+      sidebar-selected-text-color: "#86601D"
+      sidebar-selected-icon-color: "#86601D"
+      state-icon-color: "#86601D"
       state-icon-active-color: "#C8922E"
-      success-color: "#5C8448"
+      success-color: "#4A6E38"
       warning-color: "#C48024"
       error-color: "#B84838"
-      faith-accent: "#9A6B1F"
+      faith-accent: "#86601D"
       faith-accent-text: "#FFFAF0"
     dark:
       primary-color: "#DEB25A"

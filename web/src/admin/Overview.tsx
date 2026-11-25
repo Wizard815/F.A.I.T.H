@@ -13,7 +13,7 @@ function Watch() {
   if (!h) return null;
   const sources = [...h.sources].sort((a: any, b: any) => (a.ok === b.ok ? a.label.localeCompare(b.label) : a.ok === false ? -1 : b.ok === false ? 1 : 0));
   return (
-    <Panel title="Integrations watch" right={<button className="btn-soft min-h-[36px]" disabled={busy} onClick={() => load(true)}>{busy ? "Checking…" : "Check now"}</button>}>
+    <Panel title="Integrations watch" right={<button className="btn-soft" disabled={busy} onClick={() => load(true)}>{busy ? "Checking…" : "Check now"}</button>}>
       <p className="mb-3 text-[14px] text-muted">{h.interval_s > 0 ? `Checked every ${Math.round(h.interval_s / 60) || 1} min. When one stops answering twice in a row, the parents get one message, and another when it's back.` : "Off (health.interval_s: 0)."}</p>
       {!sources.length ? <p className="text-muted">Not checked yet. Press Check now.</p> : (
         <ul>{sources.map((s: any) => (

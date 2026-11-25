@@ -182,6 +182,8 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   app.post("/api/ha/rewards/claim", act("points_claim"));
   app.post("/api/ha/rewards/redeem", act("reward_redeem"));
   app.post("/api/ha/rewards/award", act("points_award"));
+  // Tick an item off the shopping list from the day card (the same rules as asking FAITH to).
+  app.post("/api/ha/shopping/done", act("shopping_done"));
 
   // ---- shared screens: "Who's here?" on a wall tablet signed into HA as the family ----
   const shared = (req: FastifyRequest) => {
