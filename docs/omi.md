@@ -10,7 +10,7 @@ FAITH reaches Omi's own MCP server (`/v1/mcp`), with **each person's own read-on
 connectors:
   - id: omi
     type: mcp
-    url: http://192.168.1.5:8000/v1/mcp
+    url: http://<omi-host>:8000/v1/mcp
     description: "Omi: this person's recorded conversations and memories"
     person_token_env: OMI_TOKEN_{ID}        # each person's own key; no household token
     tools: ["get_*", "search_*"]            # reading only
