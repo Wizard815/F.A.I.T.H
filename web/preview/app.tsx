@@ -1,9 +1,11 @@
-// FAITH's family UI as a clickable preview: React (UMD global), FAITH's real emblem renderer,
+// FAITH's family UI as a clickable preview: React (bundled in), FAITH's real emblem renderer,
 // example data and a scripted FAITH. Build: node web/scripts/preview.mjs (writes docs/brand/faith-hub.html).
+// Everything is in the one page: nothing is fetched from the internet.
+import * as ReactAll from "react";
+import * as ReactDOM from "react-dom/client";
 import { EmblemRenderer, type EmblemState } from "../src/emblem/emblem.ts";
 
-declare const React: any;
-declare const ReactDOM: any;
+const React: any = ReactAll;
 const { useState, useEffect, useRef, useCallback } = React;
 
 // ---------------------------------------------------------------- example family

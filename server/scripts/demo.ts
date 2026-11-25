@@ -9,13 +9,19 @@ import { resolve } from "node:path";
 
 const wiki = await fakeMcp([
   { name: "context_for", readOnly: true, run: (a) => ({ profile: `${a.person} likes hiking and tacos.` }) },
-  { name: "notes_search", readOnly: true, run: (_a, t) => ({ results: t === "w-house" ? [{ title: "Mackinac trip plan" }] : [{ title: "Mackinac trip plan" }, { title: "Anniversary gift ideas (private)" }] }) },
+  // Each token sees the shared plan plus only its own person's private notes, as the real wiki does.
+  { name: "notes_search", readOnly: true, run: (_a, t) => ({ results: [{ title: "Mackinac trip plan" }, ...(t === "w-wiz" ? [{ title: "Anniversary gift ideas (Wizard's, private)" }] : t === "w-par" ? [{ title: "Quilt pattern (private)" }] : [])] }) },
   { name: "memory_log", run: () => ({ ok: true }) },
 ]);
 const allg = await fakeMcp([
   { name: "allglance_get_day", readOnly: true, run: (_a, t) => {
     const shared = [{ title: "School pickup", start: "15:15", owner: "Sam" }, { title: "Robin's swim lesson", start: "16:30", owner: "Robin, Sam" }, { title: "Family dinner", start: "18:00", owner: "Everyone" }];
-    return { blocks: t === "a-house" ? shared : [{ title: "Dentist", start: "09:30", owner: "Wizard" }, ...shared, { title: "Call about the ring", start: "20:00", owner: "Wizard" }] };
+    // The household sees the shared plan; each person also sees only their own private items.
+    const own: Record<string, { title: string; start: string; owner: string }[]> = {
+      "a-wiz": [{ title: "Dentist", start: "09:30", owner: "Wizard" }, { title: "Call about the ring", start: "20:00", owner: "Wizard" }],
+      "a-par": [{ title: "Yoga", start: "07:00", owner: "Partner" }],
+    };
+    return { blocks: [...(own[t] ?? []), ...shared].sort((x, y) => x.start.localeCompare(y.start)) };
   } },
   { name: "allglance_list_chores", readOnly: true, run: () => ({ chores: [{ title: "Bins out", owner: "Robin" }, { title: "Water the plants", owner: "Sam" }, { title: "Empty the dishwasher", owner: "Robin" }] }) },
   { name: "allglance_create_task", run: (a) => ({ ok: true, title: a.title }) },

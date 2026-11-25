@@ -3,6 +3,8 @@ package family.faith.app
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
@@ -62,9 +64,25 @@ object Photos {
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_PX) sample *= 2
         val bmp = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
         val scale = minOf(1f, MAX_PX.toFloat() / maxOf(bmp.width, bmp.height))
-        val sized = if (scale < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+        val scaled = if (scale < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
+        // Phones save photos sideways and note the turn in EXIF: turn it upright, as FAITH can't see the tag.
+        val turn = turnOf(context, uri)
+        val sized = if (turn != 0f) Bitmap.createBitmap(scaled, 0, 0, scaled.width, scaled.height, Matrix().apply { postRotate(turn) }, true) else scaled
         val out = ByteArrayOutputStream()
         sized.compress(Bitmap.CompressFormat.JPEG, 85, out)
         return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    /** How far a photo must turn to stand upright, from its EXIF orientation. */
+    fun turnOf(context: Context, uri: Uri): Float = try {
+        context.contentResolver.openInputStream(uri)?.use { turnFor(ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) } ?: 0f
+    } catch (_: Exception) { 0f }
+
+    /** EXIF orientation -> degrees clockwise. */
+    fun turnFor(orientation: Int): Float = when (orientation) {
+        6 -> 90f    // ORIENTATION_ROTATE_90
+        3 -> 180f   // ORIENTATION_ROTATE_180
+        8 -> 270f   // ORIENTATION_ROTATE_270
+        else -> 0f
     }
 }

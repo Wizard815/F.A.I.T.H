@@ -98,7 +98,12 @@ export class Agent {
       const text = typeof out === "string" ? out : JSON.stringify(out);
       const max = this.cfg().model.context_chars;
       return text.length > max ? text.slice(0, max) + " …" : text;
-    } catch { return undefined; }
+    } catch (e: any) {
+      // Answering without the wiki's context still works, but say so once: a wrong token or a down wiki shows here.
+      const why = `${t.name}: ${e?.message || e}`;
+      if (!this.contextWarned.has(why)) { this.contextWarned.add(why); console.warn(`The wiki's context for ${person} didn't load (${why}). FAITH answers without it.`); }
+      return undefined;
+    }
   }
 
   private canConfirm(c: Caller) { return c.channel === "hub" || c.channel === "personal" || c.channel === "mattermost" || c.channel === "ha"; }
@@ -236,6 +241,7 @@ export class Agent {
     this.save(conv.id, "assistant", result.text);
     return { conversationId: conv.id, text: result.text, toolsUsed: result.toolsUsed, pending, requests };
   }
+  private contextWarned = new Set<string>();
   private lastContext = new Map<string, { at: number; day: string; text?: string; about: string }>();
   /** What the wiki says about whoever is asking: on a new conversation, then again every 15 minutes
    *  or when the day changes. In a group chat or by voice that's the speaker (the wiki gives a shared

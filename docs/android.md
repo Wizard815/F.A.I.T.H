@@ -41,6 +41,6 @@ The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the p
 
 ## Not built yet
 
-- Photos taken straight from the camera (the 📷 button picks existing photos for now), and EXIF rotation.
+- Photos taken straight from the camera (the 📷 button picks existing photos for now). Sideways phone photos are turned upright before sending.
 - A home screen widget with today's plan.
 - Signing in with a passkey instead of a password.

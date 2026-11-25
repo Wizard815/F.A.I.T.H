@@ -33,3 +33,13 @@ class ContractTest {
         assertEquals("checking", ChatModel.friendlyTool("something_else"))
     }
 }
+
+class PhotoTest {
+    @Test fun sidewaysPhotosAreTurnedUpright() {
+        assertEquals(90f, Photos.turnFor(6))
+        assertEquals(180f, Photos.turnFor(3))
+        assertEquals(270f, Photos.turnFor(8))
+        assertEquals(0f, Photos.turnFor(1))
+        assertEquals(0f, Photos.turnFor(0))
+    }
+}
