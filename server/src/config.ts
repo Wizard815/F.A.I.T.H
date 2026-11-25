@@ -55,7 +55,9 @@ export type HomeAssistantConnector = {
   fast_path: boolean;
   /** Cameras FAITH may look through (camera_look), and who may ask. A camera isn't
    *  reachable unless it's listed here. */
-  cameras: { entity: string; name: string; who: PolicyName[] }[];
+  cameras: { entity: string; name: string; who: PolicyName[];
+    /** HA's face recognition for this camera (Frigate, Double Take): a sensor whose state is the name it saw. */
+    face_entity?: string }[];
   roles?: PolicyName[];
 };
 export type HermesConnector = {
@@ -232,7 +234,9 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
           const who = (k?.who ? list(k.who) : ["admin", "adult"]) as PolicyName[];
           const bad = who.find((w) => ![...ROLES, "household", "parents"].includes(w));
           if (bad) throw new ConfigError(`connectors.${id}.cameras ${entity}: who "${bad}" is one of admin, adult, child, household, parents.`);
-          return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who };
+          const face = k?.face_entity ? str(k.face_entity) : undefined;
+          if (face && !/^[a-z_]+\.[a-z0-9_]+$/.test(face)) throw new ConfigError(`connectors.${id}.cameras ${entity}: face_entity "${face}" isn't an entity id (sensor.front_door_last_face).`);
+          return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who, ...(face ? { face_entity: face } : {}) };
         }) } as HomeAssistantConnector;
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;

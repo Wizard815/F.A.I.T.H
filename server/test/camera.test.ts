@@ -17,15 +17,16 @@ const SEES = "A person in a brown uniform holding a parcel. A paper sign reads U
 before(async () => {
   ha = await fakeHa({ "light.porch": { state: "off", attributes: { friendly_name: "Porch light" } }, "lock.front_door": { state: "locked" } },
     { cameras: { "camera.front_door": PNG, "camera.nursery": PNG } });
+  ha.states["sensor.front_door_face"] = { state: "unknown", attributes: { last_seen: new Date().toISOString() } };
   model = await fakeModel((req) => {
     if (String(req.messages[0]?.content).startsWith("You describe one camera picture")) { looks.push(req); return { content: SEES }; }
     return script(req);
   });
   const cfg = parseConfig({
     model: { base_url: model.url, vision_model: "eyes" },
-    people: [{ id: "wizard", name: "Wizard", role: "admin", ha_notify: ["mobile_app_wiz"] }, { id: "robin", name: "Robin", role: "child" }],
+    people: [{ id: "wizard", name: "Wizard", role: "admin", ha_notify: ["mobile_app_wiz"] }, { id: "robin", name: "Robin", role: "child", face_names: ["robbie"] }],
     connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", cameras: [
-      { entity: "camera.front_door", name: "Front door", who: ["admin", "adult", "parents"] },
+      { entity: "camera.front_door", name: "Front door", who: ["admin", "adult", "parents"], face_entity: "sensor.front_door_face" },
       { entity: "camera.nursery", name: "Nursery", who: ["admin"] },
     ] }],
   }, {});
@@ -86,4 +87,27 @@ test("faith.look from an automation: the parents' view, and the answer sent on",
   assert.equal(ok.json().camera, "Front door");
   const no = await H({ user_id: null, camera: "camera.nursery" });
   assert.equal(no.statusCode, 400, "the nursery is for the admin only, not an automation");
+});
+
+test("faces at the door: HA's face recognition names who's there, if it saw them in the last two minutes", async () => {
+  const face = (state: string, agoMs = 0) => { ha.states["sensor.front_door_face"] = { state, attributes: { last_seen: new Date(Date.now() - agoMs).toISOString() } }; };
+  const lookNow = async () => (await A.agent.runTool(as(0), "camera_look", { camera: "front door" })).out as any;
+  face("robbie");
+  let out = await lookNow();
+  assert.equal(out.who, "Robin", "a face name from face_names is the family member");
+  assert.match(looks.at(-1).messages[1].content[0].text, /Face recognition says the person at this camera is Robin/);
+  face("Grandma");
+  assert.equal((await lookNow()).who, "Grandma", "a name HA knows but FAITH doesn't is said as it is");
+  face("robbie", 10 * 60_000);
+  out = await lookNow();
+  assert.equal(out.who, undefined, "seen ten minutes ago: that's not who is there now");
+  assert.doesNotMatch(looks.at(-1).messages[1].content[0].text, /Face recognition/);
+  face("unknown");
+  assert.equal((await lookNow()).who, undefined);
+  face("robbie");
+  const H = (payload: any) => A.app.inject({ method: "POST", url: "/api/ha/look", headers: { authorization: `Bearer ${haTok}` }, payload });
+  const before = ha.services.length;
+  const r = (await H({ user_id: null, camera: "camera.front_door", to: "wizard" })).json();
+  assert.equal(r.who, "Robin");
+  assert.ok(ha.services.slice(before).some((x) => x.service === "mobile_app_wiz" && x.data.message.startsWith("Front door: It's Robin. ")), "the push says who it is");
 });

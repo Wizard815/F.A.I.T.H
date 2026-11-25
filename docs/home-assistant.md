@@ -184,6 +184,22 @@ connectors:
 - Text in the picture is reported, never followed. A change FAITH wants to make after looking through a camera waits for the person's own Yes, as with a photo.
 - Frigate cameras work the same way through HA's Frigate integration.
 
+**Faces at the door.** Give a camera HA's face recognition sensor, and FAITH says who it is: "It's Sam, holding a parcel."
+
+```yaml
+      - entity: camera.front_door
+        name: Front door
+        who: [admin, adult, parents]
+        face_entity: sensor.front_door_last_recognized_face   # Frigate 0.16+, or Double Take's sensor
+```
+
+- The sensor's state is the name it recognised. FAITH matches it to a family member like screen sign-in does: their id, name or `face_names`.
+- A name FAITH doesn't know (a grandparent you trained in Frigate) is said as it is.
+- Only a face seen in the last two minutes counts (`last_seen` or the sensor's last change). An old sighting isn't who's there now.
+- FAITH doesn't recognise faces itself. With no face sensor, it describes the person and never guesses a name.
+- The doorbell message reads "Front door: It's Sam. …".
+- Who's at the door is only told to the people the camera lists in `who`.
+
 **A doorbell that says who's there.** In an automation, use the `faith.look` action:
 
 ```yaml
@@ -249,7 +265,11 @@ FAITH reads and changes Mealie through HA's Mealie integration (shopping lists a
 
 ## The family dashboard (FAITH's cards)
 
-The family uses Home Assistant; FAITH's own page is the admin console. The integration serves five cards, loaded automatically:
+The family uses Home Assistant; FAITH's own page is the admin console. The integration serves five cards, loaded automatically.
+
+**A whole dashboard, ready to paste:** [`ha/dashboards/faith-family.yaml`](../ha/dashboards/faith-family.yaml). It has three views: the wall tablet (the hub card), Today (the day, chat, points, who's here) and Front door (the camera, a "Who's at the door?" button and the chat). In HA: Settings → Dashboards → Add dashboard → New dashboard from scratch, then ⋮ → Edit → ⋮ → Raw configuration editor, and paste it. On a person's own phone, delete the `screen:` lines.
+
+The cards one by one:
 
 ```yaml
 - type: custom:faith-hub-card      # the wall tablet's home: FAITH to talk to, the time, who's here

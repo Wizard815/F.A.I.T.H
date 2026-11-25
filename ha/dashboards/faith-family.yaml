@@ -1,0 +1,61 @@
+# A family dashboard made of FAITH's cards. In Home Assistant:
+#   Settings > Dashboards > Add dashboard > New dashboard from scratch > open it >
+#   ⋮ > Edit dashboard > ⋮ > Raw configuration editor > paste this > Save.
+# Change "kitchen" to the screen name you paired (faith pair kitchen) and the
+# camera to yours. On a person's own phone, delete every "screen:" line: the
+# cards then show that person's view (their HA user, mapped with ha_user_id).
+title: FAITH
+views:
+  - title: Home                     # the wall tablet: tap FAITH to talk
+    path: home
+    icon: mdi:hexagon-multiple
+    type: panel
+    theme: FAITH
+    cards:
+      - type: custom:faith-hub-card
+        screen: kitchen
+        cards: [today]
+
+  - title: Today                    # the day, meals, shopping, chores, approvals, points
+    path: today
+    icon: mdi:calendar-today
+    type: sections
+    theme: FAITH
+    sections:
+      - cards:
+          - type: custom:faith-who-card
+            screen: kitchen
+          - type: custom:faith-card
+            screen: kitchen
+      - cards:
+          - type: custom:faith-chat-card
+            screen: kitchen
+          - type: custom:faith-rewards-card
+            screen: kitchen
+
+  - title: Front door               # the camera, and FAITH to ask "who's at the door?"
+    path: door
+    icon: mdi:doorbell-video
+    type: sections
+    theme: FAITH
+    sections:
+      - cards:
+          - type: picture-entity
+            entity: camera.front_door
+            camera_view: live
+            show_state: false
+          # Runs as whoever taps it: the camera's "who" list must include them
+          # (an unpaired family tablet is the household view: add household to who).
+          - type: button
+            name: Who's at the door?
+            icon: mdi:account-question
+            tap_action:
+              action: perform-action
+              perform_action: faith.look
+              data:
+                camera: camera.front_door
+                question: Who is at the door?
+                to: parents
+      - cards:
+          - type: custom:faith-chat-card
+            screen: kitchen

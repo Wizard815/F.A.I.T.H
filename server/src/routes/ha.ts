@@ -239,11 +239,12 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     if (out?.error) throw new ModelError(400, out.error);
     let sent: unknown;
     if (b.to) {
-      const m = await agent.runTool(caller, "message_send", { to: b.to, text: `${out.camera}: ${out.sees}` });
+      const known = out.who && !String(out.sees).includes(out.who) ? `It's ${out.who}. ` : "";
+      const m = await agent.runTool(caller, "message_send", { to: b.to, text: `${out.camera}: ${known}${out.sees}` });
       if ((m.out as any)?.error) throw new ModelError(400, (m.out as any).error);
       sent = m.out;
     }
-    return { camera: out.camera, sees: out.sees, at: out.at, ...(sent ? { sent } : {}) };
+    return { camera: out.camera, ...(out.who ? { who: out.who } : {}), sees: out.sees, at: out.at, ...(sent ? { sent } : {}) };
   });
 
   // ---- HA → Mattermost / phones (the faith.send_message action) ----
