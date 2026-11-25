@@ -353,7 +353,10 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
       room ? `They're talking to a voice satellite in the ${room}. "The lights", "it's cold in here" and other requests without a room mean the ${room}.` : "",
       b?.language && !String(b.language).startsWith("en") ? `Answer in the language with code ${b.language}.` : "",
     ].filter(Boolean).join("\n") || undefined;
-    const r = await agent.turn({ caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined, extraSystem: extra });
+    // A bigger job ("plan the week's dinners") says so, and its answer goes to the person's chat and phone.
+    const asker = c.scope.kind === "person" ? c.scope.person : c.speaker;
+    const opts = { caller: c, text: String(b?.text || ""), extId: b?.conversation_id ? `ha:${b.conversation_id}` : undefined, extraSystem: extra };
+    const r = asker ? await agent.turnOrLater(opts, cfg().voice.answer_within_s * 1000, (late) => agent.deliverLate(asker, late)) : await agent.turn(opts);
     return { speech: r.text, conversation_id: r.conversationId, person: c.scope.kind === "person" ? c.scope.person.id : null, speaker: speaker?.id ?? null, room: room ?? null };
   });
   app.get("/api/ha/summary", async (req) => {

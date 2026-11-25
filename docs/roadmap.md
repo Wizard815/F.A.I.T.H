@@ -34,6 +34,7 @@
 - Photos and videos from the phone (HA card button, Mattermost): videos become frames plus what their sound says; any change from a photo or video waits for the person's Yes.
 - The fast path: simple commands go to HA's own sentence matcher with FAITH's rules checked first; no model, under a second.
 - Cameras: "who's at the door?" through HA's cameras and the local vision model, for the people each camera lists; `faith.look` for doorbell automations.
+- Quick, small and big requests: a big job says so and sends its answer when done; a model queue puts quick questions first.
 - Mattermost chats start fresh after 4 quiet hours or on "new topic".
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.

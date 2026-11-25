@@ -5,7 +5,8 @@ const body = (req: IncomingMessage) => new Promise<any>((res) => { let s = ""; r
 async function listen(s: Server) { await new Promise<void>((r) => s.listen(0, "127.0.0.1", r)); return `http://127.0.0.1:${(s.address() as AddressInfo).port}`; }
 
 /** An OpenAI-compatible model that follows a script: each call gets the request and returns a message. */
-export async function fakeModel(script: (req: any, n: number) => { content?: string; tool_calls?: { name: string; args: any }[] }) {
+type Said = { content?: string; tool_calls?: { name: string; args: any }[] };
+export async function fakeModel(script: (req: any, n: number) => Said | Promise<Said>) {
   const calls: any[] = [], embeds: string[] = [];
   const stt = { text: "hello" };
   const s = createServer(async (req, res) => {
@@ -28,7 +29,7 @@ export async function fakeModel(script: (req: any, n: number) => { content?: str
     }
     if (req.url?.endsWith("/audio/transcriptions")) { req.resume(); res.setHeader("content-type", "application/json"); return res.end(JSON.stringify({ text: stt.text })); }
     const b = await body(req); calls.push(b);
-    const m = script(b, calls.length - 1);
+    const m = await script(b, calls.length - 1);   // a script may take its time (a slow model)
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: m.content ?? null, tool_calls: m.tool_calls?.map((t, i) => ({ id: `c${calls.length}_${i}`, type: "function", function: { name: t.name, arguments: JSON.stringify(t.args) } })) } }] }));
   });

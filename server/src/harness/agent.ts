@@ -1,4 +1,4 @@
-import { envValue, type Config } from "../config.js";
+import { envValue, type Config, type Person } from "../config.js";
 import type { Db } from "../db.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Approvals } from "../approvals.js";
@@ -9,8 +9,13 @@ import { scopeKey, speakerLabel, who, type Caller } from "../scope.js";
 import { ModelError, runLoop, type LoopEvent, type Msg } from "./llm.js";
 import { systemPrompt } from "./prompt.js";
 import { ToolRouter } from "./router.js";
+import { ModelGate } from "./gate.js";
 
 export type AgentEvent = LoopEvent | { type: "confirm"; id: string; summary: string } | { type: "approval"; id: string; summary: string } | { type: "conversation"; id: string };
+export type TurnOpts = { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal;
+  /** Set by turnOrLater: once true, this turn's model calls wait behind quick questions. */
+  job?: { background: boolean } };
+export const LATER = "This one's a bigger job. I'll send you the answer when it's done.";
 export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[];
   /** Done by HA's own sentence matcher, without the model. */
   quick?: boolean };
@@ -149,8 +154,32 @@ export class Agent {
     }
   }
   private quickWarned = false;
+  /** The model's queue: quick questions go ahead of big jobs. */
+  readonly gate = new ModelGate(() => this.cfg().model.parallel);
 
-  async turn(o: { caller: Caller; text: string; images?: string[]; conversationId?: string; extId?: string; freshAfterMs?: number; history?: Msg[]; extraSystem?: string; onEvent?: (e: AgentEvent) => void; signal?: AbortSignal }): Promise<TurnResult> {
+  /** A turn that answers within `withinMs`, or says it's a bigger job. Then it
+   *  carries on behind quick questions (the model's queue) and `deliver` gets
+   *  the answer, or the error, when it's done. */
+  async turnOrLater(o: TurnOpts, withinMs: number, deliver: (r: TurnResult | Error) => void | Promise<void>): Promise<TurnResult & { later?: boolean }> {
+    if (!(withinMs > 0)) return this.turn(o);
+    const job = { background: false }; let conversationId = o.conversationId ?? "";
+    const p = this.turn({ ...o, job, onEvent: (e) => { if (e.type === "conversation") conversationId = e.id; o.onEvent?.(e); } });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<"late">((r) => { timer = setTimeout(() => r("late"), withinMs); });
+    const first = await Promise.race([p, late]).finally(() => clearTimeout(timer));
+    if (first !== "late") return first;
+    job.background = true;
+    p.then((r) => deliver(r), (e) => deliver(e instanceof Error ? e : new Error(String(e)))).catch((e) => console.warn(`delivering a late answer failed: ${e?.message || e}`));
+    return { conversationId, text: LATER, toolsUsed: [], pending: [], requests: [], later: true };
+  }
+
+  /** Send a big job's answer to the person who asked, in their own chat and on their phone. */
+  async deliverLate(p: Person, r: TurnResult | Error) {
+    const text = r instanceof Error ? `Sorry, that didn't work: ${r.message}` : r.text + (r.pending.length ? "\n\nIt's waiting for your Yes in FAITH." : "");
+    await this.runTool({ scope: { kind: "person", person: p }, channel: "ha", label: `${p.id} (a bigger job)` }, "message_send", { to: p.id, text });
+  }
+
+  async turn(o: TurnOpts): Promise<TurnResult> {
     const cfg = this.cfg(), c = o.caller, emit = o.onEvent ?? (() => {});
     const text = String(o.text || "").trim();
     if (!text) throw new ModelError(400, "Say something first.");
@@ -183,6 +212,7 @@ export class Agent {
       messages: [{ role: "system", content: system }, ...past, userMsg],
       tools: this.wrap(c, offered, conv.id, pending, requests, emit, seen),
       callable: offered.length < set.tools.length ? this.wrap(c, set.tools.filter((t) => !offered.includes(t)), conv.id, pending, requests, emit, seen) : undefined, maxRounds: cfg.model.max_rounds, onEvent: emit, signal: o.signal,
+      gate: this.gate, background: () => !!o.job?.background,
     });
     this.save(conv.id, "user", images.length ? `${text} [photo]` : text);
     this.save(conv.id, "assistant", result.text);

@@ -1,6 +1,6 @@
 import { envValue, type Config, type Person } from "./config.js";
 import type { Db } from "./db.js";
-import type { Agent } from "./harness/agent.js";
+import type { Agent, TurnResult } from "./harness/agent.js";
 import { Approvals, type ApprovalEvent } from "./approvals.js";
 import type { Caller } from "./scope.js";
 import { transcribe } from "./speech.js";
@@ -231,14 +231,19 @@ export class MattermostBot {
 
     const typing = setInterval(() => this.typing(post.channel_id, post.root_id), 4000); this.typing(post.channel_id, post.root_id);
     try {
-      const r = await this.agent.turn({ caller: this.callerFor(room, person, post.channel_id), text: [text, ...att.notes].join("\n\n"), images: att.images, extId: `mm:${post.channel_id}`, freshAfterMs: this.mm.new_topic_after_minutes * 60_000 });
-      let reply = heardNote + (r.text || "Done.");
-      if (r.pending.length) {
-        this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
-        if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
-      }
-      if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
-      return this.say(post, reply);
+      const finish = (r: TurnResult, note = "") => {
+        let reply = note + (r.text || "Done.");
+        if (r.pending.length) {
+          this.pending.set(post.channel_id, { id: r.pending.at(-1)!.id, by: person.id });
+          if (!/reply\W+yes\b/i.test(reply)) reply += `\n\nReply **yes** to go ahead, or **no**.`;
+        }
+        if (r.requests.length && room.kind === "family") reply += `\n\n_Sent to the parents to approve._`;
+        return this.say(post, reply);
+      };
+      // A bigger job says so now and posts its answer here when it's done; quick questions meanwhile go first.
+      const r = await this.agent.turnOrLater({ caller: this.callerFor(room, person, post.channel_id), text: [text, ...att.notes].join("\n\n"), images: att.images, extId: `mm:${post.channel_id}`, freshAfterMs: this.mm.new_topic_after_minutes * 60_000 },
+        this.cfg().model.answer_within_s * 1000, (late) => { void (late instanceof Error ? this.say(post, `Sorry, that didn't work: ${late.message}`) : finish(late)); });
+      return r.later ? this.say(post, heardNote + r.text) : finish(r, heardNote);
     } catch (e: any) {
       return this.say(post, `Sorry, that didn't work: ${e.message}`);
     } finally { clearInterval(typing); }

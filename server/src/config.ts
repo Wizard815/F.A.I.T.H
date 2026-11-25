@@ -104,13 +104,19 @@ export type Config = {
   public_url: string;        // https://faith.example.lan, needed for passkeys (Face ID)
   /** More tools than max: offer only the most relevant per question (harness/router.ts). */
   tools: { max: number; always: string[] };
-  model: { base_url: string; model: string; vision_model?: string; embed_model?: string; api_key_env?: string; max_rounds: number; temperature?: number; history_messages: number; context_chars: number; timeout_s: number };
+  model: { base_url: string; model: string; vision_model?: string; embed_model?: string; api_key_env?: string; max_rounds: number; temperature?: number; history_messages: number; context_chars: number; timeout_s: number;
+    /** A chat answer that takes longer is a bigger job: "I'll send it when it's done", and it carries on (0 = always wait). */
+    answer_within_s: number;
+    /** Model calls at once. A local GPU usually serves one; quick questions go ahead of big jobs in the queue. */
+    parallel: number };
   people: Person[];
   roles: Record<PolicyName, RolePolicy>;
   connectors: Connector[];
   hub: { idle_seconds: number; away_seconds: number; max_idle_seconds: number; max_hours: number; show_people_to_unpaired: boolean; pin_on_personal_devices: boolean; devices: HubDevice[] };
   personal: { idle_days: number; max_days: number };
-  voice: { confirm_on_voice: boolean; stt_model: string; tts_model: string; tts_voice: string; speak_replies: boolean };
+  voice: { confirm_on_voice: boolean; stt_model: string; tts_model: string; tts_voice: string; speak_replies: boolean;
+    /** Spoken requests (HA Assist) wait less: a bigger job says so and goes to the person's chat and phone. */
+    answer_within_s: number };
   dashboard: { entities: string[]; cards: Card[] };
   apps: AppLink[];
   approvals: { approvers: Role[]; ttl_hours: number };
@@ -293,12 +299,13 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
       base_url: str(env.FAITH_MODEL_URL || m.base_url, "http://argos:8080/v1").replace(/\/+$/, ""), model: str(env.FAITH_MODEL || m.model, ""), vision_model: m.vision_model ? str(m.vision_model) : undefined, embed_model: m.embed_model ? str(m.embed_model) : undefined,
       api_key_env: m.api_key_env ? str(m.api_key_env) : "ARGOS_API_KEY", max_rounds: num(m.max_rounds, 6), temperature: m.temperature != null ? num(m.temperature, 0.4) : undefined,
       history_messages: num(m.history_messages, 16), context_chars: num(m.context_chars, 4000), timeout_s: num(m.timeout_s, 180),
+      answer_within_s: Math.max(0, num(m.answer_within_s, 30)), parallel: Math.max(1, Math.floor(num(m.parallel, 1))),
     },
     people, roles, connectors,
     hub: { idle_seconds: num(h.idle_seconds, 120), away_seconds: num(h.away_seconds, 45), max_idle_seconds: num(h.max_idle_seconds, 900), max_hours: num(h.max_hours, 8),
       show_people_to_unpaired: bool(h.show_people_to_unpaired, false), pin_on_personal_devices: bool(h.pin_on_personal_devices, false), devices },
     personal: { idle_days: num(raw.personal?.idle_days, 14), max_days: num(raw.personal?.max_days, 30) },
-    voice: { confirm_on_voice: bool(raw.voice?.confirm_on_voice, false), stt_model: str(raw.voice?.stt_model, "whisper"), tts_model: str(raw.voice?.tts_model, "tts"), tts_voice: str(raw.voice?.tts_voice, ""), speak_replies: bool(raw.voice?.speak_replies, false) },
+    voice: { confirm_on_voice: bool(raw.voice?.confirm_on_voice, false), stt_model: str(raw.voice?.stt_model, "whisper"), tts_model: str(raw.voice?.tts_model, "tts"), tts_voice: str(raw.voice?.tts_voice, ""), speak_replies: bool(raw.voice?.speak_replies, false), answer_within_s: Math.max(0, num(raw.voice?.answer_within_s, 10)) },
     dashboard: { entities: list(d.entities), cards },
     apps, approvals: { approvers, ttl_hours: num(ap.ttl_hours, 24) },
     embed: { allow_from: list(raw.embed?.allow_from), cookie_samesite: samesite as Config["embed"]["cookie_samesite"] },

@@ -15,6 +15,8 @@ model:
   # embed_model: nomic-embed     # lets FAITH pick the right tools when there are many (ha-mcp)
   api_key_env: ARGOS_API_KEY     # leave the variable empty if Argos has no keys
   max_rounds: 6                  # tool rounds per answer
+  answer_within_s: 30            # longer is a bigger job: "I'll send you the answer when it's done" (0 = always wait)
+  parallel: 1                    # model calls at once; quick questions go ahead of big jobs in the queue
   temperature: 0.4
   history_messages: 16           # past messages sent with each turn
   context_chars: 4000            # how much of the wiki's context_for to include
@@ -147,6 +149,7 @@ personal:
 
 voice:
   confirm_on_voice: false        # locks etc. by voice need a screen unless this is true
+  answer_within_s: 10            # spoken requests: a bigger job says so and goes to the person's chat and phone
   # stt_model: whisper           # Argos model names for speech-to-text and text-to-speech
   # tts_model: tts
 

@@ -17,6 +17,7 @@ connectors/registry.ts   which tools does this caller get?
    3. the role's deny list and write rule: allow | allowlist | deny | approve
    ▼
 harness/agent.ts   one turn
+   - first, HA's fast path: HA's own sentence matcher, with FAITH's rules on its targets; no model
    - family prompt (harness/prompt.ts): who, where, who's home, rules; the wiki's context_for on a new conversation
    - harness/router.ts: more than tools.max tools? offer the ones that fit the question (embeddings or shared words)
    - the loop (harness/llm.ts) against Argos's /v1/chat/completions, streaming
@@ -27,6 +28,22 @@ harness/agent.ts   one turn
    ▼
 the source (wiki, ALLGlance, HA, Coinpile, Orb, Hermes, Studio) decides what that token may see
 ```
+
+## Quick, small and big requests
+
+A request takes one of three ways.
+
+- **Instant (no model).** "Turn off the kitchen lights", "what time is it". HA's own sentence matcher does it, after FAITH checks what it would touch. Under a second. Anything that needs a Yes or an approval goes the model's way. See [home-assistant.md](home-assistant.md).
+- **Small.** One model turn with a few tool calls. It answers within `model.answer_within_s` (30 s by default; spoken requests use `voice.answer_within_s`, 10 s).
+- **Big.** "Plan this week's dinners" takes many rounds. When it passes that time, the person hears "This one's a bigger job. I'll send you the answer when it's done." It carries on.
+  - Its answer goes where they asked: the same Mattermost chat, or their chat and phone when they asked in HA.
+  - It's also in the conversation, so the HA card shows it later.
+  - On the household screen nobody can be sent the answer, so it waits as before.
+
+**Several at once.** A local model answers one request at a time (`model.parallel`, default 1), so FAITH queues its model calls itself (`harness/gate.ts`).
+- A big job holds its place only while the model is answering, not while its tools run.
+- Once a job is "big", its next calls wait behind quick questions. Someone asking the time while a dinner plan is being made waits for one round at most.
+- Instant requests don't queue at all.
 
 ## Three layers of protection
 
