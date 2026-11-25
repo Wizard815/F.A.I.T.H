@@ -26,6 +26,9 @@ export class Notifier {
     return n;
   }
 
+  /** Keeps a copy for the person's FAITH apps (set by app.ts: the inbox). */
+  inbox?: (personId: string, item: { title: string; text: string; kind: string; ref?: string }) => void;
+
   /** Who's home (set by app.ts), for to: "home". */
   presence?: { whoIsHome(): { home: { id: string }[] } };
 
@@ -37,6 +40,10 @@ export class Notifier {
       return sent;
     }
     const people = this.cfg().people;
+    // The same message waits in each recipient's inbox, for their FAITH apps.
+    for (const p of to === "family" ? people : to === "parents" ? people.filter((x) => x.role !== "child") : people.filter((x) => x.id === to)) {
+      this.inbox?.(p.id, { title, text, kind: "message" });   // not counted as "reached": they may have no app
+    }
     const say = opts.from && !["routine", "faith"].includes(opts.from) ? `${text}\n\n_from ${people.find((p) => p.id === opts.from)?.name ?? opts.from}_` : text;
     if (to === "family" || to === "parents") {
       const ch = to === "family" ? this.bot?.familyId : this.bot?.parentsId;
@@ -52,8 +59,9 @@ export class Notifier {
 
   /** New approval requests: a push with buttons to every grown-up with a phone set up. */
   async onApproval(e: ApprovalEvent) {
-    if (e.kind !== "created" || !this.cfg().notifications.approvals_push) return;
+    if (e.kind !== "created") return;
     const approvers = this.cfg().people.filter((p) => this.cfg().approvals.approvers.includes(p.role));
+    for (const p of approvers) this.inbox?.(p.id, { title: "Waiting for approval", text: `${e.request.summary}\nAsked by ${e.request.requested_by.replace(/^household on /, "the ")}.`, kind: "approval", ref: e.request.id });
     for (const p of approvers) {
       await this.push(p.id, "Waiting for approval", `${e.request.summary}\nAsked by ${e.request.requested_by.replace(/^household on /, "the ")}.`, {
         tag: `faith-${e.request.id}`, // a later push replaces this one on the phone

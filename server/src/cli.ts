@@ -20,6 +20,7 @@ const HELP = `faith: set up FAITH's people, screens and tokens
   faith token add person <person> <name>  one person's token (their private things too)
   faith token add ha <name>             for the Home Assistant integration
   faith token add omi <person> <name>   for that person's Omi webhook (opens nothing else)
+  faith token add client <person> <name>  a FAITH app signed in as that person (D.A.S.H, phone, desktop)
   faith token list | faith token revoke <name>
   faith signout <person>                end all their sessions
   faith doctor                          check every source with every token
@@ -119,7 +120,8 @@ async function main(argv: string[]) {
         else if (a === "ha") token = auth.addToken("ha", b);
         else if (a === "person") token = auth.addToken("person", c, person(b).id);
         else if (a === "omi") token = auth.addToken("omi", c, person(b).id);
-        else throw new AuthError(400, "faith token add household <name> | person <person> <name> | ha <name> | omi <person> <name>");
+        else if (a === "client") token = auth.addToken("client", c, person(b).id);
+        else throw new AuthError(400, "faith token add household <name> | person <person> <name> | ha <name> | omi <person> <name> | client <person> <name>");
         console.log(`${token}\nShown once. FAITH keeps only its hash.`);
         return 0;
       }

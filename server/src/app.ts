@@ -48,6 +48,12 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 12_000_000 }); // photos for the vision model
   await app.register(cookie);
   const notifier = new Notifier(cfg, registry.ha, app.log);
+  // The inbox: what FAITH sends a person, kept for their FAITH apps to fetch (docs/clients.md).
+  db.exec("CREATE TABLE IF NOT EXISTS inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, ref TEXT)");
+  notifier.inbox = (personId, i) => {
+    db.prepare("INSERT INTO inbox (person_id, at, kind, title, text, ref) VALUES (?, ?, ?, ?, ?, ?)").run(personId, Date.now(), i.kind, i.title.slice(0, 200), i.text.slice(0, 4000), i.ref ?? null);
+    db.prepare("DELETE FROM inbox WHERE person_id = ? AND at < ?").run(personId, Date.now() - 30 * 86400_000);
+  };
   const health = new Health(cfg, registry, notifier, env);
   notifier.presence = presence;
   agent.homeLine = () => presence.homeLine();
@@ -186,6 +192,38 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     await passkeys.authFinish(p, b?.response, origin(req));
     return signIn(req, reply, p);
   });
+  // A FAITH app (Android, desktop) signs in once with a password and keeps a client token:
+  // that person's own screen, until they remove it (Settings, or faith token revoke).
+  app.post("/api/auth/client", async (req) => {
+    const b = req.body as any, p = person(b?.person);
+    auth.check(p, "password", String(b?.password ?? ""));
+    const label = String(b?.name || "app").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "app";
+    const name = `${p.id}-${label}-${Math.random().toString(36).slice(2, 6)}`;
+    const token = auth.addToken("client", name, p.id);
+    app.log.info({ person: p.id, client: name }, "app signed in");
+    return { token, name, person: { id: p.id, name: p.name, role: p.role, color: p.color } };
+  });
+  app.get("/api/me/clients", async (req) => {
+    const c = needPerson(req);
+    return auth.tokens().filter((t) => t.kind === "client" && t.person_id === c.scope.person.id).map((t) => ({ name: t.name, created_at: t.created_at, last_used: t.last_used, this_one: c.deviceId === `client:${t.name}` }));
+  });
+  app.delete("/api/me/clients/:name", async (req) => {
+    const c = needPerson(req), name = String((req.params as any).name);
+    if (!auth.tokens().some((t) => t.kind === "client" && t.person_id === c.scope.person.id && t.name === name)) throw new AuthError(404, "No such app of yours.");
+    return { ok: auth.revokeToken(name) };
+  });
+
+  // What FAITH sent this person (late answers, doorbell, approvals to decide), for their apps.
+  // ?after=<last id seen>&wait=<seconds, up to 30>: waits for something new (long poll).
+  app.get("/api/inbox", async (req) => {
+    const c = needPerson(req), q = req.query as any;
+    const after = Number(q?.after) || 0, wait = Math.min(30, Math.max(0, Number(q?.wait) || 0)) * 1000, until = Date.now() + wait;
+    const read = () => db.prepare("SELECT id, at, kind, title, text, ref FROM inbox WHERE person_id = ? AND id > ? ORDER BY id LIMIT 50").all(c.scope.person.id, after) as any[];
+    let items = read();
+    while (!items.length && Date.now() < until && !req.raw.destroyed) { await new Promise((r) => setTimeout(r, 1000)); items = read(); }
+    return { items, last: items.length ? items.at(-1).id : after };
+  });
+
   app.post("/api/auth/logout", async (req, reply) => {
     auth.endSession(req.cookies[SESSION]);
     reply.clearCookie(SESSION, { path: "/" });

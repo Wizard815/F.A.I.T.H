@@ -70,6 +70,7 @@ is its hands, and Argos (local models) is its brain.
 
 - **Home Assistant:** FAITH's cards on the family dashboard, with the hub card as the wall tablet's home (tap FAITH to talk, it answers out loud); voice satellites that know who's talking ([how](docs/home-assistant.md#voice-a-jarvis-for-the-house)); Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
 - **Mattermost:** a personal chat each, a family channel, a parents' channel ([docs](docs/mattermost.md)).
+- **FAITH's apps:** the Android app (`android/`), D.A.S.H the pocket handheld, and later a desktop app, all on one contract: sign in as one person, ask, speak, say Yes, and an inbox for notifications ([docs/clients.md](docs/clients.md)).
 - **FAITH's own page** is the admin console: health, people and voices, skills, routines, points and rewards, approvals, tokens.
 
 ## Try it without your homelab
@@ -116,7 +117,7 @@ The demo prints a pairing code and PINs. A made-up family, wiki, ALLGlance and H
 | `web/` | React + Tailwind app: wall view, home, chat, apps, sign-in, approvals (design: [architecture](docs/architecture.md#the-screens)) |
 | `ha/custom_components/faith` | the Home Assistant integration (`cd ha && pytest`) |
 | `config/faith.example.yaml` | every setting, commented |
-| `docs/` | [brand](docs/brand.md) · [rewards](docs/rewards.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
+| `docs/` | [brand](docs/brand.md) · [rewards](docs/rewards.md) · [architecture](docs/architecture.md) · [setup](docs/setup.md) · [home assistant](docs/home-assistant.md) · [hub & sign-in](docs/hub.md) · [mattermost](docs/mattermost.md) · [apps](docs/clients.md) · [decisions](docs/decisions.md) · [roadmap](docs/roadmap.md) |
 
 ## API
 
