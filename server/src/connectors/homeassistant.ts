@@ -421,6 +421,24 @@ export class HomeAssistant implements Connector {
     return (r?.service_response?.[entity]?.items || []).map((i: any) => String(i.summary));
   }
 
+  /** A weather entity now and its daily forecast (HA fetches the weather; FAITH only reads HA). */
+  async weather(entityId: string, caller?: Caller) {
+    const s: any = await this.state(entityId, caller);
+    if (!s) throw new ToolError(`Home Assistant has no ${entityId}.`);
+    const a = s.attributes || {};
+    let days: any[] = [];
+    try {
+      const r: any = await this.api("POST", "/api/services/weather/get_forecasts?return_response", { entity_id: entityId, type: "daily" }, caller);
+      days = r?.service_response?.[entityId]?.forecast || [];
+    } catch { days = Array.isArray(a.forecast) ? a.forecast : []; }   // older HA kept the forecast on the entity
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+    return {
+      place: String(a.friendly_name || entityId), condition: String(s.state).replace(/-/g, " "), unit: String(a.temperature_unit || ""),
+      temperature: n(a.temperature), feels_like: n(a.apparent_temperature), humidity: n(a.humidity), wind: n(a.wind_speed), wind_unit: String(a.wind_speed_unit || ""),
+      days: days.slice(0, 7).map((d: any) => ({ date: String(d.datetime || "").slice(0, 10), condition: String(d.condition || "").replace(/-/g, " "), high: n(d.temperature), low: n(d.templow), rain: n(d.precipitation_probability) })),
+    };
+  }
+
   async states(ids: string[], caller?: Caller) {
     const out = [];
     for (const id of ids) { const s = await this.state(id, caller).catch(() => null); if (s) out.push(this.brief(s)); }

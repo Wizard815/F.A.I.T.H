@@ -11,6 +11,7 @@ FAITH on your phone: ask, talk, show it a photo, say Yes to a held change, and g
 - **Notifications** from FAITH's inbox: a bigger job's answer, the doorbell, approvals to decide. Checked every 15 minutes in the background (Android's shortest), and live while the app is open. No Google push: nothing goes through the cloud.
 - **The phone's assistant.** Settings → Apps → Default apps → **Digital assistant app** → FAITH. Long-press home (or power, on some phones) opens FAITH listening.
 - **New topic** starts a fresh conversation.
+- **Board**, the second tab: the info board ([dashboard.md](dashboard.md)). Your morning brief (*Write it now*), the weather, FAITH's day cards, your projects (tap the status to move one), your log (*Log it*), news, and for admins uptime and FAITH's server. Bringing projects over from Pondering Orb is on the desktop app.
 
 ## Build it
 
@@ -35,6 +36,7 @@ The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the p
 
 **What goes wrong:**
 - "FAITH isn't answering": you're not on the home Wi-Fi, or FAITH is down.
+- The board is missing a part (weather, news, uptime): it isn't set up in `board:` in faith.yaml, or it's not for your role.
 - "This phone isn't signed in to FAITH any more": the key was removed (*Tokens & screens* on the admin page, or `faith token revoke`). Sign in again.
 - No notifications: allow them for FAITH in Android's settings, and don't put FAITH in battery "Restricted" mode (it can't check the inbox then).
 - The assistant gesture opens Google: pick FAITH as the digital assistant app (above).
@@ -43,4 +45,5 @@ The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the p
 
 - Photos taken straight from the camera (the 📷 button picks existing photos for now). Sideways phone photos are turned upright before sending.
 - A home screen widget with today's plan.
+- Approving the household's requests from the board (the desktop app has it).
 - Signing in with a passkey instead of a password.

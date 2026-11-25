@@ -26,6 +26,10 @@ import { registerAdminRoutes } from "./routes/admin.js";
 import { Health } from "./health.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerOmiRoutes } from "./routes/omi.js";
+import { registerBoardRoutes } from "./routes/board.js";
+import { Board } from "./board/board.js";
+import { BoardTools } from "./board/tools.js";
+import { BoardError } from "./board/store.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -60,6 +64,9 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   faithTools.approvals = approvals; faithTools.notifier = notifier;
   approvals.on((e) => { notifier.onApproval(e).catch((err) => app.log.warn({ err: err.message }, "approval push failed")); });
   const routines = new Routines(db, cfg, agent, skills, notifier, app.log);
+  // The info board (Pondering Orb's Main and Daily pages), with its tools for FAITH's agent.
+  const board = new Board(db, cfg, registry, agent, { approvals, notifier, health, log: app.log });
+  registry.add(new BoardTools(board));
   // Audio for speech-to-text arrives as raw bytes.
   app.addContentTypeParser(/^audio\/|^application\/octet-stream/, { parseAs: "buffer", bodyLimit: 15_000_000 }, (_req, body, done) => done(null, body));
 
@@ -75,7 +82,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   });
 
   app.setErrorHandler((err: any, _req, reply) => {
-    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError || err instanceof RewardsError || err instanceof RoutineError || err instanceof VoiceError ? err.status : err instanceof SkillError ? 400 : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError || err instanceof RewardsError || err instanceof RoutineError || err instanceof VoiceError || err instanceof BoardError ? err.status : err instanceof SkillError ? 400 : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) app.log.error(err);
     reply.status(status).send({ error: status === 500 ? "Something went wrong on FAITH's side." : err.message });
   });
@@ -421,6 +428,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   registerAdminRoutes(app, ctx);
   registerMcpRoutes(app, { agent, registry, apiCaller, name: () => cfg().name });
   const omi = registerOmiRoutes(app, { cfg, db, auth, notifier });
+  registerBoardRoutes(app, { cfg, env, board, agent, registry, need, needPerson });
 
   // ---------- the web app ----------
   if (opts.webDir && existsSync(opts.webDir)) {
@@ -434,7 +442,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   // Lock screens on time even when nobody polls.
   const sweeper = setInterval(() => { for (const d of auth.sweep()) app.log.info({ device: d }, "signed out (idle or nobody there)"); }, 5000);
   sweeper.unref();
-  app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); });
+  app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); board.stop(); });
 
-  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health, omi };
+  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health, omi, board };
 }

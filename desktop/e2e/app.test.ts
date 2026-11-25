@@ -17,7 +17,9 @@ const SHOTS = process.env.FAITH_DESKTOP_SHOTS;
 let ha: Awaited<ReturnType<typeof fakeHa>>, model: Awaited<ReturnType<typeof fakeModel>>, A: App, url = "";
 let app: any, page: any;
 before(async () => {
-  ha = await fakeHa({ "lock.front_door": { state: "locked", attributes: { friendly_name: "Front door" } } });
+  ha = await fakeHa({ "lock.front_door": { state: "locked", attributes: { friendly_name: "Front door" } },
+    "weather.home": { state: "rainy", attributes: { friendly_name: "Home", temperature: 44, temperature_unit: "°F", humidity: 80 } } },
+    { forecast: [{ datetime: "2026-11-26T12:00:00Z", condition: "cloudy", temperature: 47, templow: 35, precipitation_probability: 20 }] });
   model = await fakeModel((req) => {
     const last = req.messages?.at(-1);
     if (last?.role === "tool") return { content: String(last.content).includes("waiting_for_confirmation") ? "I'll unlock it as soon as you say **yes**." : "Done." };
@@ -30,6 +32,7 @@ before(async () => {
     people: [{ id: "sam", name: "Sam", role: "adult", color: "#A0522D" }],
     connectors: [{ id: "homeassistant", type: "homeassistant", url: ha.url, token_env: "HA", expose: { domains: ["lock"] } }],
     dashboard: { entities: ["lock.front_door"] },
+    board: { weather_entity: "weather.home" },
   }, {});
   A = await buildApp({ config: () => cfg, dataFile: ":memory:", env: { HA: "ha" } });
   A.auth.setPassword("sam", "correct horse battery");
@@ -93,11 +96,29 @@ test("the inbox: a new item shows, and the tab says how many are new", async () 
   assert.equal(await page.getByRole("button", { name: /new\)/ }).count(), 0, "read once opened");
 });
 
-test("today: FAITH's day cards", async () => {
-  await page.getByRole("button", { name: "Today" }).click();
-  await page.getByRole("heading", { level: 3 }).first().waitFor();
+test("the board: the day cards, the weather, a project and a log entry", async () => {
+  await page.getByRole("button", { name: "Board" }).click();
+  await page.getByRole("heading", { name: "Weather" }).waitFor();
   await page.getByText("Front door").waitFor();
-  await shot("5-today");
+  assert.match(await page.getByRole("region", { name: "Board" }).innerText(), /44°F/);
+  await shot("5-board-top");
+  await page.getByLabel("New project's name").fill("Garden shed");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Status of Garden shed").waitFor();
+  await page.getByLabel("Status of Garden shed").selectOption("active");
+  await page.getByText("Garden shed is now Active.").waitFor();
+  await page.getByLabel("What did you get done?").fill("Cleared the old shed");
+  await page.getByLabel("Which project").selectOption("Garden shed");
+  await page.getByRole("button", { name: "Log it" }).click();
+  await page.getByText("Last: Cleared the old shed", { exact: false }).waitFor();
+  const s = A.board.store;
+  assert.deepEqual(s.projects("sam").map((p) => [p.name, p.status]), [["Garden shed", "active"]]);
+  assert.equal(s.log("sam")[0].text, "Cleared the old shed");
+  await shot("5-board");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+  await shot("5-board-dark");
+  await page.emulateMedia({ colorScheme: "light" });
 });
 
 test("the page has no way to Node or the key", async () => {

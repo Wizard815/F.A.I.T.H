@@ -114,6 +114,24 @@ class FaithApi(baseUrl: String, private val token: String?) {
         } finally { c.disconnect() }
     }
 
+    /** The info board (section 6): brief, weather, the day cards, projects, the log, news. */
+    fun board(): BoardView = BoardView.parse(json("/api/board"))
+
+    /** The morning brief, written now by FAITH. The model takes its time. */
+    fun writeBrief(): String = json("/api/board/brief", "POST", JSONObject(), readTimeoutMs = 300_000).optString("text")
+
+    fun addLog(text: String, project: String?) {
+        val b = JSONObject().put("text", text)
+        if (!project.isNullOrBlank()) b.put("project", project)
+        json("/api/board/log", "POST", b)
+    }
+
+    fun addProject(name: String) { json("/api/board/projects", "POST", JSONObject().put("name", name)) }
+
+    fun setProjectStatus(name: String, status: String) {
+        json("/api/board/projects/" + URLEncoder.encode(name, "UTF-8").replace("+", "%20"), "POST", JSONObject().put("status", status))
+    }
+
     /** What FAITH sent this person since `after` (section 5). `waitSeconds` > 0 long-polls. */
     fun inbox(after: Long, waitSeconds: Int): Pair<List<InboxItem>, Long> {
         val d = json("/api/inbox?after=$after&wait=$waitSeconds", readTimeoutMs = (waitSeconds + 15) * 1000)

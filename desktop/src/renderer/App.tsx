@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, CalendarDays, Check, ImagePlus, Loader2, MessageCircle, Mic, RotateCcw, Send, Settings, Square, Volume2, X } from "lucide-react";
+import { Bell, Check, CloudSun, FolderKanban, LayoutDashboard, Newspaper, NotebookPen, Server, Sparkles, ImagePlus, Loader2, MessageCircle, Mic, RotateCcw, Send, Settings, Square, Volume2, X } from "lucide-react";
 import { Avatar, Card, Empty, ErrorText, Sheet, cn, niceTime } from "@web/ui";
-import type { ChatEvent, InboxItem } from "../faith";
+import type { Board as BoardData, ChatEvent, InboxItem } from "../faith";
 import type { FaithBridge, State } from "../shared";
 
 declare global { interface Window { faith: FaithBridge } }
@@ -65,7 +65,7 @@ function SignIn({ st, note, onDone }: { st: State; note: string; onDone: (s: Sta
 
 // ---------------------------------------------------------------- the app
 
-type Tab = "ask" | "today" | "inbox";
+type Tab = "ask" | "board" | "inbox";
 
 function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
   const [tab, setTab] = useState<Tab>("ask");
@@ -82,7 +82,7 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
     return () => offs.forEach((f) => f());
   }, []);
   useEffect(() => { if (tab === "inbox" && unread) { api.markRead(); setUnread(0); } }, [tab, unread]);
-  const tabs: [Tab, string, ReactNode][] = [["ask", "Ask", <MessageCircle size={17} />], ["today", "Today", <CalendarDays size={17} />], ["inbox", unread ? `Inbox (${unread} new)` : "Inbox", <Bell size={17} />]];
+  const tabs: [Tab, string, ReactNode][] = [["ask", "Ask", <MessageCircle size={17} />], ["board", "Board", <LayoutDashboard size={17} />], ["inbox", unread ? `Inbox (${unread} new)` : "Inbox", <Bell size={17} />]];
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -102,8 +102,8 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
       {problem && <p className="bg-primary-soft px-4 py-2 text-[14px]" role="status">{problem}</p>}
       <div className="min-h-0 flex-1">
         {tab === "ask" && <Ask st={st} />}
-        {tab === "today" && <Today />}
-        {tab === "inbox" && <Inbox items={items} onAsk={() => setTab("ask")} onApprovals={() => setTab("today")} />}
+        {tab === "board" && <Board />}
+        {tab === "inbox" && <Inbox items={items} onAsk={() => setTab("ask")} onApprovals={() => setTab("board")} />}
       </div>
       {settings && <SettingsSheet st={st} setSt={setSt} onClose={() => setSettings(false)} />}
     </div>
@@ -321,57 +321,178 @@ function Ask({ st }: { st: State }) {
   );
 }
 
-// ---------------------------------------------------------------- today
+// ---------------------------------------------------------------- the board (Pondering Orb's Main and Daily, through FAITH)
 
-function Today() {
-  const [cards, setCards] = useState<any[] | null>(null), [err, setErr] = useState("");
-  const [status, setStatus] = useState("");
-  const load = useCallback(() => api.dashboard().then((d) => { setCards(d.cards); setErr(""); }).catch((e) => setErr(msg(e))), []);
-  useEffect(() => { void load(); const i = setInterval(load, 60_000); return () => clearInterval(i); }, [load]);
-  const decide = async (id: string, approve: boolean) => {
-    try { await api.decide(id, approve); setStatus(approve ? "Approved." : "Declined."); void load(); } catch (e) { setStatus(msg(e)); }
-  };
+const STATUS: Record<string, string> = { next: "Next", active: "Active", blocked: "Blocked", paused: "Paused", shipped: "Shipped" };
+const failed = (v: unknown): v is { error: string } => !!v && typeof v === "object" && "error" in (v as any);
+const dayName = (d: string) => { const t = new Date(`${d}T12:00:00`); return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString([], { weekday: "short" }); };
+
+/** One of FAITH's day cards (the same as the Home Assistant card). */
+function DayCard({ c, decide }: { c: any; decide: (id: string, approve: boolean) => void }) {
   return (
-    <section className="h-full overflow-auto p-4" aria-label="Today">
-      <p className="sr-only" role="status">{status}</p>
+    <Card title={c.title} count={c.items?.length ?? c.approvals?.length}>
+      {c.error ? <ErrorText>{c.error}</ErrorText> : c.empty ? <Empty>{c.empty}</Empty> : c.text ? <Rich text={c.text} /> : null}
+      {c.items && (
+        <ul className="flex flex-col gap-2">
+          {c.items.map((it: any, i: number) => (
+            <li key={i} className="flex gap-3 text-[15px]">
+              {(it.time || it.label) && <span className="w-20 shrink-0 text-muted">{it.label || niceTime(it.time)}</span>}
+              <span className={cn(it.done && "text-muted line-through")}>{it.title}{it.done && <span className="sr-only"> (done)</span>}</span>
+              {it.meta && <span className="ml-auto text-[13px] text-muted">{it.meta}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {c.entities && (
+        <ul className="flex flex-col gap-1.5">{c.entities.map((e: any) => <li key={e.entity_id} className="flex justify-between text-[15px]"><span>{e.name}</span><span className="text-muted">{e.state}</span></li>)}</ul>
+      )}
+      {c.approvals && (
+        <ul className="flex flex-col gap-3">
+          {c.approvals.map((a: any) => (
+            <li key={a.id}>
+              <p className="font-semibold">{a.summary}</p>
+              <p className="text-[13px] text-muted">Asked by {a.requested_by}</p>
+              <div className="mt-2 flex gap-2">
+                <button className="btn-primary flex-1" onClick={() => decide(a.id, true)}>Approve</button>
+                <button className="btn-soft flex-1" onClick={() => decide(a.id, false)}>Decline</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function Board() {
+  const [b, setB] = useState<BoardData | null>(null), [err, setErr] = useState("");
+  const [status, setStatus] = useState("");
+  const [writing, setWriting] = useState(false);
+  const [logText, setLogText] = useState(""), [logProject, setLogProject] = useState("");
+  const [newProject, setNewProject] = useState("");
+  const load = useCallback(() => api.board().then((d) => { setB(d); setErr(""); }).catch((e) => setErr(msg(e))), []);
+  useEffect(() => { void load(); const i = setInterval(load, 60_000); return () => clearInterval(i); }, [load]);
+  const act = async (f: () => Promise<unknown>, done: string) => {
+    try { await f(); setStatus(done); return true; } catch (e) { setStatus(msg(e)); return false; } finally { await load(); }
+  };
+  const decide = (id: string, approve: boolean) => void act(() => api.decide(id, approve), approve ? "Approved." : "Declined.");
+  const brief = async () => {
+    setWriting(true); setStatus("FAITH is writing your brief. This can take a minute.");
+    await act(() => api.writeBrief(), "Your brief is ready.");
+    setWriting(false);
+  };
+  const w = b?.weather, n = b?.news, up = b?.uptime, sys = b?.system;
+  return (
+    <section className="h-full overflow-auto p-4" aria-label="Board">
+      <p className={cn("text-[14px] text-muted", status && "mb-3")} role="status" aria-live="polite">{status}</p>
       {err && <div role="alert"><ErrorText>{err}</ErrorText></div>}
-      {!cards && !err && <p className="text-muted">Loading…</p>}
-      {cards && !cards.length && <Empty>No day cards yet. A grown-up chooses them in FAITH's settings (dashboard in faith.yaml).</Empty>}
-      <div className="flex flex-col gap-4">
-        {cards?.map((c) => (
-          <Card key={c.id} title={c.title} count={c.items?.length ?? c.approvals?.length}>
-            {c.error ? <ErrorText>{c.error}</ErrorText> : c.empty ? <Empty>{c.empty}</Empty> : c.text ? <Rich text={c.text} /> : null}
-            {c.items && (
-              <ul className="flex flex-col gap-2">
-                {c.items.map((it: any, i: number) => (
-                  <li key={i} className="flex gap-3 text-[15px]">
-                    {(it.time || it.label) && <span className="w-20 shrink-0 text-muted">{it.label || niceTime(it.time)}</span>}
-                    <span className={cn(it.done && "text-muted line-through")}>{it.title}{it.done && <span className="sr-only"> (done)</span>}</span>
-                    {it.meta && <span className="ml-auto text-[13px] text-muted">{it.meta}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {c.entities && (
-              <ul className="flex flex-col gap-1.5">{c.entities.map((e: any) => <li key={e.entity_id} className="flex justify-between text-[15px]"><span>{e.name}</span><span className="text-muted">{e.state}</span></li>)}</ul>
-            )}
-            {c.approvals && (
+      {!b && !err && <p className="text-muted">Loading…</p>}
+      {b && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {b.person && (
+            <Card icon={<Sparkles size={18} />} title="Morning brief" className="md:col-span-2"
+              action={<button className="btn-soft min-h-[44px] px-3 text-[14px]" onClick={brief} disabled={writing}>{writing ? <><Loader2 size={15} className="animate-spin" />Writing…</> : b.brief ? "Write it again" : "Write it now"}</button>}>
+              {b.brief ? <Rich text={b.brief.text} /> : <Empty>No brief yet today. FAITH writes it from your board, your calendar and the news.</Empty>}
+            </Card>
+          )}
+          {w && (
+            <Card icon={<CloudSun size={18} />} title="Weather">
+              {failed(w) ? <ErrorText>{w.error}</ErrorText> : (
+                <>
+                  <p className="text-[15px]"><span className="font-serif text-[28px] font-semibold">{w.temperature ?? "–"}{w.unit}</span> <span className="capitalize">{w.condition}</span></p>
+                  <p className="text-[13px] text-muted">{[w.feels_like != null && `Feels like ${w.feels_like}${w.unit}`, w.humidity != null && `humidity ${w.humidity}%`, w.wind != null && `wind ${w.wind} ${w.wind_unit}`].filter(Boolean).join(" · ")}</p>
+                  {w.days.length > 0 && (
+                    <ul className="mt-3 flex flex-col gap-1.5">
+                      {w.days.slice(0, 5).map((d) => <li key={d.date} className="flex gap-3 text-[15px]"><span className="w-12 text-muted">{dayName(d.date)}</span><span className="flex-1 capitalize">{d.condition}</span><span>{d.high ?? "–"}° / {d.low ?? "–"}°</span>{d.rain != null && <span className="w-24 text-right text-muted">{d.rain}% rain</span>}</li>)}
+                    </ul>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
+          {b.cards.map((c) => <DayCard key={c.id} c={c} decide={decide} />)}
+          {b.projects && (
+            <Card icon={<FolderKanban size={18} />} title="Projects" count={b.projects.length}>
+              {!b.projects.length && (
+                <div className="flex flex-col gap-2">
+                  <Empty>No projects yet. Add one below, or bring yours over from Pondering Orb.</Empty>
+                  <button className="btn-soft" onClick={async () => { try { const r = await api.importOrb(); setStatus(`Brought over ${r.projects} projects and ${r.logs} log entries from Pondering Orb.`); await load(); } catch (e) { setStatus(msg(e)); } }}>Bring my projects over from Pondering Orb</button>
+                </div>
+              )}
               <ul className="flex flex-col gap-3">
-                {c.approvals.map((a: any) => (
-                  <li key={a.id}>
-                    <p className="font-semibold">{a.summary}</p>
-                    <p className="text-[13px] text-muted">Asked by {a.requested_by}</p>
-                    <div className="mt-2 flex gap-2">
-                      <button className="btn-primary flex-1" onClick={() => decide(a.id, true)}>Approve</button>
-                      <button className="btn-soft flex-1" onClick={() => decide(a.id, false)}>Decline</button>
+                {b.projects.map((p) => (
+                  <li key={p.id} className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{p.fav && <span aria-label="Starred">★ </span>}{p.name}</span>
+                      <select className="field ml-auto w-auto min-w-[120px] py-1 text-[14px]" aria-label={`Status of ${p.name}`} value={p.status}
+                        onChange={(e) => act(() => api.updateProject(p.name, { status: e.target.value }), `${p.name} is now ${STATUS[e.target.value] || e.target.value}.`)}>
+                        {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
                     </div>
+                    {p.next && <p className="text-[14px]">Next: {p.next}</p>}
+                    {p.last && <p className="text-[13px] text-muted">Last: {p.last}{p.last_day ? ` (${p.last_day})` : ""}</p>}
                   </li>
                 ))}
               </ul>
-            )}
-          </Card>
-        ))}
-      </div>
+              <form className="mt-3 flex gap-2" onSubmit={async (e) => { e.preventDefault(); if (newProject.trim() && await act(() => api.addProject(newProject.trim()), `Added ${newProject.trim()}.`)) setNewProject(""); }}>
+                <input className="field" value={newProject} onChange={(e) => setNewProject(e.target.value)} aria-label="New project's name" placeholder="A new project" />
+                <button className="btn-soft shrink-0" disabled={!newProject.trim()}>Add</button>
+              </form>
+            </Card>
+          )}
+          {b.log && (
+            <Card icon={<NotebookPen size={18} />} title="Log">
+              <form className="mb-3 flex flex-col gap-2" onSubmit={async (e) => { e.preventDefault(); if (logText.trim() && await act(() => api.addLog(logText.trim(), logProject || undefined), "Logged.")) setLogText(""); }}>
+                <label className="label">What did you get done?
+                  <input className="field" value={logText} onChange={(e) => setLogText(e.target.value)} placeholder="Fixed the gate latch" />
+                </label>
+                <div className="flex gap-2">
+                  <select className="field" aria-label="Which project" value={logProject} onChange={(e) => setLogProject(e.target.value)}>
+                    <option value="">General</option>
+                    {b.projects?.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <button className="btn-primary shrink-0 whitespace-nowrap" disabled={!logText.trim()}>Log it</button>
+                </div>
+              </form>
+              {b.log.length ? (
+                <ul className="flex flex-col gap-1.5">{b.log.map((l) => <li key={l.id} className="flex gap-3 text-[15px]"><span className="w-20 shrink-0 text-muted">{l.day.slice(5)}</span><span className="flex-1">{l.text}</span><span className="text-[13px] text-muted">{l.project}</span></li>)}</ul>
+              ) : <Empty>Nothing logged yet.</Empty>}
+            </Card>
+          )}
+          {n && (
+            <Card icon={<Newspaper size={18} />} title="News">
+              {failed(n) ? <ErrorText>{n.error}</ErrorText> : (
+                <>
+                  {n.errors.map((e) => <ErrorText key={e}>{e}</ErrorText>)}
+                  {n.items.length ? <ul className="flex flex-col gap-2">{n.items.map((i) => <li key={i.link} className="text-[15px]"><a className="underline decoration-border underline-offset-2 hover:decoration-primary" href={i.link} target="_blank" rel="noreferrer">{i.title}</a> <span className="text-[13px] text-muted">{i.source}</span></li>)}</ul> : <Empty>No headlines right now.</Empty>}
+                </>
+              )}
+            </Card>
+          )}
+          {up && (
+            <Card icon={<Server size={18} />} title="Uptime">
+              {failed(up) ? <ErrorText>{up.error}</ErrorText> : (
+                <>
+                  <p className="text-[15px]"><strong>{up.up} up</strong>{up.down ? <>, <strong className="text-danger">{up.down} down</strong></> : ", none down"}</p>
+                  <ul className="mt-2 flex flex-col gap-1">{up.monitors.filter((m) => m.status !== "up" && !m.ignored).map((m) => <li key={m.name} className="flex justify-between text-[15px]"><span>{m.name}</span><span className="text-muted">{m.status === "down" ? "Down" : "Waiting"}</span></li>)}</ul>
+                </>
+              )}
+            </Card>
+          )}
+          {sys && (
+            <Card icon={<Server size={18} />} title="FAITH's server">
+              {failed(sys) ? <ErrorText>{sys.error}</ErrorText> : (
+                <>
+                  <p className="text-[15px]">Load {sys.load}% · memory {sys.memory}% of {sys.memory_gib} GiB{sys.disks.map((d) => ` · ${d.mount} ${d.pct}% full`).join("")} · up {sys.uptime_days} days</p>
+                  {sys.sources.filter((x) => x.ok === false).map((x) => <p key={x.label} className="text-[14px] text-danger">{x.label} is down{x.error ? `: ${x.error}` : ""}</p>)}
+                  {sys.sources.length > 0 && !sys.sources.some((x) => x.ok === false) && <p className="text-[13px] text-muted">Every connection is answering.</p>}
+                </>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+      {b && !b.cards.length && !b.person && !w && !n && <Empty>Nothing on the board yet. A grown-up sets it up in faith.yaml (dashboard and board).</Empty>}
     </section>
   );
 }
@@ -390,7 +511,7 @@ function Inbox({ items, onApprovals }: { items: InboxItem[]; onAsk: () => void; 
               <span className="ml-auto text-[12px] text-muted">{new Date(it.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}</span>
             </div>
             <div className="mt-1 text-[15px]"><Rich text={it.text} /></div>
-            {it.kind === "approval" && <button className="btn-soft mt-3" onClick={onApprovals}>Decide in Today</button>}
+            {it.kind === "approval" && <button className="btn-soft mt-3" onClick={onApprovals}>Decide on the board</button>}
           </li>
         ))}
       </ol>

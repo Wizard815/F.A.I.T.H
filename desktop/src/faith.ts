@@ -18,6 +18,19 @@ export type ChatEvent =
   | { type: "approval"; id: string; summary: string }
   | { type: "done"; text: string }
   | { type: "error"; message: string };
+/** A part of the board that's set up but couldn't load carries an error, in words for people. */
+export type Board = {
+  person: { id: string; name: string } | null; day: string;
+  brief: { day: string; text: string; by: string; at: number } | null;
+  weather: { place: string; condition: string; unit: string; temperature: number | null; feels_like: number | null; humidity: number | null; wind: number | null; wind_unit: string;
+    days: { date: string; condition: string; high: number | null; low: number | null; rain: number | null }[] } | { error: string } | null;
+  news: { items: { title: string; link: string; source: string; published: number; summary: string }[]; errors: string[] } | { error: string } | null;
+  projects: { id: string; name: string; status: string; next: string; fav: boolean; archived: boolean; last?: string; last_day?: string }[] | null;
+  log: { id: number; project: string; text: string; by: string; day: string; at: number }[] | null;
+  uptime: { up: number; down: number; monitors: { name: string; group: string; status: string; uptime24: number | null; ignored: boolean }[] } | { error: string } | null;
+  system: { name: string; cores: number; load: number; memory: number; memory_gib: number; disks: { mount: string; pct: number }[]; uptime_days: number; sources: { label: string; ok: boolean | null; error?: string }[] } | { error: string } | null;
+  cards: any[];
+};
 export type InboxItem = { id: number; at: number; kind: "message" | "approval"; title: string; text: string; ref: string | null };
 
 /** "http://faith:8097/" or "faith:8097" -> "http://faith:8097". */
@@ -88,6 +101,15 @@ export class Faith {
   me() { return this.json<Person>("GET", "/api/me"); }
   latest() { return this.json<{ conversation_id: string | null; messages: { role: string; content: string }[] }>("GET", "/api/chat/latest"); }
   dashboard() { return this.json<{ cards: any[] }>("GET", "/api/dashboard"); }
+  /** The info board (docs/clients.md, section 6): brief, weather, projects, log, news, the day cards. */
+  board() { return this.json<Board>("GET", "/api/board"); }
+  /** The morning brief, written now. The model takes its time. */
+  writeBrief() { return this.json<{ day: string; text: string; by: string; at: number }>("POST", "/api/board/brief", {}, 5 * 60_000); }
+  addLog(text: string, project?: string) { return this.json("POST", "/api/board/log", { text, ...(project ? { project } : {}) }); }
+  addProject(name: string, status?: string, next?: string) { return this.json("POST", "/api/board/projects", { name, ...(status ? { status } : {}), ...(next ? { next } : {}) }); }
+  updateProject(name: string, patch: { status?: string; next?: string; name?: string; starred?: boolean; archived?: boolean }) { return this.json("PATCH", `/api/board/projects/${encodeURIComponent(name)}`, patch); }
+  /** Bring projects and the log over from this person's Pondering Orb (FAITH uses their own Orb token). */
+  importOrb() { return this.json<{ projects: number; logs: number; skipped: string[] }>("POST", "/api/board/import", { from: "orb" }, 60_000); }
   approvals() { return this.json<{ can_approve: boolean; requests: any[] }>("GET", "/api/approvals"); }
   decide(id: string, approve: boolean) { return this.json("POST", `/api/approvals/${encodeURIComponent(id)}`, { approve }); }
   confirm(id: string, approve: boolean) { return this.json<{ ok: boolean; text: string }>("POST", `/api/chat/confirm/${encodeURIComponent(id)}`, { approve }); }

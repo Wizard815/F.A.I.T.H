@@ -26,6 +26,33 @@ class ContractTest {
         assertEquals(6L, FaithApi.parseInbox(JSONObject("{\"items\":[]}"), 6).second)
     }
 
+    @Test fun theBoard() {
+        val b = BoardView.parse(JSONObject("""{"person":{"id":"sam","name":"Sam"},"day":"2026-11-25",
+            "brief":{"day":"2026-11-25","text":"Good morning.","by":"you","at":1},
+            "weather":{"place":"Home","condition":"rainy","unit":"°F","temperature":44,"feels_like":null,"humidity":80,"wind":null,"wind_unit":"",
+              "days":[{"date":"2026-11-26","condition":"cloudy","high":47,"low":35,"rain":null}]},
+            "news":{"error":"Town News: The feed answered 503."},
+            "projects":[{"id":"p1","name":"Garden shed","status":"blocked","next":"Order timber","fav":true,"archived":false,"last":"Cleared it"}],
+            "log":[{"id":1,"project":"Garden shed","text":"Cleared it","by":"you","day":"2026-11-25","at":1}],
+            "uptime":{"up":3,"down":1,"monitors":[{"name":"Printer","group":"Home","status":"down","uptime24":50,"ignored":false}]},
+            "system":null,
+            "cards":[{"id":"today","title":"Today","kind":"schedule","items":[{"title":"Dentist","time":"09:30"}]},{"id":"chores","title":"Chores","kind":"list","empty":"Nothing here."}]}"""))
+        assertEquals("Sam", b.person)
+        assertEquals("Good morning.", b.brief)
+        assertEquals("44", b.weather!!.value!!.temperature)
+        assertEquals("–", b.weather!!.value!!.days[0].rain)
+        assertNull(b.news!!.value)
+        assertEquals("Town News: The feed answered 503.", b.news!!.error)
+        assertEquals("Blocked", BoardView.statusWord(b.projects!![0].status))
+        assertEquals("3 up, 1 down\nPrinter is down", b.uptime!!.value)
+        assertNull(b.system)
+        assertEquals(listOf("Dentist"), b.cards[0].items.map { it.title })
+        assertEquals("Nothing here.", b.cards[1].empty)
+        // The household's board: no one's projects, log or brief.
+        val h = BoardView.parse(JSONObject("""{"person":null,"brief":null,"projects":null,"log":null,"weather":null,"news":null,"uptime":null,"system":null,"cards":[]}"""))
+        assertNull(h.person); assertNull(h.projects); assertNull(h.log); assertNull(h.brief)
+    }
+
     @Test fun toolNamesInPlainWords() {
         assertEquals("checking the calendar", ChatModel.friendlyTool("allglance_get_day"))
         assertEquals("checking the house", ChatModel.friendlyTool("HassTurnOff"))

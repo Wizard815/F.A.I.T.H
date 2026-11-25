@@ -27,7 +27,7 @@ const state = (): State => ({
   keyring: store.keeping === "os" ? "os" : "file", platform: process.platform,
 });
 
-function show(tab?: "ask" | "today" | "inbox") {
+function show(tab?: "ask" | "board" | "inbox") {
   if (!win || win.isDestroyed()) createWindow();
   win!.show(); win!.focus();
   if (tab) send("show", tab);
@@ -53,7 +53,7 @@ function setTray() {
   tray?.setContextMenu(Menu.buildFromTemplate([
     { label: "Ask FAITH", accelerator: store.settings.shortcut, click: () => { show("ask"); send("askFocus"); } },
     { label: n ? `Inbox (${n} new)` : "Inbox", click: () => show("inbox") },
-    { label: "Today", click: () => show("today") },
+    { label: "Board", click: () => show("board") },
     { type: "separator" },
     { label: "Notifications", type: "checkbox", checked: store.settings.notifications, click: (i) => setSettings({ notifications: i.checked }) },
     { label: "Start when I sign in to this computer", type: "checkbox", checked: store.settings.startAtLogin, click: (i) => setSettings({ startAtLogin: i.checked }) },
@@ -96,7 +96,7 @@ function gotItems(items: InboxItem[], fresh: boolean) {
     if (store.settings.notifications && Notification.isSupported()) {
       for (const it of items.slice(-3)) {
         const n = new Notification({ title: it.title || "FAITH", body: it.text, icon: icon("icon.png"), silent: false });
-        n.on("click", () => show(it.kind === "approval" ? "today" : "inbox"));
+        n.on("click", () => show(it.kind === "approval" ? "board" : "inbox"));
         n.show();
       }
     }
@@ -164,6 +164,12 @@ function registerIpc() {
   handle("approvals", () => guarded((f) => f.approvals()));
   handle("decide", (id: string, approve: boolean) => guarded((f) => f.decide(id, approve)));
   handle("dashboard", () => guarded((f) => f.dashboard()));
+  handle("board", () => guarded((f) => f.board()));
+  handle("writeBrief", () => guarded((f) => f.writeBrief()));
+  handle("addLog", (text: string, project?: string) => guarded((f) => f.addLog(String(text), project ? String(project) : undefined)));
+  handle("addProject", (name: string, status?: string, next?: string) => guarded((f) => f.addProject(String(name), status, next)));
+  handle("updateProject", (name: string, patch: any) => guarded((f) => f.updateProject(String(name), { status: patch?.status, next: patch?.next, starred: patch?.starred, archived: patch?.archived })));
+  handle("importOrb", () => guarded((f) => f.importOrb()));
   handle("transcribe", (audio: ArrayBuffer, mime: string) => guarded((f) => f.transcribe(new Uint8Array(audio), mime)));
   handle("speak", (text: string) => guarded(async (f) => (await f.speak(text)).buffer));
   handle("inbox", () => inbox);

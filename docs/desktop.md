@@ -9,7 +9,7 @@ FAITH on your computer (Windows, macOS, Linux): ask, talk, drop in a photo, say 
 - **Yes / No** for held changes (a lock, the garage), on your own computer, by you.
 - **Photos:** drag them onto the window, paste them, or use the photo button. Up to 4, made 1600 px JPEGs first and turned upright.
 - **Read aloud:** each answer has *Read aloud*, or turn on *Read answers aloud* in Settings. It uses FAITH's own voice (Argos).
-- **Today:** FAITH's day cards, the same as the Home Assistant card. Grown-ups approve or decline the household's requests there.
+- **Board:** the info board ([dashboard.md](dashboard.md)), beside Ask. Your morning brief (*Write it now*), the weather, FAITH's day cards (the same as the Home Assistant card), your projects and their status, your log, news, and for admins uptime and FAITH's server. Grown-ups approve or decline the household's requests there. With no projects yet, *Bring my projects over from Pondering Orb* copies them and your log from Orb.
 - **Inbox and notifications:** a bigger job's answer, the doorbell, approvals to decide. The app keeps a connection to FAITH open from the tray (a long poll) and shows a normal notification. Nothing goes through Google's, Apple's or Microsoft's push services.
 - **From anywhere:** Ctrl+Alt+F (⌘⌥F on a Mac) opens FAITH ready to type. Change it in Settings.
 - **Closing the window** keeps FAITH in the tray. Quit from the tray menu. *Start when I sign in to this computer* starts it in the tray.
@@ -46,6 +46,7 @@ npx electron-builder --publish never       # installers for this computer, in de
 - **Sign out of this computer** (Settings) also removes this computer's key on FAITH. A lost laptop: remove its key on FAITH's admin page (*Tokens & screens*) or with `faith token revoke <name>`.
 
 **What goes wrong:**
+- The board is missing a part (weather, news, uptime): it isn't set up in `board:` in faith.yaml, or it's not for your role. See [dashboard.md](dashboard.md).
 - "FAITH isn't answering": you're not on the home network, the address is wrong, or FAITH is down.
 - "This computer isn't signed in to FAITH any more": its key was removed. Sign in again.
 - "This computer has no keychain FAITH can use" (Linux): this only happens if no keyring can be found. Normally, without a keyring, the app keeps the key in a file only your account can read, and Settings says so. Install GNOME Keyring or KWallet to have it encrypted.
@@ -59,7 +60,7 @@ npx electron-builder --publish never       # installers for this computer, in de
 - Only the main process talks to FAITH and holds the key. The page gets a narrow bridge (`src/preload.ts`), no Node, no key, and a strict content security policy. Links open in your browser.
 - Tests:
   - `npm test`: the client against a real FAITH with fakes.
-  - `xvfb-run -a npm run e2e`: the real app driven by Playwright. Sign in, ask, Yes to a lock, a notification, Today, sign out.
+  - `xvfb-run -a npm run e2e`: the real app driven by Playwright. Sign in, ask, Yes to a lock, a notification, the board (weather, a project, a log entry), sign out.
 
 ## Not built yet
 

@@ -81,11 +81,42 @@ What FAITH sends a person also waits in their inbox, for their apps. Examples:
   - **Desktop:** a long poll from the tray.
   - **D.A.S.H:** a long poll while awake.
 
-## 6. Glance
+## 6. Glance and the board
 
 - `GET /api/dashboard` → the same day cards as the Home Assistant card: today, meals, shopping, chores, the house, approvals.
 - Each card is `{ id, title, kind, items | entities | approvals | text | empty | error }`.
 - `GET /api/session` → name, `pending_approvals`, `can_approve`.
+
+**The board** ([dashboard.md](dashboard.md)): Pondering Orb's Main and Daily pages, for the signed-in person.
+
+`GET /api/board` →
+```json
+{ "person": { "id": "sam", "name": "Sam" }, "day": "2026-11-25",
+  "brief": { "day": "2026-11-25", "text": "Good morning…", "by": "morning", "at": 1764050000000 },
+  "weather": { "place": "Home", "condition": "rainy", "unit": "°F", "temperature": 44, "feels_like": 40, "humidity": 80, "wind": 8, "wind_unit": "mph",
+               "days": [ { "date": "2026-11-26", "condition": "cloudy", "high": 47, "low": 35, "rain": 20 } ] },
+  "news": { "items": [ { "title": "…", "link": "https://…", "source": "…", "published": 0, "summary": "…" } ], "errors": [] },
+  "projects": [ { "id": "…", "name": "Garden shed", "status": "active", "next": "Order the timber", "fav": false, "archived": false, "last": "Cleared it", "last_day": "2026-11-24" } ],
+  "log": [ { "id": 1, "project": "Garden shed", "text": "Cleared it", "by": "you", "day": "2026-11-24", "at": 0 } ],
+  "uptime": { "up": 12, "down": 1, "monitors": [ { "name": "Printer", "group": "Home", "status": "down", "uptime24": 50, "ping": null, "ignored": false } ] },
+  "system": { "name": "…", "cores": 8, "load": 12, "memory": 41, "memory_gib": 32, "disks": [ { "mount": "/data", "pct": 63 } ], "uptime_days": 9, "sources": [ { "label": "wiki", "ok": true } ] },
+  "cards": [ …the day cards… ] }
+```
+- A part is `null` when it isn't set up, or isn't for this viewer. Then don't show it.
+- A part that's set up but didn't load is `{ "error": "…" }`. Show the error as it is.
+- `person`, `brief`, `projects` and `log` are `null` for the household (a shared screen, HA's token).
+
+Changes (a signed-in person's own; each goes through FAITH's rules and the action log):
+
+| Call | Does |
+|---|---|
+| `POST /api/board/brief` | Writes today's brief now → `{ day, text, by, at }`. It takes as long as the model needs (allow 5 minutes). |
+| `POST /api/board/log` `{ "text", "project"? }` | Logs what you got done. No project: General. Too long is refused (`board.log_max`). |
+| `POST /api/board/projects` `{ "name", "status"?, "next"? }` | Adds a project. |
+| `PATCH /api/board/projects/<name>` `{ "status"?, "next"?, "name"?, "starred"?, "archived"? }` | Changes one. `POST` works too, for apps that can't send `PATCH`. |
+| `POST /api/board/import` `{ "from": "orb" }` or `{ "projects", "logs" }` | Brings projects and the log over from Pondering Orb → `{ projects, logs, skipped }`. |
+
+Errors come back as `{ "error": "…" }` with 400 (a wrong value), 403 (not for your role, e.g. a child) or 409 (the brief is already being written).
 
 ## 7. Rules for every app
 
@@ -107,3 +138,4 @@ What FAITH sends a person also waits in their inbox, for their apps. Examples:
 | Voice | push-to-talk (Hermes first, FAITH as the fallback) | push-to-talk; can be the phone's **assistant** (hold home / power) | click to talk; a shortcut from anywhere (Ctrl+Alt+F) |
 | Photos | — | camera, and **Share → FAITH** from any app | drag and drop, paste |
 | Notifications | buzz + card | Android notifications | tray and the computer's notifications |
+| Board | — | Board tab | Board tab (and bringing projects over from Orb) |

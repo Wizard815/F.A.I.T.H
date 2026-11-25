@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
  *  starts listening; shared a photo, it attaches it (docs/android.md, docs/clients.md). */
 class MainActivity : ComponentActivity() {
     private val chat: ChatModel by viewModels()
+    private val board: BoardModel by viewModels()
     private var pendingIntent by mutableStateOf<Intent?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,7 +52,7 @@ class MainActivity : ComponentActivity() {
         pendingIntent = intent
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        setContent { FaithTheme { Root(chat, pendingIntent) { pendingIntent = null } } }
+        setContent { FaithTheme { Root(chat, board, pendingIntent) { pendingIntent = null } } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); pendingIntent = intent }
     override fun onStart() { super.onStart(); chat.startInbox() }
@@ -72,11 +73,25 @@ fun FaithTheme(content: @Composable () -> Unit) {
 private val Serif = FontFamily.Serif
 
 @Composable
-fun Root(chat: ChatModel, intent: Intent?, consumed: () -> Unit) {
+fun Root(chat: ChatModel, board: BoardModel, intent: Intent?, consumed: () -> Unit) {
     var signedIn by remember { mutableStateOf(chat.store.signedIn) }
+    var tab by remember { mutableStateOf(0) }
+    // Opened as the assistant or shared a photo: that's for Ask.
+    LaunchedEffect(intent) { if (intent?.action == Intent.ACTION_ASSIST || intent?.action == Intent.ACTION_SEND || intent?.action == "android.intent.action.VOICE_COMMAND") tab = 0 }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!signedIn) SignIn(chat.store) { signedIn = true; chat.startInbox(); chat.loadHistory() }
-        else Chat(chat, intent, consumed) { chat.store.signOut(); chat.lines.clear(); signedIn = false }
+        else Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+            // Two views: Ask (the helper) and Board (the info board, docs/dashboard.md).
+            TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
+                listOf("Ask", "Board").forEachIndexed { i, label ->
+                    Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.heightIn(min = 48.dp), text = { Text(label, fontSize = 16.sp) })
+                }
+            }
+            Box(Modifier.weight(1f)) {
+                if (tab == 0) Chat(chat, intent, consumed) { chat.store.signOut(); chat.lines.clear(); board.board.value = null; signedIn = false }
+                else BoardScreen(board)
+            }
+        }
     }
 }
 
@@ -142,7 +157,7 @@ fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> 
         consumed()
     }
 
-    Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("FAITH", fontFamily = Serif, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
