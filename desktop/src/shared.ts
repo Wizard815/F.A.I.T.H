@@ -7,7 +7,7 @@ export type State = {
   signedIn: boolean;
   url?: string;
   person?: Person;
-  settings: Pick<Settings, "readAloud" | "notifications" | "startAtLogin" | "shortcut">;
+  settings: Pick<Settings, "readAloud" | "notifications" | "startAtLogin" | "shortcut" | "layout">;
   /** "os": the key is encrypted by the OS keychain; "file": no keyring (Linux), a file only this user can read. */
   keyring: "os" | "file";
   platform: string;
@@ -19,7 +19,8 @@ export type FaithBridge = {
   signOut(): Promise<State>;
   setSettings(patch: Partial<State["settings"]>): Promise<State>;
   /** Starts a question; its events come through onChat with this id. */
-  ask(q: { text: string; images?: string[] }): Promise<string>;
+  /** `spoken`: the answer will be read aloud, so FAITH keeps it to a few plain sentences. */
+  ask(q: { text: string; images?: string[]; spoken?: boolean }): Promise<string>;
   stop(id: string): Promise<void>;
   newTopic(): Promise<void>;
   latest(): Promise<{ role: string; content: string }[]>;
@@ -49,6 +50,8 @@ export type FaithBridge = {
   onAsk(cb: () => void): () => void;
   /** A notification or the tray asked to show a tab. */
   onShow(cb: (tab: "ask" | "board" | "inbox") => void): () => void;
+  /** The tray changed the layout. */
+  onLayout(cb: (layout: State["settings"]["layout"]) => void): () => void;
 };
 
 export const CHANNELS = [

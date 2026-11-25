@@ -82,8 +82,9 @@ class FaithApi(baseUrl: String, private val token: String?) {
     fun removeClient(name: String) { if (name.isNotBlank()) json("/api/me/clients/" + URLEncoder.encode(name, "UTF-8"), "DELETE") }
 
     /** Ask, streaming the answer: each event as FAITH sends it (section 2). Blocking: call it off the main thread. */
-    fun chat(text: String, conversationId: String?, images: List<String>, onEvent: (JSONObject) -> Unit) {
+    fun chat(text: String, conversationId: String?, images: List<String>, spoken: Boolean = false, onEvent: (JSONObject) -> Unit) {
         val body = JSONObject().put("text", text)
+        if (spoken) body.put("spoken", true)   // read aloud: FAITH keeps it to a few plain sentences
         if (conversationId != null) body.put("conversation_id", conversationId)
         if (images.isNotEmpty()) body.put("images", JSONArray(images))
         val c = open("/api/chat", "POST", "application/json", readTimeoutMs = 300_000)

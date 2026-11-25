@@ -16,6 +16,25 @@ FAITH on your computer (Windows, macOS, Linux): ask, talk, drop in a photo, say 
 - **Closing the window** keeps FAITH in the tray. Quit from the tray menu. *Start when I sign in to this computer* starts it in the tray.
 - Light or dark follows the computer's setting.
 
+## Three layouts
+
+Pick one in Settings (the gear, or the tray menu → Layout). Each person picks their own, on each device.
+
+| Layout | For | What's on screen |
+|---|---|---|
+| **Voice focus** | Just talking: a desk, a bedside, when you don't need a screen | FAITH (tap it, press Space or to talk), what it heard, its answer, and a Yes for a held change. Every answer is read aloud. |
+| **Voice panel** | A kitchen or hallway screen, like a smart speaker with a display | A big clock, the weather and a few panels: your brief, next up, dinner, shopping, the house. Tap a panel and FAITH tells you about it. A big Talk button. |
+| **Voice dashboard** | Everything | Ask, the Board (projects, log, brief, weather, news) and the Inbox. |
+
+- In both voice layouts FAITH answers in a few plain sentences, made for reading aloud, and can still use everything you can (your calendar, the house, your notes, the board).
+- They start on a clean screen. The conversation carries on behind it, so "and tomorrow?" still works.
+- A change that needs a Yes (a lock, the garage) always shows Yes and No on the screen, in every layout.
+- Voice panel goes back to its panels after half a minute of quiet.
+
+**What goes wrong:**
+- Nothing is read aloud: FAITH's voice (Argos's text-to-speech) isn't set up, or the computer's sound is off. The answer still shows.
+- A panel is missing: that part isn't set up on FAITH (no meal plan, no shopping list, no weather entity), so there's nothing to show.
+
 ## Get it
 
 Build the installers on GitHub: **Actions → desktop → Run workflow**. When it finishes, the run's page has:

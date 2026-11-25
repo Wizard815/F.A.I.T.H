@@ -19,6 +19,15 @@ The board works in the desktop app and the Android app. The API is in [clients.m
 
 **Privacy.** Projects, the log and the brief belong to one person. The household screen, Home Assistant's shared token and the Mattermost group chats never see them, and get none of the board's tools. A person's day cards use that person's own tokens, as before.
 
+## Three layouts
+
+The apps show the board three ways, picked per device in Settings:
+- **Voice focus:** just talk to FAITH. It reads every answer aloud and can use all of the board.
+- **Voice panel:** a clock, the weather and a few panels (brief, next up, dinner, shopping, the house), like a smart speaker's screen. A tap asks FAITH about that panel.
+- **Voice dashboard:** the whole board, with Ask and the Inbox.
+
+Details and what goes wrong: [desktop.md](desktop.md#three-layouts), [android.md](android.md#three-layouts).
+
 ## Set it up
 
 Everything is optional. A part that isn't set up doesn't show.

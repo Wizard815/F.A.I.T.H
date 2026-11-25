@@ -69,6 +69,15 @@ test("the inbox: what FAITH sends a person waits for their apps, and a long poll
   assert.equal((await A.app.inject({ url: "/api/inbox" })).statusCode, 401);
 });
 
+test("a voice layout asks for a spoken answer: a few plain sentences", async () => {
+  let seen: any;
+  script = (req) => { seen = req; return { content: "Tacos tonight." }; };
+  await A.app.inject({ method: "POST", url: "/api/chat", headers: as(app), payload: { text: "what's for dinner?", spoken: true } });
+  assert.match(seen.messages[0].content, /read aloud to them.*one to three plain sentences/);
+  await A.app.inject({ method: "POST", url: "/api/chat", headers: as(app), payload: { text: "what's for dinner?" } });
+  assert.doesNotMatch(seen.messages[0].content, /read aloud to them/);
+});
+
 test("removing an app ends its token", async () => {
   const name = (await A.app.inject({ url: "/api/me/clients", headers: as(app) })).json()[0].name;
   assert.equal((await A.app.inject({ method: "DELETE", url: `/api/me/clients/${name}`, headers: as(app) })).json().ok, true);

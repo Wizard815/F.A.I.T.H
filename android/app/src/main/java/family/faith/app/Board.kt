@@ -28,7 +28,7 @@ import org.json.JSONObject
 // ---------------------------------------------------------------- what GET /api/board says (docs/clients.md, section 6)
 
 data class CardItem(val title: String, val time: String, val label: String, val meta: String, val done: Boolean)
-data class DayCard(val id: String, val title: String, val items: List<CardItem>, val text: String, val empty: String, val error: String)
+data class DayCard(val id: String, val title: String, val items: List<CardItem>, val text: String, val empty: String, val error: String, val kind: String = "")
 data class Project(val name: String, val status: String, val next: String, val last: String, val starred: Boolean)
 data class LogLine(val day: String, val project: String, val text: String)
 data class Forecast(val date: String, val condition: String, val high: String, val low: String, val rain: String)
@@ -69,8 +69,10 @@ data class BoardView(
             system = d.part("system") { s -> "Load ${s.optInt("load")}% · memory ${s.optInt("memory")}% · up ${s.optInt("uptime_days")} days" +
                 s.optJSONArray("sources").list { it }.filter { !it.isNull("ok") && !it.optBoolean("ok") }.joinToString("") { "\n${it.str("label")} is down" } },
             cards = d.optJSONArray("cards").list { c ->
-                DayCard(c.str("id"), c.str("title"), c.optJSONArray("items").list { CardItem(it.str("title"), it.str("time"), it.str("label"), it.str("meta"), it.optBoolean("done")) },
-                    c.str("text"), c.str("empty"), c.str("error")) },
+                // The house card lists entities (name and state); shown like other items.
+                val items = c.optJSONArray("items").list { CardItem(it.str("title"), it.str("time"), it.str("label"), it.str("meta"), it.optBoolean("done")) } +
+                    c.optJSONArray("entities").list { CardItem(it.str("name"), "", "", it.str("state"), false) }
+                DayCard(c.str("id"), c.str("title"), items, c.str("text"), c.str("empty"), c.str("error"), c.str("kind")) },
         )
 
         val STATUSES = listOf("next" to "Next", "active" to "Active", "blocked" to "Blocked", "paused" to "Paused", "shipped" to "Shipped")

@@ -29,7 +29,7 @@ An app signs in as **one person** and counts as **their own screen**:
 
 ## 2. Asking
 
-`POST /api/chat` `{ "text": "…", "conversation_id"?: "…", "images"?: ["data:image/jpeg;base64,…"] }` answers as a stream (Server-Sent Events, `data: {json}` lines):
+`POST /api/chat` `{ "text": "…", "conversation_id"?: "…", "images"?: ["data:image/jpeg;base64,…"], "spoken"?: true }` answers as a stream (Server-Sent Events, `data: {json}` lines):
 
 | Event | Means |
 |---|---|
@@ -42,6 +42,7 @@ An app signs in as **one person** and counts as **their own screen**:
 | `{"type":"done","text":"…"}` | The whole answer. |
 | `{"type":"error","message":"…"}` | Show the message as it is: it's written for people. |
 
+- `"spoken": true`: the app will read the answer aloud (a voice layout), so FAITH answers in a few plain sentences, without lists.
 - `GET /api/chat/latest`: the last conversation's messages, to show when the app opens.
 - `GET /api/photos/<source>/<id>`: a shown photo's picture (a JPEG), fetched with this person's own Immich key. Show the photos small, and open `link` on a tap. Ignore event types you don't know.
 - A bigger job ("plan the week's dinners") can take a while. Keep the stream open; its answer also arrives in the inbox (section 5).

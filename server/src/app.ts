@@ -309,6 +309,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   });
 
   // ---------- chat on the screen (server-sent events) ----------
+  const SPOKEN = "This answer is read aloud to them (their app is in a voice layout). Answer in one to three plain sentences: no lists, no markdown, no links read out. Photos and a Yes for a change still show on their screen, so mention them briefly.";
   // A photo a tool showed (Immich), with the asker's own key: the apps draw these.
   app.get("/api/photos/:source/:id", async (req, reply) => {
     const c = need(req), p = req.params as any;
@@ -330,7 +331,9 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     reply.raw.on("close", () => ctl.abort());
     try {
       const images = Array.isArray(b?.images) ? b.images.map(String) : undefined;
-      const r = await agent.turn({ caller: c, text: String(b?.text || ""), images, conversationId: b?.conversation_id || undefined, onEvent: send, signal: ctl.signal });
+      // An app in a voice layout reads the answer aloud: a few plain sentences, no lists.
+      const extraSystem = b?.spoken === true ? SPOKEN : undefined;
+      const r = await agent.turn({ caller: c, text: String(b?.text || ""), images, conversationId: b?.conversation_id || undefined, onEvent: send, signal: ctl.signal, extraSystem });
       send({ type: "done", text: r.text });
     } catch (e: any) {
       if (!(e instanceof ModelError || e instanceof ToolError)) app.log.error(e);

@@ -81,3 +81,33 @@ class PhotoTest {
         assertEquals(0f, Photos.turnFor(0))
     }
 }
+
+class GlanceTest {
+    private val board = BoardView.parse(JSONObject("""{"person":{"id":"sam","name":"Sam"},"brief":{"text":"Good evening, Sam. Rain until late. Dinner is fish tacos.","day":"x","by":"faith","at":1},
+        "weather":{"place":"Home","condition":"rainy","unit":"°F","temperature":44,"days":[]},"news":null,"projects":[],"log":[],"uptime":null,"system":null,
+        "cards":[{"id":"today","title":"Today","kind":"schedule","items":[{"title":"School pickup","time":"15:15"},{"title":"Swim lesson","time":"18:30"},{"title":"Book club","time":"20:00"}]},
+          {"id":"meals","title":"Meals","kind":"meals","items":[{"title":"Pancakes","label":"breakfast"},{"title":"Fish tacos","label":"dinner"}]},
+          {"id":"shopping","title":"Shopping","kind":"checklist","items":[{"title":"Limes"},{"title":"Milk","done":true},{"title":"Tortillas"}]},
+          {"id":"home","title":"Home","kind":"entities","entities":[{"entity_id":"lock.front_door","name":"Front door","state":"locked"}]}]}"""))
+
+    @Test fun thePanelsTiles() {
+        val g = Glance.from(board, "18:47")
+        assertEquals("Book club", g.next); assertEquals("20:00", g.nextTime)
+        assertEquals("Fish tacos", g.dinner)
+        assertEquals(2, g.shopping); assertEquals(listOf("Limes", "Tortillas"), g.shoppingFirst)
+        assertEquals(listOf("Front door: locked"), g.house)
+        assertEquals("Rain until late.", g.brief)
+        assertEquals("44°F", g.weather)
+    }
+
+    @Test fun nothingLeftTodayAndNoCards() {
+        assertEquals("", Glance.from(board, "21:00").next)
+        val empty = Glance.from(null, "09:00")
+        assertNull(empty.next); assertNull(empty.dinner); assertNull(empty.shopping); assertNull(empty.house); assertNull(empty.weather)
+    }
+
+    @Test fun theLayouts() {
+        assertEquals(listOf("voice-focus", "voice-panel", "voice-dashboard"), Layouts.ALL)
+        assertEquals("Voice panel: talk, with a few panels", Layouts.NAMES["voice-panel"])
+    }
+}

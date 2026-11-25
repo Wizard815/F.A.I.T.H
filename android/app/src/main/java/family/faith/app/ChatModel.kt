@@ -28,6 +28,9 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
     val lines = mutableStateListOf<Line>()
     val busy = mutableStateOf(false)
     val listening = mutableStateOf(false)
+    val speaking = mutableStateOf(false)
+    /** A voice layout: answers are asked for short and always read aloud. */
+    var voice = false
     val status = mutableStateOf("")            // announced to screen readers
     val attached = mutableStateOf<String?>(null)
     private val recorder = Recorder(app)
@@ -50,7 +53,7 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
             var shown = emptyList<Shown>()
             try {
                 io {
-                    store.api().chat(q.ifEmpty { "What's in this photo?" }, store.conversationId, listOfNotNull(photo)) { e ->
+                    store.api().chat(q.ifEmpty { "What's in this photo?" }, store.conversationId, listOfNotNull(photo), spoken = voice) { e ->
                         when (e.optString("type")) {
                             "conversation" -> store.conversationId = e.optString("id")
                             "text" -> { answer += e.optString("delta"); update(Line(answer.ifBlank { "…" }, checking = checking.toList(), shown = shown)) }
@@ -64,7 +67,7 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 status.value = "FAITH answered"
-                if (store.speakReplies && answer.isNotBlank()) speakOut(answer)
+                if ((voice || store.speakReplies) && answer.isNotBlank()) speakOut(answer)
             } catch (e: FaithError) {
                 update(Line(e.message ?: "That didn't work.")); status.value = e.message ?: ""
             } finally { busy.value = false }
@@ -98,12 +101,14 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
             val said = try { io { store.api().confirm(c.id, yes) } } catch (e: FaithError) { e.message ?: "That didn't work." }
             lines[i] = lines[i].copy(confirm = c.copy(state = if (said.startsWith("Done")) "done" else if (yes) "failed" else "no"))
             lines += Line(said); status.value = said
+            if (voice) speakOut(said)
         }
     }
 
     // ---- push-to-talk
     fun startTalking() {
         if (busy.value) return
+        quiet()
         try { recorder.start(); listening.value = true; status.value = "Listening. Tap again to send." }
         catch (e: Exception) { status.value = "The microphone isn't available." }
     }
@@ -119,8 +124,12 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private suspend fun speakOut(text: String) {
-        try { val mp3 = io { store.api().speak(text.replace(Regex("[*_#`>]"), "")) }; speaker.play(mp3) } catch (_: Exception) { /* reading aloud is a nicety */ }
+        try {
+            val mp3 = io { store.api().speak(text.replace(Regex("[*_#`>]"), "")) }
+            speaking.value = true; speaker.play(mp3) { ui { speaking.value = false } }
+        } catch (_: Exception) { speaking.value = false /* reading aloud is a nicety */ }
     }
+    fun quiet() { speaker.stop(); speaking.value = false }
 
     // ---- the inbox while the app is open: a long poll (the worker covers the background)
     fun startInbox() {

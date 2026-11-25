@@ -14,5 +14,5 @@ const listen = (ch: string) => (cb: (...a: any[]) => void) => {
 contextBridge.exposeInMainWorld("faith", {
   ...Object.fromEntries(CHANNELS.map((c) => [c, call(c)])),
   onChat: listen("chat"), onInbox: listen("inboxItems"), onStatus: listen("status"), onSignedOut: listen("signedOut"),
-  onAsk: listen("askFocus"), onShow: listen("show"),
+  onAsk: listen("askFocus"), onShow: listen("show"), onLayout: listen("layout"),
 });

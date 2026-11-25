@@ -43,7 +43,8 @@ before(async () => {
   url = await A.app.listen({ port: 0, host: "127.0.0.1" });
   app = await _electron.launch({
     executablePath: require("electron") as unknown as string,
-    args: [resolve(import.meta.dirname, ".."), "--no-sandbox"],
+    // A pretend microphone (a beep) and no permission prompt, for talking in the voice layouts.
+    args: [resolve(import.meta.dirname, ".."), "--no-sandbox", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
     env: { ...process.env, FAITH_DESKTOP_DATA: mkdtempSync(join(tmpdir(), "faith-desktop-e2e-")), FAITH_DESKTOP_TEST: "1", FAITH_DESKTOP_SHOW: "1" },
   });
   page = await app.firstWindow();
@@ -142,6 +143,68 @@ test("the page has no way to Node or the key", async () => {
   assert.equal(r.require, "undefined");
   assert.equal(r.process, "undefined");
   assert.ok(!r.bridge.some((k: string) => /token|key/i.test(k)));
+});
+
+const layout = async (name: RegExp) => {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("radio", { name }).check();
+  await page.getByRole("button", { name: "Close" }).click();
+};
+const lastSystem = () => String(model.calls.at(-1)?.messages?.[0]?.content || "");
+
+test("voice focus: talk to FAITH's emblem; the answer is a caption, short and read aloud", async () => {
+  await layout(/Voice focus/);
+  const talk = page.getByRole("button", { name: "Talk to FAITH" });
+  await talk.waitFor();
+  assert.equal(await page.getByRole("button", { name: "Board" }).count(), 0, "no tabs: just FAITH");
+  model.stt.text = "what's for dinner?";
+  await talk.click();
+  await page.getByRole("button", { name: "Stop and send what you said" }).waitFor();
+  await page.waitForTimeout(1200);
+  await shot("7-focus-listening");
+  await page.getByRole("button", { name: "Stop and send what you said" }).click();
+  await page.getByText("“what's for dinner?”").waitFor();
+  await page.getByText("fish tacos").waitFor();
+  assert.match(lastSystem(), /read aloud to them/, "asked for a spoken answer");
+  await shot("7-focus-answer");
+  // Typing still works, and a held change still waits for a Yes on the screen.
+  await page.getByRole("button", { name: "Type instead" }).click();
+  await page.getByLabel("Type to FAITH").fill("unlock the front door");
+  await page.keyboard.press("Enter");
+  await page.getByText("unlock Front door").waitFor();
+  const before = ha.services.length;
+  await page.getByRole("button", { name: "Yes", exact: true }).click();
+  for (let i = 0; i < 50 && ha.services.length === before; i++) await page.waitForTimeout(100);
+  assert.equal(ha.services.at(-1)?.service, "unlock");
+  await page.getByText("Answered").waitFor();   // the card stays, with what happened
+  ha.states["lock.front_door"].state = "locked";
+});
+
+test("voice panel: a clock, the weather and a few panels; a tap asks FAITH", async () => {
+  await layout(/Voice panel/);
+  await page.getByRole("region", { name: "Today at a glance" }).waitFor();
+  assert.match(await page.getByRole("button", { name: /^Weather: 44°F, rainy/ }).getAttribute("aria-label"), /Ask FAITH about the weather/);
+  await page.getByRole("button", { name: /The house/ }).waitFor();
+  assert.match(await page.getByRole("button", { name: /The house/ }).innerText(), /Front door: locked/);
+  await shot("8-panel");
+  await page.getByRole("button", { name: /The house/ }).click();
+  await page.getByText("“How's the house?”").waitFor();
+  await page.getByText("fish tacos").waitFor();
+  assert.match(lastSystem(), /read aloud to them/);
+  await shot("8-panel-answer");
+  await page.getByRole("button", { name: "Back to the panels" }).click();
+  await page.getByRole("region", { name: "Today at a glance" }).waitFor();
+  assert.ok(await page.getByRole("button", { name: "Talk to FAITH" }).isVisible(), "talking is the main way in");
+});
+
+test("voice dashboard: everything again, and the layout is kept", async () => {
+  await layout(/Voice dashboard/);
+  await page.getByRole("button", { name: "Board" }).waitFor();
+  await page.getByRole("button", { name: "Ask" }).click();
+  await page.getByLabel("Your question").waitFor();
+  const st = await page.evaluate(() => (window as any).faith.state());
+  assert.equal(st.settings.layout, "voice-dashboard");
+  await assert.rejects(page.evaluate(() => (window as any).faith.setSettings({ layout: "sideways" })), /isn't a layout/);
 });
 
 test("sign out: the key is removed on FAITH too", async () => {

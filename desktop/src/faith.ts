@@ -134,7 +134,7 @@ export class Faith {
   }
 
   /** Ask, with the answer as it's written. Resolves with the whole answer. */
-  async chat(q: { text: string; conversation_id?: string; images?: string[] }, on: (e: ChatEvent) => void, signal?: AbortSignal): Promise<string> {
+  async chat(q: { text: string; conversation_id?: string; images?: string[]; spoken?: boolean }, on: (e: ChatEvent) => void, signal?: AbortSignal): Promise<string> {
     const r = await this.req("POST", "/api/chat", { json: q, timeoutMs: 15 * 60_000, signal });
     const reader = r.body!.getReader(), dec = new TextDecoder();
     let buf = "", answer = "";

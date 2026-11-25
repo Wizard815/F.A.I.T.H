@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, Check, CloudSun, FolderKanban, LayoutDashboard, Newspaper, NotebookPen, Server, Sparkles, ImagePlus, Loader2, MessageCircle, Mic, RotateCcw, Send, Settings, Square, Volume2, X } from "lucide-react";
 import { Avatar, Card, Empty, ErrorText, Sheet, cn, niceTime } from "@web/ui";
-import type { Board as BoardData, ChatEvent, InboxItem, PhotoRef } from "../faith";
-import type { FaithBridge, State } from "../shared";
-
-declare global { interface Window { faith: FaithBridge } }
-const api = window.faith;
-const msg = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(e));
+import type { Board as BoardData, InboxItem } from "../faith";
+import type { State } from "../shared";
+import { api, msg, Photos, Rich, shrink, useTalk } from "./talk";
+import { Focus, Panel } from "./layouts";
 
 /** Follow the computer's light or dark setting. */
 function useOsTheme() {
@@ -22,7 +20,11 @@ export function App() {
   useOsTheme();
   const [st, setSt] = useState<State | null>(null);
   const [note, setNote] = useState("");
-  useEffect(() => { api.state().then(setSt); return api.onSignedOut((m) => { setNote(m); api.state().then(setSt); }); }, []);
+  useEffect(() => {
+    api.state().then(setSt);
+    const offs = [api.onSignedOut((m) => { setNote(m); api.state().then(setSt); }), api.onLayout(() => api.state().then(setSt))];
+    return () => offs.forEach((f) => f());
+  }, []);
   if (!st) return null;
   return st.signedIn ? <Main st={st} setSt={setSt} /> : <SignIn st={st} note={note} onDone={(s) => { setNote(""); setSt(s); }} />;
 }
@@ -82,6 +84,10 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
     return () => offs.forEach((f) => f());
   }, []);
   useEffect(() => { if (tab === "inbox" && unread) { api.markRead(); setUnread(0); } }, [tab, unread]);
+  const sheet = settings && <SettingsSheet st={st} setSt={setSt} onClose={() => setSettings(false)} />;
+  const banner = problem && <p className="bg-primary-soft px-4 py-2 text-[14px]" role="status">{problem}</p>;
+  if (st.settings.layout === "voice-focus") return <div className="flex h-full flex-col">{banner}<div className="min-h-0 flex-1"><Focus st={st} onSettings={() => setSettings(true)} /></div>{sheet}</div>;
+  if (st.settings.layout === "voice-panel") return <div className="flex h-full flex-col">{banner}<div className="min-h-0 flex-1"><Panel st={st} onSettings={() => setSettings(true)} /></div>{sheet}</div>;
   const tabs: [Tab, string, ReactNode][] = [["ask", "Ask", <MessageCircle size={17} />], ["board", "Board", <LayoutDashboard size={17} />], ["inbox", unread ? `Inbox (${unread} new)` : "Inbox", <Bell size={17} />]];
   return (
     <div className="flex h-full flex-col">
@@ -112,142 +118,17 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
 
 // ---------------------------------------------------------------- ask
 
-type Line = { id: string; who: "me" | "faith"; text: string; images?: string[]; photos?: PhotoRef[]; checking?: string[]; confirm?: { id: string; summary: string; answer?: string }; note?: string; error?: boolean; busy?: boolean };
-let seq = 0;
-const lineId = () => `l${++seq}`;
-
-/** FAITH writes a little Markdown: **bold**, lists, paragraphs. Shown as text, never as HTML. */
-function Rich({ text }: { text: string }) {
-  const bold = (s: string) => s.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (/^\*\*[^*]+\*\*$/.test(p) ? <strong key={i}>{p.slice(2, -2)}</strong> : p));
-  const blocks: ReactNode[] = [];
-  let list: string[] = [];
-  const flush = () => { if (list.length) blocks.push(<ul key={blocks.length} className="ml-5 list-disc">{list.map((l, i) => <li key={i}>{bold(l)}</li>)}</ul>); list = []; };
-  for (const line of text.split("\n")) {
-    const m = /^\s*(?:[-*•]|\d+\.)\s+(.*)$/.exec(line);
-    if (m) { list.push(m[1]); continue; }
-    flush();
-    if (line.trim()) blocks.push(<p key={blocks.length}>{bold(line)}</p>);
-  }
-  flush();
-  return <div className="flex flex-col gap-2">{blocks}</div>;
-}
-
-const friendly = (name: string) => {
-  if (name.includes("day") || name.includes("calendar")) return "checking the calendar";
-  if (name.includes("shopping")) return "checking the shopping list";
-  if (name.includes("meal") || name.includes("recipe")) return "checking meals";
-  if (name.startsWith("Hass") || name.startsWith("home_") || name.includes("camera")) return "checking the house";
-  if (/notes|wiki|memory|context/.test(name)) return "checking your notes";
-  if (name.startsWith("coinpile")) return "checking money";
-  if (name.startsWith("photos_")) return "looking through photos";
-  return "checking";
-};
-
-/** A photo as FAITH wants it: upright, at most 1600 px on its long side, JPEG. */
-async function shrink(file: Blob): Promise<string> {
-  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement("canvas");
-  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.85);
-}
-
-/** Photos an answer showed (Immich). A click opens the photo in Immich, in the browser. */
-function Photos({ photos }: { photos: PhotoRef[] }) {
-  const [src, setSrc] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let live = true;
-    for (const p of photos) api.photo(p.source, p.id).then((u) => live && setSrc((m) => ({ ...m, [p.id]: u }))).catch(() => {});
-    return () => { live = false; };
-  }, [photos.map((p) => p.id).join()]);
-  const label = (p: PhotoRef) => [p.kind === "video" ? "Video" : "Photo", p.taken && `from ${p.taken.slice(0, 10)}`, p.place && `in ${p.place}`, p.people?.length && `with ${p.people.join(", ")}`].filter(Boolean).join(" ");
-  return (
-    <ul className="mt-3 grid w-72 max-w-full grid-cols-3 gap-2" aria-label={`${photos.length} photo${photos.length > 1 ? "s" : ""}`}>
-      {photos.map((p) => (
-        <li key={p.id}>
-          <button type="button" className="relative block aspect-square w-full overflow-hidden rounded-input bg-surface-2" title={label(p)}
-            aria-label={`${label(p)}${p.link ? ". Opens in Immich." : ""}`} onClick={() => p.link && api.openLink(p.link)}>
-            {src[p.id] && <img src={src[p.id]} alt="" className="h-full w-full object-cover" />}
-            {p.kind === "video" && <span className="absolute bottom-1 left-1 rounded-full bg-black/60 px-2 text-[11px] text-white">Video</span>}
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function Ask({ st }: { st: State }) {
-  const [lines, setLines] = useState<Line[]>([]);
+  const t = useTalk(st.settings.readAloud);
+  const { lines, busy, status, setStatus, rec, ask, answer, talk, speak } = t;
   const [text, setText] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
-  const [rec, setRec] = useState<MediaRecorder | null>(null);
   const [drag, setDrag] = useState(false);
-  const box = useRef<HTMLTextAreaElement>(null), end = useRef<HTMLDivElement>(null), audio = useRef<HTMLAudioElement | null>(null);
-  const current = useRef<{ ask: string; line: string; answer: string } | null>(null);
-  const readAloud = useRef(st.settings.readAloud);
-  readAloud.current = st.settings.readAloud;
-  const update = (id: string, f: (l: Line) => Line) => setLines((ls) => ls.map((l) => (l.id === id ? f(l) : l)));
+  const box = useRef<HTMLTextAreaElement>(null), end = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    api.latest().then((ms) => setLines(ms.filter((m) => m.role === "user" || m.role === "assistant").map((m) => ({ id: lineId(), who: m.role === "user" ? "me" : "faith", text: m.content })))).catch(() => {});
-    const offs = [api.onAsk(() => box.current?.focus()), api.onChat(onEvent)];
-    box.current?.focus();
-    return () => offs.forEach((f) => f());
-  }, []);
+  useEffect(() => { box.current?.focus(); return api.onAsk(() => box.current?.focus()); }, []);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [lines]);
-
-  const speak = async (t: string) => {
-    try {
-      const mp3 = await api.speak(t);
-      audio.current?.pause();
-      const a = new Audio(URL.createObjectURL(new Blob([mp3], { type: "audio/mpeg" })));
-      audio.current = a; await a.play();
-    } catch (e) { setStatus(`Couldn't read it aloud: ${msg(e)}`); }
-  };
-
-  function onEvent(id: string, e: ChatEvent) {
-    const cur = current.current;
-    if (!cur || cur.ask !== id) return;
-    const L = cur.line;
-    if (e.type === "text") { cur.answer += e.delta; update(L, (l) => ({ ...l, text: cur.answer })); }
-    else if (e.type === "tool") { const w = friendly(e.name); setStatus(`FAITH is ${w}…`); update(L, (l) => ({ ...l, checking: [...new Set([...(l.checking || []), w])] })); }
-    else if (e.type === "photos") update(L, (l) => ({ ...l, photos: e.items }));
-    else if (e.type === "confirm") setLines((ls) => [...ls, { id: lineId(), who: "faith", text: "", confirm: { id: e.id, summary: e.summary } }]);
-    else if (e.type === "approval") setLines((ls) => [...ls, { id: lineId(), who: "faith", text: "", note: `Sent to a grown-up to approve: ${e.summary}` }]);
-    else if (e.type === "done") {
-      cur.answer = e.text || cur.answer;
-      update(L, (l) => ({ ...l, text: cur.answer, busy: false }));
-      setStatus("FAITH answered."); setBusy(null); current.current = null;
-      if (readAloud.current && cur.answer.trim()) void speak(cur.answer);
-    } else if (e.type === "error") {
-      update(L, (l) => ({ ...l, text: e.message, error: true, busy: false }));
-      setStatus(e.message); setBusy(null); current.current = null;
-    }
-  }
-
-  const ask = async (q: string, imgs = photos) => {
-    const t = q.trim() || (imgs.length ? "What's in this photo?" : "");
-    if (!t || busy) return;
-    const L = lineId();
-    setLines((ls) => [...ls, { id: lineId(), who: "me", text: t, images: imgs }, { id: L, who: "faith", text: "", busy: true }]);
-    setText(""); setPhotos([]); setStatus("FAITH is thinking…");
-    try {
-      const id = await api.ask({ text: t, images: imgs });
-      current.current = { ask: id, line: L, answer: "" }; setBusy(id);
-    } catch (e) { update(L, (l) => ({ ...l, text: msg(e), error: true, busy: false })); setStatus(msg(e)); }
-  };
-
-  const answer = async (line: Line, approve: boolean) => {
-    if (!line.confirm) return;
-    try {
-      const r = await api.confirm(line.confirm.id, approve);
-      update(line.id, (l) => ({ ...l, confirm: { ...l.confirm!, answer: r.text || (approve ? "Done." : "Cancelled.") } }));
-      setStatus(r.text || "");
-    } catch (e) { update(line.id, (l) => ({ ...l, confirm: { ...l.confirm!, answer: msg(e) } })); setStatus(msg(e)); }
-  };
+  const send = (q: string) => { if (busy) return; void ask(q, photos); setText(""); setPhotos([]); };
 
   const addFiles = async (files: Iterable<File>) => {
     const imgs = [...files].filter((f) => f.type.startsWith("image/"));
@@ -256,27 +137,6 @@ function Ask({ st }: { st: State }) {
       const urls = await Promise.all(imgs.slice(0, 4).map(shrink));
       setPhotos((p) => [...p, ...urls].slice(0, 4)); setStatus(`${urls.length} photo${urls.length > 1 ? "s" : ""} ready to send.`);
     } catch { setStatus("That photo couldn't be read. Try a JPEG or PNG."); }
-  };
-
-  const talk = async () => {
-    if (rec) { rec.stop(); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const r = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" }), parts: Blob[] = [];
-      r.ondataavailable = (e) => parts.push(e.data);
-      r.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop()); setRec(null);
-        const blob = new Blob(parts, { type: "audio/webm" });
-        if (blob.size < 2000) { setStatus("That was too short. Click the microphone, talk, then click it again."); return; }
-        setStatus("Listening back…");
-        try {
-          const heard = await api.transcribe(await blob.arrayBuffer(), "audio/webm");
-          if (!heard) { setStatus("I didn't catch that."); return; }
-          void ask(heard);
-        } catch (e) { setStatus(msg(e)); }
-      };
-      r.start(); setRec(r); setStatus("Listening. Click the microphone again to send.");
-    } catch { setStatus("FAITH can't use the microphone. Allow it in your computer's privacy settings."); }
   };
 
   return (
@@ -313,7 +173,7 @@ function Ask({ st }: { st: State }) {
         <div ref={end} />
       </div>
       <p className="sr-only" role="status" aria-live="polite">{status}</p>
-      <form className="border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); void ask(text); }}>
+      <form className="border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); send(text); }}>
         {photos.length > 0 && (
           <div className="mb-2 flex gap-2">
             {photos.map((u, i) => (
@@ -332,7 +192,7 @@ function Ask({ st }: { st: State }) {
           <textarea ref={box} className="field max-h-40 min-h-[44px] flex-1 resize-none py-2.5" rows={1} value={text} aria-label="Your question"
             placeholder={rec ? "Listening…" : "Ask FAITH"} onChange={(e) => setText(e.target.value)}
             onPaste={(e) => { const f = [...e.clipboardData.files]; if (f.length) { e.preventDefault(); void addFiles(f); } }}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(text); } }} />
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(text); } }} />
           <button type="button" className={cn("icon-btn", rec && "border-primary bg-primary text-primary-foreground hover:bg-primary-hover")} onClick={talk}
             aria-label={rec ? "Stop and send what you said" : "Talk to FAITH"} aria-pressed={!!rec}>{rec ? <Square size={16} /> : <Mic size={18} />}</button>
           {busy
@@ -341,7 +201,7 @@ function Ask({ st }: { st: State }) {
         </div>
         <div className="mt-1 flex items-center justify-between text-[12px] text-muted">
           <span aria-hidden="true">{status}</span>
-          <button type="button" className="btn-ghost min-h-[36px] px-2 text-[12px]" onClick={async () => { await api.newTopic(); setLines([]); setStatus("A fresh start."); box.current?.focus(); }}><RotateCcw size={13} />New topic</button>
+          <button type="button" className="btn-ghost min-h-[36px] px-2 text-[12px]" onClick={async () => { await t.newTopic(); box.current?.focus(); }}><RotateCcw size={13} />New topic</button>
         </div>
       </form>
     </section>
@@ -548,9 +408,20 @@ function Inbox({ items, onApprovals }: { items: InboxItem[]; onAsk: () => void; 
 
 // ---------------------------------------------------------------- settings
 
+const LAYOUT_CHOICES: [State["settings"]["layout"], string, string][] = [
+  ["voice-focus", "Voice focus", "Just talk. FAITH reads every answer aloud and can use everything you can; the screen shows only what you said, the answer and any Yes."],
+  ["voice-panel", "Voice panel", "Talk, with a big clock and a few panels: next up, dinner, shopping, the house. Tap a panel to ask about it."],
+  ["voice-dashboard", "Voice dashboard", "Everything: Ask, the Board (projects, log, brief, weather, news) and the Inbox."],
+];
+
 function SettingsSheet({ st, setSt, onClose }: { st: State; setSt: (s: State) => void; onClose: () => void }) {
   const [err, setErr] = useState(""), [shortcut, setShortcut] = useState(st.settings.shortcut);
-  const set = async (p: Partial<State["settings"]>) => { try { setSt(await api.setSettings(p)); setErr(""); } catch (e) { setErr(msg(e)); } };
+  // Shown at once; put back if the computer refuses (a shortcut another app uses).
+  const set = async (p: Partial<State["settings"]>) => {
+    const was = st;
+    setSt({ ...st, settings: { ...st.settings, ...p } });
+    try { setSt(await api.setSettings(p)); setErr(""); } catch (e) { setSt(was); setErr(msg(e)); }
+  };
   const Toggle = ({ k, label, hint }: { k: "readAloud" | "notifications" | "startAtLogin"; label: string; hint: string }) => (
     <label className="flex min-h-[44px] cursor-pointer items-start gap-3">
       <input type="checkbox" className="mt-1 h-5 w-5 accent-[rgb(var(--primary))]" checked={st.settings[k]} onChange={(e) => set({ [k]: e.target.checked })} />
@@ -560,7 +431,16 @@ function SettingsSheet({ st, setSt, onClose }: { st: State; setSt: (s: State) =>
   return (
     <Sheet title="Settings" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <Toggle k="readAloud" label="Read answers aloud" hint="In FAITH's own voice (from your server)." />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 font-medium">Layout</legend>
+          {LAYOUT_CHOICES.map(([id, name, what]) => (
+            <label key={id} className={cn("flex min-h-[44px] cursor-pointer items-start gap-3 rounded-input border p-3", st.settings.layout === id ? "border-primary bg-primary-soft" : "border-border")}>
+              <input type="radio" name="layout" className="mt-1 h-5 w-5 accent-[rgb(var(--primary))]" checked={st.settings.layout === id} onChange={() => set({ layout: id })} />
+              <span><span className="font-medium">{name}</span>{st.settings.layout === id && <span className="text-[13px] text-muted"> (on)</span>}<br /><span className="text-[13px] text-muted">{what}</span></span>
+            </label>
+          ))}
+        </fieldset>
+        <Toggle k="readAloud" label="Read answers aloud" hint="In FAITH's own voice (from your server). Voice focus and Voice panel always read them aloud." />
         <Toggle k="notifications" label="Notifications" hint="A bigger job's answer, the doorbell, approvals. FAITH keeps running in the tray when you close the window." />
         <Toggle k="startAtLogin" label="Start when I sign in to this computer" hint="In the tray, ready for notifications." />
         <form className="label" onSubmit={(e) => { e.preventDefault(); void set({ shortcut: shortcut.trim() }); }}>

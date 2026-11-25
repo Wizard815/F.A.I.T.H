@@ -14,6 +14,25 @@ FAITH on your phone: ask, talk, show it a photo, say Yes to a held change, and g
 - **New topic** starts a fresh conversation.
 - **Board**, the second tab: the info board ([dashboard.md](dashboard.md)). Your morning brief (*Write it now*), the weather, FAITH's day cards, your projects (tap the status to move one), your log (*Log it*), news, and for admins uptime and FAITH's server. Bringing projects over from Pondering Orb is on the desktop app.
 
+## Three layouts
+
+Pick one in Settings (the ⋮ menu → Voice focus / Voice panel / Voice dashboard). Each person picks their own, on each device.
+
+| Layout | For | What's on screen |
+|---|---|---|
+| **Voice focus** | Just talking: a desk, a bedside, when you don't need a screen | FAITH (tap it, to talk), what it heard, its answer, and a Yes for a held change. Every answer is read aloud. |
+| **Voice panel** | A kitchen or hallway screen, like a smart speaker with a display | A big clock, the weather and a few panels: your brief, next up, dinner, shopping, the house. Tap a panel and FAITH tells you about it. A big Talk button. |
+| **Voice dashboard** | Everything | Ask, the Board (projects, log, brief, weather, news) and the Inbox. |
+
+- In both voice layouts FAITH answers in a few plain sentences, made for reading aloud, and can still use everything you can (your calendar, the house, your notes, the board).
+- They start on a clean screen. The conversation carries on behind it, so "and tomorrow?" still works.
+- A change that needs a Yes (a lock, the garage) always shows Yes and No on the screen, in every layout.
+- Voice panel goes back to its panels after half a minute of quiet.
+
+**What goes wrong:**
+- Nothing is read aloud: FAITH's voice (Argos's text-to-speech) isn't set up, or the computer's sound is off. The answer still shows.
+- A panel is missing: that part isn't set up on FAITH (no meal plan, no shopping list, no weather entity), so there's nothing to show.
+
 ## Build it
 
 Needs JDK 17+ and the Android SDK (Android Studio, or the command-line tools with `platforms;android-35` and `build-tools;35.0.0`).
