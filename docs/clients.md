@@ -56,7 +56,7 @@ Speech-to-text and the voice are Argos's, on your own server.
 
 ## 4. Yes and No
 
-- A `confirm` event, or an inbox item of kind `confirm`: show `summary` word for word, with **Yes** and **No**.
+- A `confirm` event: show `summary` word for word, with **Yes** and **No**.
 - `POST /api/chat/confirm/<id>` `{ "approve": true }` → `{ "ok": true, "text": "Done: unlock Front door." }`.
 - A held change expires after 10 minutes ("That request has expired. Ask again.").
 - **Never answer Yes for the person.** No auto-confirm, no "always yes". On D.A.S.H, a tap plus the side button. Locks, alarms and covers say Yes only on a screen the person is holding (FAITH also refuses them from anywhere else).
