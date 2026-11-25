@@ -4,10 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontStyle
@@ -86,22 +84,21 @@ fun stateWord(chat: ChatModel) = when {
     else -> "Tap to talk"
 }
 
-/** FAITH's round talk button: a gold ring that breathes while listening, thinking or speaking. */
+fun emblemState(chat: ChatModel) = when {
+    chat.listening.value -> EmblemState.LISTENING
+    chat.busy.value -> EmblemState.THINKING
+    chat.speaking.value -> EmblemState.SPEAKING
+    else -> EmblemState.IDLE
+}
+
+/** FAITH's emblem as the talk button: tap to talk, tap again to send. It listens, thinks and
+ *  speaks as FAITH does; while listening its core follows your voice. */
 @Composable
-fun TalkOrb(chat: ChatModel, size: Int, talk: () -> Unit) {
-    val active = chat.listening.value || chat.busy.value || chat.speaking.value
-    val pulse = rememberInfiniteTransition(label = "orb").animateFloat(0.92f, 1.06f, infiniteRepeatable(tween(if (chat.busy.value) 500 else 900), RepeatMode.Reverse), label = "pulse")
-    val gold = MaterialTheme.colorScheme.primary
+fun TalkEmblem(chat: ChatModel, size: Int, talk: () -> Unit) {
     Box(Modifier.size(size.dp).clip(CircleShape).clickable(onClickLabel = if (chat.listening.value) "Send" else "Talk") { talk() }
-        .semantics { contentDescription = if (chat.listening.value) "Stop and send what you said" else "Talk to FAITH"; stateDescription = stateWord(chat) },
+        .semantics(mergeDescendants = true) { contentDescription = if (chat.listening.value) "Stop and send what you said" else "Talk to FAITH"; stateDescription = stateWord(chat) },
         contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val s = if (active) pulse.value else 1f
-            drawCircle(gold.copy(alpha = 0.12f), radius = size.dp.toPx() / 2 * s)
-            drawCircle(gold, radius = size.dp.toPx() / 2 * 0.82f * s, style = Stroke(width = 4.dp.toPx()))
-            drawCircle(gold.copy(alpha = if (chat.listening.value) 0.9f else 0.55f), radius = size.dp.toPx() / 2 * 0.36f * s)
-        }
-        Text("FAITH", fontFamily = Serif, fontWeight = FontWeight.SemiBold, fontSize = (size / 9).sp, color = MaterialTheme.colorScheme.onBackground)
+        Emblem(emblemState(chat), size.dp, isSystemInDarkTheme(), level = { chat.voiceLevel() })
     }
 }
 
@@ -132,16 +129,22 @@ fun LayoutMenuItems(store: Store, close: () -> Unit, changed: () -> Unit) {
 
 @Composable
 private fun TopBar(chat: ChatModel, title: String, changed: () -> Unit, signOut: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Box {
-            TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Settings" }) { Text("⋮", fontSize = 22.sp) }
-            DropdownMenu(menu, { menu = false }) {
-                LayoutMenuItems(chat.store, { menu = false }, changed)
-                DropdownMenuItem(text = { Text("New topic") }, onClick = { chat.newTopic(); menu = false })
-                DropdownMenuItem(text = { Text("Sign out of this phone") }, onClick = { menu = false; signOut() })
-            }
+        MenuButton(chat, changed, signOut)
+    }
+}
+
+/** ⋮: the layout, a new topic, signing out. */
+@Composable
+private fun MenuButton(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Settings" }) { Text("⋮", fontSize = 22.sp) }
+        DropdownMenu(menu, { menu = false }) {
+            LayoutMenuItems(chat.store, { menu = false }, changed)
+            DropdownMenuItem(text = { Text("New topic") }, onClick = { chat.newTopic(); menu = false })
+            DropdownMenuItem(text = { Text("Sign out of this phone") }, onClick = { menu = false; signOut() })
         }
     }
 }
@@ -157,7 +160,7 @@ fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit) {
     DisposableEffect(Unit) { chat.voice = true; onDispose { chat.voice = false } }
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         TopBar(chat, "FAITH · ${chat.store.personName}", changed, signOut)
-        TalkOrb(chat, 240, talk)
+        TalkEmblem(chat, 260, talk)
         Text(stateWord(chat), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         Caption(chat, big = true)
         Text(chat.status.value, fontSize = 1.sp, color = Color.Transparent, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -197,7 +200,7 @@ fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut
                 Text("$greet, ${chat.store.personName}.", fontSize = 17.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
-                TopBar(chat, "", changed, signOut)
+                MenuButton(chat, changed, signOut)
                 g.weather?.let { w ->
                     Column(Modifier.clickable(onClickLabel = "Ask about the weather") { ask("What's the weather today?") }, horizontalAlignment = Alignment.End) {
                         Text(w, fontFamily = Serif, fontWeight = FontWeight.SemiBold, fontSize = 28.sp)
@@ -225,8 +228,13 @@ fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut
         }
         Text(chat.status.value, fontSize = 1.sp, color = Color.Transparent, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = talk, modifier = Modifier.heightIn(min = 64.dp).semantics { contentDescription = if (chat.listening.value) "Stop and send what you said" else "Talk to FAITH" },
-                shape = RoundedCornerShape(32.dp)) { Text(if (chat.listening.value) "■  Send" else if (chat.busy.value) "Thinking…" else if (chat.speaking.value) "Speaking…" else "🎙  Talk", fontSize = 18.sp) }
+            Button(onClick = talk, modifier = Modifier.heightIn(min = 64.dp).semantics(mergeDescendants = true) { contentDescription = if (chat.listening.value) "Stop and send what you said" else "Talk to FAITH" },
+                shape = RoundedCornerShape(32.dp), contentPadding = PaddingValues(start = 10.dp, end = 22.dp)) {
+                // On the gold button the other tone reads (bright gold on bronze, brown on gold).
+                Emblem(emblemState(chat), 48.dp, !isSystemInDarkTheme(), level = { chat.voiceLevel() })
+                Spacer(Modifier.width(8.dp))
+                Text(if (chat.listening.value) "■  Send" else if (chat.busy.value) "Thinking…" else if (chat.speaking.value) "Speaking…" else "🎙  Talk", fontSize = 18.sp)
+            }
         }
     }
 }

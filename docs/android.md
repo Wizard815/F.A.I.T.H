@@ -28,6 +28,7 @@ Pick one in Settings (the ⋮ menu → Voice focus / Voice panel / Voice dashboa
 - They start on a clean screen. The conversation carries on behind it, so "and tomorrow?" still works.
 - A change that needs a Yes (a lock, the garage) always shows Yes and No on the screen, in every layout.
 - Voice panel goes back to its panels after half a minute of quiet.
+- Both show FAITH's emblem, as on the web screens: the d20 with its hive of bees. It turns slowly when idle, draws in and glows with your voice while it listens, spins up while it thinks, and pulses while it speaks. With Android's animations off (Accessibility → Remove animations) it stays still.
 
 **What goes wrong:**
 - Nothing is read aloud: FAITH's voice (Argos's text-to-speech) isn't set up, or the computer's sound is off. The answer still shows.
@@ -46,6 +47,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the phone and open it (allow installing from that app once).
 
 - For a release build, make your own signing key (`keytool -genkey -v -keystore faith.jks -alias faith -keyalg RSA -keysize 4096 -validity 10000`) and sign it with `apksigner`. Keep the key out of git.
+- **See the screens without a phone:** `./gradlew recordPaparazziDebug` draws the emblem, Voice focus (light and dark) and Voice panel into `app/src/test/snapshots/images/`.
 - **Check it against your FAITH** without a phone: `FAITH_URL=http://<faith>:8097 FAITH_PERSON=sam FAITH_PASSWORD=… ./gradlew testDebugUnitTest --tests '*LiveContractTest*'`. It signs in, asks, says No to a held lock, and signs out. Add `FAITH_HA_TOKEN` (the HA integration's FAITH token) to test the inbox, `FAITH_AUDIO=talk.m4a` to test speech-to-text, and `FAITH_TTS=1` to test reading aloud.
 
 ## On the phone

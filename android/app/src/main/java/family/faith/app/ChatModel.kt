@@ -129,6 +129,8 @@ class ChatModel(app: Application) : AndroidViewModel(app) {
             speaking.value = true; speaker.play(mp3) { ui { speaking.value = false } }
         } catch (_: Exception) { speaking.value = false /* reading aloud is a nicety */ }
     }
+    /** The microphone's level while listening (the emblem's core follows it); null otherwise. */
+    fun voiceLevel(): Float? = if (listening.value) recorder.level() else null
     fun quiet() { speaker.stop(); speaking.value = false }
 
     // ---- the inbox while the app is open: a long poll (the worker covers the background)

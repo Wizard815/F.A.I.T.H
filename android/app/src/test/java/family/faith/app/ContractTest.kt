@@ -3,6 +3,7 @@ package family.faith.app
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The parts of docs/clients.md the app reads: FAITH's chat stream and the inbox. */
@@ -109,5 +110,44 @@ class GlanceTest {
     @Test fun theLayouts() {
         assertEquals(listOf("voice-focus", "voice-panel", "voice-dashboard"), Layouts.ALL)
         assertEquals("Voice panel: talk, with a few panels", Layouts.NAMES["voice-panel"])
+    }
+}
+
+class EmblemTest {
+    @Test fun theD20AndTheHive() {
+        assertEquals(12, EmblemEngine.ICO.size)
+        assertEquals(30, EmblemEngine.EDGES.size)
+        assertEquals(20, EmblemEngine.FACES.size)
+        assertEquals(7, EmblemEngine.BEE.size)
+        assertEquals(20, EmblemEngine.LINKS.size)
+    }
+
+    @Test fun itEasesIntoEachMood() {
+        val e = EmblemEngine()
+        e.state = EmblemState.THINKING
+        repeat(200) { e.step(0.016) }
+        assertEquals(0.55, e.cur.spin, 0.01)
+        assertEquals(3.2, e.cur.rings, 0.05)
+        e.state = EmblemState.IDLE; e.settle()
+        assertEquals(0.16, e.cur.spin, 1e-9)
+        val t = e.t; e.step(5.0)
+        assertEquals(t + 0.05, e.t, 1e-9)   // a long pause moves it on by one frame at most
+    }
+
+    @Test fun theVoiceLevel() {
+        val e = EmblemEngine()
+        assertEquals(0.0, e.level(0.8f), 0.0)   // idle: no voice
+        e.state = EmblemState.LISTENING
+        assertEquals(0.8, e.level(0.8f), 1e-6)
+        assertEquals(1.0, e.level(3f), 0.0)
+        assertTrue(e.level(null) in 0.1..0.5)      // no meter: a gentle pulse
+    }
+
+    @Test fun listeningDrawsTheHiveIn() {
+        val e = EmblemEngine()
+        val far = e.beeAt(0, 1.0).map { kotlin.math.abs(it) }.sum()
+        e.state = EmblemState.LISTENING; e.settle()
+        val near = e.beeAt(0, 1.0).map { kotlin.math.abs(it) }.sum()
+        assertEquals(far * 0.7, near, 1e-9)
     }
 }

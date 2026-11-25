@@ -31,6 +31,9 @@ class Recorder(private val context: Context) {
         rec = r
     }
 
+    /** How loud it is right now, 0..1 (the loudest since the last call), or null when not recording. */
+    fun level(): Float? = try { rec?.maxAmplitude?.let { (it / 12_000f).coerceIn(0f, 1f) } } catch (_: Exception) { null }
+
     /** The recording, or null if it was too short to hold anything. */
     fun stop(): ByteArray? {
         val r = rec ?: return null
