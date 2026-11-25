@@ -154,6 +154,7 @@ people:
 - Orb is Wizard's personal dashboard and stays his. FAITH reaches it only in Wizard's view.
 - Add `faith:<random>` to Orb's `ORB_API_TOKENS` and put the same `<random>` in `ORB_TOKEN_WIZARD`. Orb records `faith` as the writer.
 - Connector URL: `http://<host>:8095/mcp`.
+- **Moving to FAITH's board:** the same token lets FAITH copy Wizard's projects and log into his FAITH board ([dashboard.md](dashboard.md#moving-over-from-orb)).
 
 ## Hermes and Hermes Studio
 

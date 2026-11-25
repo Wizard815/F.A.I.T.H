@@ -60,7 +60,7 @@ export async function fakeMcp(tools: FakeTool[]) {
 }
 
 /** Enough of Home Assistant's REST API for FAITH. */
-export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[]; areas?: Record<string, string>; cameras?: Record<string, Buffer> } = {}) {
+export async function fakeHa(states: Record<string, { state: string; attributes?: any }>, opts: { token?: string; shopping?: string[]; meals?: { cal: string; date: string; summary: string }[]; areas?: Record<string, string>; cameras?: Record<string, Buffer>; forecast?: any[] } = {}) {
   const services: { domain: string; service: string; data: any; token: string }[] = [];
   const recognized: string[] = [];
   const shopping = [...(opts.shopping || [])];
@@ -126,6 +126,7 @@ export async function fakeHa(states: Record<string, { state: string; attributes?
     m = u.pathname.match(/^\/api\/services\/([a-z_]+)\/([a-z_]+)$/);
     if (m) {
       services.push({ domain: m[1], service: m[2], data: b, token });
+      if (m[1] === "weather" && m[2] === "get_forecasts") return json({ changed_states: [], service_response: { [b.entity_id]: { forecast: opts.forecast || [] } } });
       if (m[1] === "todo" && m[2] === "get_items") return json({ changed_states: [], service_response: { [b.entity_id]: { items: shopping.map((x) => ({ summary: x, status: "needs_action" })) } } });
       if (m[1] === "todo" && m[2] === "add_item") { shopping.push(b.item); return json([]); }
       if (m[1] === "todo" && m[2] === "update_item" && b.status === "completed") { const i = shopping.indexOf(b.item); if (i >= 0) shopping.splice(i, 1); return json([]); }

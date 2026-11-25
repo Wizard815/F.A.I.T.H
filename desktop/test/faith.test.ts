@@ -116,6 +116,23 @@ test("voice: speech to text, and the answer read aloud", async () => {
   assert.equal(Buffer.from(await f.speak("Tacos tonight.")).toString(), "mp3:Tacos tonight.");
 });
 
+test("the board: projects, the log and the brief, Sam's own", async () => {
+  const f = new Faith(url);
+  await f.signIn("sam", "correct horse battery", "laptop");
+  await f.addProject("Garden shed", "active", "Order the timber");
+  await f.addLog("Cleared the old shed", "Garden shed");
+  await assert.rejects(f.addLog("Fixed", "No such project"), (e: any) => e instanceof FaithError && e.status === 400 && /No project called/.test(e.message));
+  await f.updateProject("Garden shed", { status: "blocked" });
+  script = () => ({ content: "Good morning, Sam. **Garden shed** is blocked." });
+  assert.match((await f.writeBrief()).text, /Good morning/);
+  const b = await f.board();
+  assert.equal(b.person?.id, "sam");
+  assert.deepEqual(b.projects?.map((p) => [p.name, p.status, p.last]), [["Garden shed", "blocked", "Cleared the old shed"]]);
+  assert.match(b.brief!.text, /blocked/);
+  assert.equal(b.weather, null, "no weather entity set up: no weather part");
+  assert.ok(Array.isArray(b.cards));
+});
+
 test("the tray's inbox: what's there at first isn't news; new items are, and a removed key signs out", async () => {
   const f = new Faith(url);
   const d = await f.signIn("sam", "correct horse battery", "laptop");

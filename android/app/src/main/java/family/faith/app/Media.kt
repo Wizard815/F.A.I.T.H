@@ -44,12 +44,16 @@ class Recorder(private val context: Context) {
 /** Plays FAITH's spoken answer (MP3 bytes from /api/voice/speak). */
 class Speaker(private val context: Context) {
     private var player: MediaPlayer? = null
-    fun play(mp3: ByteArray) {
+    /** `done` runs when it finishes or is stopped. */
+    fun play(mp3: ByteArray, done: () -> Unit = {}) {
         stop()
         val f = File(context.cacheDir, "faith-say.mp3").apply { writeBytes(mp3) }
-        player = MediaPlayer().apply { setDataSource(f.absolutePath); setOnCompletionListener { it.release(); player = null }; prepare(); start() }
+        onDone = done
+        player = MediaPlayer().apply { setDataSource(f.absolutePath); setOnCompletionListener { it.release(); player = null; finished() }; prepare(); start() }
     }
-    fun stop() { player?.release(); player = null }
+    private var onDone: () -> Unit = {}
+    private fun finished() { val d = onDone; onDone = {}; d() }
+    fun stop() { player?.release(); player = null; finished() }
 }
 
 object Photos {

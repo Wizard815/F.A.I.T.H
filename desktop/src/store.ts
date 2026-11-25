@@ -12,8 +12,13 @@ export type Settings = {
   notifications: boolean;
   startAtLogin: boolean;
   shortcut: string;
+  /** How the app looks: voice-focus (talk, no screen to speak of), voice-panel (a few big
+   *  panels, like a kitchen speaker's screen) or voice-dashboard (everything: Ask, Board, Inbox). */
+  layout: Layout;
 };
-export const DEFAULTS: Settings = { readAloud: false, notifications: true, startAtLogin: false, shortcut: "CommandOrControl+Alt+F" };
+export type Layout = "voice-focus" | "voice-panel" | "voice-dashboard";
+export const LAYOUTS: Layout[] = ["voice-focus", "voice-panel", "voice-dashboard"];
+export const DEFAULTS: Settings = { readAloud: false, notifications: true, startAtLogin: false, shortcut: "CommandOrControl+Alt+F", layout: "voice-dashboard" };
 
 /** The OS keychain (Electron's safeStorage), or a stand-in in tests.
  *  `plainOk`: with no keychain (Linux without a keyring), keep the key in a file only this

@@ -52,6 +52,7 @@ import kotlinx.coroutines.withContext
  *  starts listening; shared a photo, it attaches it (docs/android.md, docs/clients.md). */
 class MainActivity : ComponentActivity() {
     private val chat: ChatModel by viewModels()
+    private val board: BoardModel by viewModels()
     private var pendingIntent by mutableStateOf<Intent?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +60,7 @@ class MainActivity : ComponentActivity() {
         pendingIntent = intent
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        setContent { FaithTheme { Root(chat, pendingIntent) { pendingIntent = null } } }
+        setContent { FaithTheme { Root(chat, board, pendingIntent) { pendingIntent = null } } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); pendingIntent = intent }
     override fun onStart() { super.onStart(); chat.startInbox() }
@@ -77,14 +78,40 @@ fun FaithTheme(content: @Composable () -> Unit) {
         onBackground = Color(0xFF2B1E15), onSurface = Color(0xFF2B1E15), surfaceVariant = Color(0xFFEFE5D5), onSurfaceVariant = Color(0xFF6E5A47), error = Color(0xFFB84838))
     MaterialTheme(colorScheme = scheme, content = content)
 }
-private val Serif = FontFamily.Serif
+val Serif = FontFamily.Serif
 
 @Composable
-fun Root(chat: ChatModel, intent: Intent?, consumed: () -> Unit) {
+fun Root(chat: ChatModel, board: BoardModel, intent: Intent?, consumed: () -> Unit) {
     var signedIn by remember { mutableStateOf(chat.store.signedIn) }
+    var tab by remember { mutableStateOf(0) }
+    var layout by remember { mutableStateOf(chat.store.layout) }
+    val changed = { layout = chat.store.layout }
+    val scope = rememberCoroutineScope()
+    // Opened as the assistant or shared a photo: that's for Ask.
+    LaunchedEffect(intent) { if (intent?.action == Intent.ACTION_ASSIST || intent?.action == Intent.ACTION_SEND || intent?.action == "android.intent.action.VOICE_COMMAND") tab = 0 }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (!signedIn) SignIn(chat.store) { signedIn = true; chat.startInbox(); chat.loadHistory() }
-        else Chat(chat, intent, consumed) { chat.store.signOut(); chat.lines.clear(); signedIn = false }
+        else if (layout != Layouts.DASHBOARD) Box(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+            // The voice layouts (docs/android.md): Voice focus and Voice panel.
+            val out = {
+                val api = chat.store.api(); val name = chat.store.clientName
+                scope.launch { withContext(Dispatchers.IO) { try { api.removeClient(name) } catch (_: Exception) { } }; chat.store.signOut(); chat.lines.clear(); board.board.value = null; signedIn = false }
+                Unit
+            }
+            if (layout == Layouts.FOCUS) FocusScreen(chat, changed, out) else PanelScreen(chat, board, changed, out)
+        }
+        else Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+            // Two views: Ask (the helper) and Board (the info board, docs/dashboard.md).
+            TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
+                listOf("Ask", "Board").forEachIndexed { i, label ->
+                    Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.heightIn(min = 48.dp), text = { Text(label, fontSize = 16.sp) })
+                }
+            }
+            Box(Modifier.weight(1f)) {
+                if (tab == 0) Chat(chat, intent, consumed, changed) { chat.store.signOut(); chat.lines.clear(); board.board.value = null; signedIn = false }
+                else BoardScreen(board)
+            }
+        }
     }
 }
 
@@ -125,7 +152,7 @@ fun SignIn(store: Store, done: () -> Unit) {
 
 // ---------------------------------------------------------------- the chat
 @Composable
-fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> Unit) {
+fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, changed: () -> Unit = {}, signOut: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var input by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
@@ -150,7 +177,7 @@ fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> 
         consumed()
     }
 
-    Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("FAITH", fontFamily = Serif, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
@@ -160,6 +187,7 @@ fun Chat(chat: ChatModel, intent: Intent?, consumed: () -> Unit, signOut: () -> 
             Box {
                 TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "More" }) { Text("⋮", fontSize = 22.sp) }
                 DropdownMenu(menu, { menu = false }) {
+                    LayoutMenuItems(chat.store, { menu = false }, changed)
                     DropdownMenuItem(text = { Text(if (chat.store.speakReplies) "Stop reading answers aloud" else "Read answers aloud") }, onClick = { chat.store.speakReplies = !chat.store.speakReplies; menu = false })
                     DropdownMenuItem(text = { Text("Sign out of this phone") }, onClick = {
                         menu = false

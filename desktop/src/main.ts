@@ -3,7 +3,9 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { cleanUrl, Faith, FaithError, SignedOut, type InboxItem } from "./faith.js";
 import type { State } from "./shared.js";
-import { NO_KEYCHAIN, Store } from "./store.js";
+import { LAYOUTS, NO_KEYCHAIN, Store, type Layout } from "./store.js";
+
+const LAYOUT_NAMES: Record<Layout, string> = { "voice-focus": "Voice focus: just talk", "voice-panel": "Voice panel: talk, with a few panels", "voice-dashboard": "Voice dashboard: everything" };
 import { InboxWatch } from "./watch.js";
 
 // FAITH_DESKTOP_DATA: a separate profile (tests, or a second person on one computer account).
@@ -23,11 +25,11 @@ const asks = new Map<string, AbortController>();
 const send = (ch: string, ...a: unknown[]) => { if (win && !win.isDestroyed()) win.webContents.send(`faith:${ch}`, ...a); };
 const state = (): State => ({
   signedIn: !!faith?.token, url: store.settings.url, person: store.settings.person,
-  settings: { readAloud: store.settings.readAloud, notifications: store.settings.notifications, startAtLogin: store.settings.startAtLogin, shortcut: store.settings.shortcut },
+  settings: { readAloud: store.settings.readAloud, notifications: store.settings.notifications, startAtLogin: store.settings.startAtLogin, shortcut: store.settings.shortcut, layout: store.settings.layout },
   keyring: store.keeping === "os" ? "os" : "file", platform: process.platform,
 });
 
-function show(tab?: "ask" | "today" | "inbox") {
+function show(tab?: "ask" | "board" | "inbox") {
   if (!win || win.isDestroyed()) createWindow();
   win!.show(); win!.focus();
   if (tab) send("show", tab);
@@ -35,7 +37,9 @@ function show(tab?: "ask" | "today" | "inbox") {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 480, height: 760, minWidth: 380, minHeight: 520, show: !TESTING || !!process.env.FAITH_DESKTOP_SHOW,
+    // FAITH_DESKTOP_SIZE=1024x600: open at that size (a wall tablet's screen; the layout videos).
+    ...(() => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(process.env.FAITH_DESKTOP_SIZE || ""); return m ? { width: Number(m[1]), height: Number(m[2]), useContentSize: true, x: 0, y: 0 } : { width: 480, height: 760 }; })(),
+    minWidth: 380, minHeight: 520, show: !TESTING || !!process.env.FAITH_DESKTOP_SHOW,
     title: "FAITH", icon: icon("icon.png"), backgroundColor: "#18110c", autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: true },
   });
@@ -53,8 +57,9 @@ function setTray() {
   tray?.setContextMenu(Menu.buildFromTemplate([
     { label: "Ask FAITH", accelerator: store.settings.shortcut, click: () => { show("ask"); send("askFocus"); } },
     { label: n ? `Inbox (${n} new)` : "Inbox", click: () => show("inbox") },
-    { label: "Today", click: () => show("today") },
+    { label: "Board", click: () => show("board") },
     { type: "separator" },
+    { label: "Layout", submenu: LAYOUTS.map((l) => ({ label: LAYOUT_NAMES[l], type: "radio" as const, checked: store.settings.layout === l, click: () => { setSettings({ layout: l }); send("layout", l); } })) },
     { label: "Notifications", type: "checkbox", checked: store.settings.notifications, click: (i) => setSettings({ notifications: i.checked }) },
     { label: "Start when I sign in to this computer", type: "checkbox", checked: store.settings.startAtLogin, click: (i) => setSettings({ startAtLogin: i.checked }) },
     { type: "separator" },
@@ -72,6 +77,7 @@ function setShortcut(next: string, prev?: string) {
 
 function setSettings(patch: Partial<State["settings"]>) {
   const prev = store.settings.shortcut;
+  if (patch.layout !== undefined && !LAYOUTS.includes(patch.layout)) throw new FaithError(`"${patch.layout}" isn't a layout. Pick voice-focus, voice-panel or voice-dashboard.`);
   store.set(patch);
   if (patch.startAtLogin !== undefined && !TESTING) app.setLoginItemSettings({ openAtLogin: patch.startAtLogin, args: ["--hidden"] });
   if (patch.shortcut !== undefined && patch.shortcut !== prev && !setShortcut(patch.shortcut, prev)) {
@@ -96,7 +102,7 @@ function gotItems(items: InboxItem[], fresh: boolean) {
     if (store.settings.notifications && Notification.isSupported()) {
       for (const it of items.slice(-3)) {
         const n = new Notification({ title: it.title || "FAITH", body: it.text, icon: icon("icon.png"), silent: false });
-        n.on("click", () => show(it.kind === "approval" ? "today" : "inbox"));
+        n.on("click", () => show(it.kind === "approval" ? "board" : "inbox"));
         n.show();
       }
     }
@@ -148,10 +154,10 @@ function registerIpc() {
     if (d.conversation_id) store.set({ conversationId: d.conversation_id });
     return d.messages;
   }));
-  handle("ask", (q: { text: string; images?: string[] }) => {
+  handle("ask", (q: { text: string; images?: string[]; spoken?: boolean }) => {
     const id = Math.random().toString(36).slice(2), ctl = new AbortController();
     asks.set(id, ctl);
-    void guarded((f) => f.chat({ text: q.text, images: q.images?.slice(0, 4), conversation_id: store.settings.conversationId }, (e) => {
+    void guarded((f) => f.chat({ text: q.text, images: q.images?.slice(0, 4), conversation_id: store.settings.conversationId, ...(q.spoken ? { spoken: true } : {}) }, (e) => {
       if (e.type === "conversation") store.set({ conversationId: e.id });
       send("chat", id, e);
     }, ctl.signal))
@@ -164,6 +170,12 @@ function registerIpc() {
   handle("approvals", () => guarded((f) => f.approvals()));
   handle("decide", (id: string, approve: boolean) => guarded((f) => f.decide(id, approve)));
   handle("dashboard", () => guarded((f) => f.dashboard()));
+  handle("board", () => guarded((f) => f.board()));
+  handle("writeBrief", () => guarded((f) => f.writeBrief()));
+  handle("addLog", (text: string, project?: string) => guarded((f) => f.addLog(String(text), project ? String(project) : undefined)));
+  handle("addProject", (name: string, status?: string, next?: string) => guarded((f) => f.addProject(String(name), status, next)));
+  handle("updateProject", (name: string, patch: any) => guarded((f) => f.updateProject(String(name), { status: patch?.status, next: patch?.next, starred: patch?.starred, archived: patch?.archived })));
+  handle("importOrb", () => guarded((f) => f.importOrb()));
   handle("transcribe", (audio: ArrayBuffer, mime: string) => guarded((f) => f.transcribe(new Uint8Array(audio), mime)));
   handle("speak", (text: string) => guarded(async (f) => (await f.speak(text)).buffer));
   handle("photo", (source: string, id: string) => guarded((f) => f.photo(source, id)));

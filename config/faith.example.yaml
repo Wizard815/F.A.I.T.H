@@ -232,3 +232,15 @@ dashboard:
     - { id: chores, title: Chores, builtin: chores }
     - { id: home, title: Home, builtin: home }
     - { id: mine, title: My notes, tool: wiki_context_for, args: { person: "{person}" }, who: person }
+
+# The info board in FAITH's apps (docs/dashboard.md): Pondering Orb's Main and Daily pages.
+# Projects, the log and the morning brief are each person's own. Everything here is optional.
+# board:
+#   weather_entity: weather.home          # Home Assistant's weather (HA fetches it)
+#   news:
+#     feeds: []                           # RSS/Atom; FAITH fetches these, so prefer a local reader (FreshRSS, Miniflux)
+#     items: 8
+#   uptime: { url: http://uptime-kuma:3001, slug: home, roles: [admin] }
+#   system: { roles: [admin], disks: [/data] }
+#   brief: { people: [wizard], time: "07:00", days: daily, send: false }
+#   log_max: 120

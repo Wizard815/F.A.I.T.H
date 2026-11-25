@@ -170,6 +170,25 @@ export type Config = {
   notifications: { approvals_push: boolean };
   /** Checking every source on a schedule and telling the parents when one goes down (health.ts). 0 = off. */
   health: { interval_s: number };
+  /** The info board for FAITH's apps (board/), brought over from Pondering Orb. */
+  board: BoardConfig;
+};
+
+/** The info board (docs/dashboard.md). Everything here is optional; a part that isn't set up doesn't show. */
+export type BoardConfig = {
+  /** An HA weather entity (weather.home). Home Assistant fetches the forecast; FAITH only reads HA. */
+  weather_entity: string;
+  /** RSS or Atom feeds. Off until you add one. These are fetched from wherever they point (the internet,
+   *  unless you use a local reader such as FreshRSS or Miniflux). */
+  news: { feeds: string[]; items: number };
+  /** Uptime Kuma's published status page: its address and slug, and who sees it. */
+  uptime?: { url: string; slug: string; roles: PolicyName[]; ignore: string[] };
+  /** FAITH's own machine (load, memory, disks) and FAITH's sources: who sees it. */
+  system: { roles: PolicyName[]; disks: string[] };
+  /** The morning brief: written each morning for these people (ids), at this time (HH:MM, TZ). Empty: on request only. */
+  brief: { time: string; days: string; people: string[]; send: boolean };
+  /** The longest log entry, in characters (Orb's logMax). */
+  log_max: number;
 };
 
 /** FAITH as a Mattermost bot: a DM with each person, a family channel, a parents channel. */
@@ -376,6 +395,39 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     })(),
     notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
     health: { interval_s: num(raw.health?.interval_s, 120) },
+    board: parseBoard(raw.board || {}, people),
+  };
+}
+
+function parseBoard(b: any, people: Person[]): BoardConfig {
+  const policies: PolicyName[] = [...ROLES, "household", "parents"];
+  const roles = (v: unknown, d: PolicyName[], where: string) => {
+    const r = v == null ? d : (list(v) as PolicyName[]);
+    if (r.some((x) => !policies.includes(x))) throw new ConfigError(`${where} lists roles: ${policies.join(", ")}.`);
+    return r;
+  };
+  const weather = str(b.weather_entity, "");
+  if (weather && !/^weather\.[a-z0-9_]+$/.test(weather)) throw new ConfigError(`board.weather_entity must be a weather.* entity, like weather.home (got "${weather}").`);
+  const feeds = list(b.news?.feeds);
+  for (const f of feeds) if (!/^https?:\/\//.test(f)) throw new ConfigError(`board.news.feeds: "${f}" must start with http:// or https://.`);
+  let uptime: BoardConfig["uptime"];
+  if (b.uptime?.url) {
+    const url = str(b.uptime.url).replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(url)) throw new ConfigError("board.uptime.url must start with http:// or https://.");
+    if (!b.uptime.slug) throw new ConfigError("board.uptime.slug is the status page's slug in Uptime Kuma (its address ends in /status/<slug>).");
+    uptime = { url, slug: str(b.uptime.slug), roles: roles(b.uptime.roles, ["admin"], "board.uptime.roles"), ignore: list(b.uptime.ignore) };
+  }
+  const time = str(b.brief?.time, "07:00");
+  if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new ConfigError("board.brief.time is HH:MM (24-hour), e.g. 07:00, or empty for on request only.");
+  const briefPeople = list(b.brief?.people);
+  for (const id of briefPeople) if (!people.some((p) => p.id === id)) throw new ConfigError(`board.brief.people: no one with the id "${id}".`);
+  return {
+    weather_entity: weather,
+    news: { feeds, items: Math.max(1, Math.min(30, num(b.news?.items, 8))) },
+    uptime,
+    system: { roles: roles(b.system?.roles, ["admin"], "board.system.roles"), disks: b.system?.disks ? list(b.system.disks) : ["/data"] },
+    brief: { time, days: str(b.brief?.days, "daily"), people: briefPeople, send: bool(b.brief?.send, false) },
+    log_max: Math.max(20, Math.min(500, num(b.log_max, 120))),
   };
 }
 

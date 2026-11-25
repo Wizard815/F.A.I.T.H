@@ -30,6 +30,10 @@ class Store(context: Context) {
     var speakReplies: Boolean
         get() = prefs.getBoolean("speak_replies", false)
         set(v) = prefs.edit().putBoolean("speak_replies", v).apply()
+    /** How the app looks: voice-focus, voice-panel or voice-dashboard (docs/android.md). */
+    var layout: String
+        get() = prefs.getString("layout", Layouts.DASHBOARD) ?: Layouts.DASHBOARD
+        set(v) = prefs.edit().putString("layout", if (v in Layouts.ALL) v else Layouts.DASHBOARD).apply()
     var conversationId: String?
         get() = prefs.getString("conversation_id", null)
         set(v) = prefs.edit().putString("conversation_id", v).apply()

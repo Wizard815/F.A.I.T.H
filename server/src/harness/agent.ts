@@ -17,7 +17,9 @@ export type TurnOpts = { caller: Caller; text: string; images?: string[]; conver
   /** Set by turnOrLater: once true, this turn's model calls wait behind quick questions. */
   job?: { background: boolean; release?: () => void };
   /** The text was heard (an Omi recording), not said to FAITH: every change waits for the person's own Yes. */
-  heard?: boolean };
+  heard?: boolean;
+  /** Reading only (the morning brief): the model gets no tool that changes anything. */
+  readOnly?: boolean };
 export const LATER = "This one's a bigger job. I'll send you the answer when it's done.";
 export type TurnResult = { conversationId: string; text: string; toolsUsed: string[]; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[];
   /** Photos a tool showed the person (the latest show wins), for apps that draw them. */
@@ -241,8 +243,9 @@ export class Agent {
 
   private async turnIn(o: TurnOpts, conv: { id: string; fresh: boolean }, text: string, emit: (e: AgentEvent) => void): Promise<TurnResult> {
     const cfg = this.cfg(), c = o.caller;
-    if (!o.images?.length && !o.history && !o.heard) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
+    if (!o.images?.length && !o.history && !o.heard && !o.readOnly) { const q = await this.quick(c, text, conv, emit); if (q) return q; }
     const set = await this.registry.toolsFor(c);
+    if (o.readOnly) set.tools = set.tools.filter((t) => !t.write);
     const context = await this.contextFor(c, conv.id, set.tools, conv.fresh || !!o.history);
     const sources = this.registry.describe(set.sources) + (set.problems.length ? `\n(Not reachable right now: ${set.problems.map((p) => p.split(":")[0]).join(", ")}.)` : "");
     // HA's own overview of the house (areas, devices, aliases), when the Assist API is on.
@@ -300,7 +303,8 @@ export class Agent {
     const set = await this.registry.toolsFor(c);
     const t = set.tools.find((x) => x.name === name);
     if (!t) throw new ModelError(403, "You can't do that from here.");
-    const conv = this.conversation(c);
+    // The person's latest conversation, so a button (a card, the board) doesn't start an empty one that hides their chat.
+    const conv = this.conversation(c, this.latest(c));
     const pending: TurnResult["pending"] = [], requests: TurnResult["requests"] = [];
     const [w] = this.wrap(c, [t], conv.id, pending, requests, () => {});
     const out: any = await w.run(args ?? {});
