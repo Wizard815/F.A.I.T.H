@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brass & honey: parchment by day, espresso at night (Compose draws the rest). -->
+    <style name="Theme.Faith" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <color name="paper">#F6EFE4</color>
+    <color name="espresso">#18110C</color>
+    <color name="gold">#86601D</color>
+</resources>

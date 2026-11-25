@@ -70,7 +70,7 @@ is its hands, and Argos (local models) is its brain.
 
 - **Home Assistant:** FAITH's cards on the family dashboard, with the hub card as the wall tablet's home (tap FAITH to talk, it answers out loud); voice satellites that know who's talking ([how](docs/home-assistant.md#voice-a-jarvis-for-the-house)); Assist voice; phone notifications ([docs](docs/home-assistant.md#the-family-dashboard-faiths-cards)).
 - **Mattermost:** a personal chat each, a family channel, a parents' channel ([docs](docs/mattermost.md)).
-- **FAITH's apps:** the Android app (`android/`), D.A.S.H the pocket handheld, and later a desktop app, all on one contract: sign in as one person, ask, speak, say Yes, and an inbox for notifications ([docs/clients.md](docs/clients.md)).
+- **FAITH's apps:** the Android app (`android/`, [docs](docs/android.md)), D.A.S.H the pocket handheld, and later a desktop app, all on one contract: sign in as one person, ask, speak, say Yes, and an inbox for notifications ([docs/clients.md](docs/clients.md)).
 - **FAITH's own page** is the admin console: health, people and voices, skills, routines, points and rewards, approvals, tokens.
 
 ## Try it without your homelab

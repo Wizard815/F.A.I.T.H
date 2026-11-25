@@ -38,6 +38,7 @@
 - Mattermost chats start fresh after 4 quiet hours or on "new topic".
 - The wiki as memory: notes go to whoever said them (in code), recall searches older notes, context for group chats and voices, finished chats filed for Ingest.
 - Omi: each person's recordings, read with their own key; what Omi heard is context, so changes after it wait for a Yes. Each kept conversation can come to FAITH (a webhook), which suggests a few things in that person's chat, each waiting for their yes.
+- FAITH's apps share one contract ([clients.md](clients.md)): client sign-in that counts as the person's own screen, and an inbox for notifications. The Android app (`android/`): sign in once, ask, talk, photos (share to FAITH), Yes/No, notifications, the phone's assistant.
 - Snap a receipt (`receipt-to-coinpile` skill): cash is recorded in Coinpile, a card payment is matched when the bank sends it; one Yes in FAITH (Coinpile's `act` token).
 - Live-tested against the family's real apps (wiki, ALLGlance with Vikunja and Mealie, Coinpile, Orb, Hermes, Hermes Studio, Firefly, HA, Mattermost, voice ID) through Argos: `server/scripts/eval-live.ts`.
 

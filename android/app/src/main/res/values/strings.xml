@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FAITH</string>
+    <string name="channel_inbox">Messages from FAITH</string>
+    <string name="channel_inbox_about">Answers to bigger jobs, the doorbell, approvals to decide</string>
+</resources>

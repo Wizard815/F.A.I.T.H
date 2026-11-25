@@ -2,7 +2,7 @@
 
 FAITH has more than one front door: the Home Assistant cards, Mattermost, voice satellites, and its own apps:
 - **D.A.S.H**: the pocket handheld (ESP32).
-- **The Android app**: `android/`.
+- **The Android app**: `android/` ([android.md](android.md)).
 - **A desktop app** (later).
 
 They all follow this page, so a change to FAITH reaches every one of them the same way. Every call below is plain HTTPS to FAITH (`http://<faith>:8097` on your network) with `Authorization: Bearer <token>`.
