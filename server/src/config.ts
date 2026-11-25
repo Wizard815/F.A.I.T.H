@@ -114,6 +114,11 @@ export type HubDevice = {
   presence_entity?: string;  // e.g. binary_sensor.kitchen_person_occupancy (camera or mmWave)
   face_entity?: string;      // e.g. sensor.kitchen_last_face (Frigate face recognition / Double Take)
   face_unlock: boolean;      // a recognized face signs in without PIN (off: it only suggests the tile)
+  /** Voice satellites next to this screen (HA device ids or assist_satellite.* entities): its camera's face checks their voices too. */
+  satellites: string[];
+  /** When the voice and the face agree, answer that one question as that person, without signing in.
+   *  Off by default; needs face_unlock. Changes that need a Yes still need a sign-in. */
+  voice_and_face: boolean;
 };
 
 export type Card = { id: string; title: string; tool?: string; args?: Record<string, unknown>; who: "anyone" | "person" | "household"; people?: string[]; roles?: PolicyName[]; builtin?: "today" | "chores" | "meals" | "shopping" | "home" | "approvals" };
@@ -144,7 +149,9 @@ export type Config = {
   embed: { allow_from: string[]; cookie_samesite: "strict" | "lax" | "none" };
   mattermost?: MattermostConfig;
   skills: { dir: string; packs: { dir: string; who?: PolicyName[] }[] }; // your own skills (Markdown); packs: SKILL.md folders (e.g. homeassistant-ai/skills)
-  voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean };
+  voice_id?: { url: string; token_env?: string; threshold: number; trust_for_changes: boolean;
+    /** How far under the threshold a voice may be when the camera there sees that same person's face. */
+    face_helps: number };
   /** FAITH as a Wyoming speech-to-text service for HA's voice pipeline (and voice ID on satellites). */
   wyoming?: { port: number; host: string; languages: string[]; allow_from: string[] };
   /** A person's chat, once put away ("new topic" or quiet), is filed in their own wiki folder for Ingest (the wiki's conversation_log). */
@@ -274,7 +281,10 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   const devices: HubDevice[] = (h.devices || []).map((d: any, i: number) => {
     const id = str(d?.id).trim();
     if (!ID.test(id)) throw new ConfigError(`hub.devices[${i}].id "${id}" must be lowercase letters, digits, - or _.`);
-    return { id, name: str(d.name, id), presence_entity: d.presence_entity ? str(d.presence_entity) : undefined, face_entity: d.face_entity ? str(d.face_entity) : undefined, face_unlock: bool(d.face_unlock, false) };
+    const dev: HubDevice = { id, name: str(d.name, id), presence_entity: d.presence_entity ? str(d.presence_entity) : undefined, face_entity: d.face_entity ? str(d.face_entity) : undefined, face_unlock: bool(d.face_unlock, false),
+      satellites: list(d.satellites), voice_and_face: bool(d.voice_and_face, false) };
+    if (dev.voice_and_face && !(dev.face_entity && dev.face_unlock)) throw new ConfigError(`hub.devices.${id}: voice_and_face needs face_entity and face_unlock: true on that screen. If a face alone shouldn't sign in there, voice and face shouldn't either.`);
+    return dev;
   });
 
   const d = raw.dashboard || {};
@@ -341,7 +351,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills"),
       packs: (raw.skills?.packs || []).map((p: any) => (typeof p === "string" ? { dir: p } : { dir: str(p.dir), who: p.who ? (list(p.who) as PolicyName[]) : undefined })) },
     voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
-      threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true) } : undefined,
+      threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true), face_helps: Math.min(0.2, Math.max(0, num(raw.voice_id.face_helps, 0.08))) } : undefined,
     wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"], allow_from: list(raw.wyoming.allow_from) } : undefined,
     rewards: (() => {
       const r = raw.rewards || {}, payout = str(r.payout, "manual");

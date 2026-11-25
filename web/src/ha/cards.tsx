@@ -308,7 +308,7 @@ function useChat(api: Api, speak: boolean) {
     try {
       const r: any = await api.call("/api/ha/chat", { ...body, conversation_id: conv.current });
       conv.current = r.conversation_id;
-      setLines((l) => [...l.slice(0, -1), ...(r.heard ? [{ me: true, text: r.heard + (r.speaker ? ` (${r.speaker.name})` : "") }] : []),
+      setLines((l) => [...l.slice(0, -1), ...(r.heard ? [{ me: true, text: r.heard + (r.speaker ? ` (${r.speaker.name}${r.own_view ? ", known by voice and face: their own view" : ""})` : "") }] : []),
         ...r.confirms.map((c: any) => ({ text: "", confirm: c })), ...r.approvals.map((a: any) => ({ text: "", waiting: a.summary })), { text: r.text, tools: r.tools }]);
       setSaid(Date.now());
       if (speak && r.text) say(r.text);

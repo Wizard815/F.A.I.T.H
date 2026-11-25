@@ -1,6 +1,9 @@
 import { envValue, type Config, type Person } from "./config.js";
 import type { Db } from "./db.js";
 
+export type VoiceMatch = { person: Person; score: number; how: "voice" | "both" | "face_helped" };
+export type Decision = { match?: VoiceMatch; conflict?: { voice: Person; face?: Person } };
+
 export class VoiceError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 /** Telling family voices apart. The voiceid service (voiceid/) turns a
@@ -43,38 +46,59 @@ export class Voices {
     return this.cfg().people.map((p) => { const r = rows.find((x) => x.person_id === p.id); return { person: p.id, name: p.name, samples: r?.samples ?? 0, updated_at: r?.updated_at ?? null }; });
   }
 
-  /** The closest enrolled person above the threshold, or none. */
-  match(e: number[]) {
+  private rank(e: number[]) {
     const unit = (v: number[]) => { const n = Math.hypot(...v) || 1; return v.map((x) => x / n); };
-    const q = unit(e), threshold = this.cfg().voice_id?.threshold ?? 0.78;
+    const q = unit(e);
     let best: { person: Person; score: number } | undefined, second = -1;
     for (const r of this.db.prepare("SELECT person_id, sum FROM voiceprints").all() as any[]) {
       const p = this.cfg().people.find((x) => x.id === r.person_id); if (!p) continue;
       const v = unit(JSON.parse(r.sum)), score = v.reduce((s, x, i) => s + x * (q[i] ?? 0), 0);
       if (!best || score > best.score) { second = best?.score ?? -1; best = { person: p, score }; } else if (score > second) second = score;
     }
+    return { best, second };
+  }
+
+  /** The closest enrolled person above the threshold, or none. */
+  match(e: number[]) {
+    const { best, second } = this.rank(e), threshold = this.cfg().voice_id?.threshold ?? 0.78;
     // Too close to call between two people is no answer at all.
     if (!best || best.score < threshold || best.score - second < 0.04) return undefined;
     return best;
   }
   async identify(audio: Buffer, mime: string) { return this.match(await this.embed(audio, mime)); }
 
+  /** The voice, checked against the face a camera there saw just now (a family member's id).
+   *  - both agree: `how: "both"`;
+   *  - they disagree: `conflict`, and nobody is trusted (it could be a recording, or someone else in view);
+   *  - a voice a little under the threshold, or too close to call, counts when the face is that same person: `how: "face_helped"`;
+   *  - no face: the voice alone, as before. */
+  decide(e: number[], face?: string): Decision {
+    const strict = this.match(e);
+    if (!face) return strict ? { match: { ...strict, how: "voice" } } : {};
+    const facePerson = this.cfg().people.find((p) => p.id === face);
+    if (strict) return strict.person.id === face ? { match: { ...strict, how: "both" } } : { conflict: { voice: strict.person, face: facePerson } };
+    const { best } = this.rank(e), threshold = this.cfg().voice_id?.threshold ?? 0.78, helps = this.cfg().voice_id?.face_helps ?? 0.08;
+    if (best && best.person.id === face && best.score >= threshold - helps) return { match: { ...best, how: "face_helped" } };
+    return {};
+  }
+  async identifyAt(audio: Buffer, mime: string, face?: string) { return this.decide(await this.embed(audio, mime), face); }
+
   // ---- voice satellites: HA sends FAITH only the words, so remember who said them ----
-  private heard: { key: string; person: Person; at: number }[] = [];
+  private heard: { key: string; print: number[]; at: number }[] = [];
   private static key = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  /** Speech-to-text (the Wyoming server) heard this person say this. */
-  remember(text: string, person: Person) {
+  /** Speech-to-text (the Wyoming server) heard this said, in this voice (its voiceprint, not the audio). */
+  remember(text: string, print: number[]) {
     const now = Date.now();
     this.heard = this.heard.filter((h) => now - h.at < 60_000).slice(-20);
-    this.heard.push({ key: Voices.key(text), person, at: now });
+    this.heard.push({ key: Voices.key(text), print, at: now });
   }
-  /** Who said exactly this in the last minute (once: the record is used up). */
-  recall(text: string): Person | undefined {
+  /** Who said exactly this in the last minute, checked against the face there now (once: the record is used up). */
+  recall(text: string, face?: string): Decision {
     const k = Voices.key(text), now = Date.now();
     for (let i = this.heard.length - 1; i >= 0; i--) {
       const h = this.heard[i];
-      if (now - h.at < 60_000 && h.key === k && k) { this.heard.splice(i, 1); return h.person; }
+      if (now - h.at < 60_000 && h.key === k && k) { this.heard.splice(i, 1); return this.decide(h.print, face); }
     }
-    return undefined;
+    return {};
   }
 }

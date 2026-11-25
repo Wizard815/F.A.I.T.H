@@ -114,11 +114,13 @@ export class WyomingStt {
 
   /** The words, and (when voice ID is on) who said them. */
   async hear(audio: Buffer, from?: string) {
-    const [text, who] = await Promise.all([
+    const [text, print] = await Promise.all([
       transcribe(this.d.cfg(), this.d.env, audio, "audio/wav").catch((e) => { this.d.log.warn({ err: e.message }, "wyoming: speech-to-text failed"); return ""; }),
-      this.d.voices.enabled() ? this.d.voices.identify(audio, "audio/wav").catch(() => undefined) : Promise.resolve(undefined),
+      this.d.voices.enabled() ? this.d.voices.embed(audio, "audio/wav").catch(() => undefined) : Promise.resolve(undefined),
     ]);
-    if (text && who) this.d.voices.remember(text, who.person);
+    // Keep the voiceprint, not a name: the camera next to the satellite may still have a say (voice.ts decide).
+    if (text && print) this.d.voices.remember(text, print);
+    const who = print ? this.d.voices.match(print) : undefined;
     this.d.log.info({ from, speaker: who?.person.id ?? null, score: who ? Math.round(who.score * 100) / 100 : null }, "wyoming: heard");
     return text;
   }

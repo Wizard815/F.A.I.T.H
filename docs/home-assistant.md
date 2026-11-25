@@ -59,6 +59,31 @@ Point each screen's `presence_entity` at a sensor that says someone is in front 
 - It highlights that person's tile.
 - With `face_unlock: true` it signs them in on its own. Leave that off for screens children use: a face match is a weaker check than a PIN.
 
+### Voice and face together
+
+With voice ID on (below), a screen's face sensor also checks who's talking at that screen. List the voice satellites next to it in `satellites` (their HA device id or `assist_satellite.*` entity), and its camera checks their voices too.
+
+- **They disagree** (the camera sees Robin, the voice sounds like Sam): nobody's voice counts. FAITH answers in the family's view. On a screen where Sam is signed in, that question gets the family's view too.
+- **A close call:** a voice a little under `voice_id.threshold` counts when the camera sees that same person (`voice_id.face_helps`, default 0.08). That only makes them the speaker in the family's view.
+- **Both agree, and the screen allows it** (`voice_and_face: true`, off by default): FAITH answers that one question in that person's own view, without a sign-in. On a satellite, the answer is said out loud.
+  - It needs `face_unlock: true` on that screen too. If a face alone shouldn't sign in there, voice and face shouldn't either.
+  - Changes that need a Yes (locks, the garage, anything after a photo) still need a real sign-in with the PIN. FAITH says so.
+  - A close call never counts here: both have to be sure.
+
+```yaml
+hub:
+  devices:
+    - id: kitchen
+      face_entity: sensor.kitchen_last_recognized_face
+      face_unlock: true
+      satellites: [assist_satellite.kitchen]   # voice satellites next to this camera
+      voice_and_face: true                    # optional: both agree = their own view for that question
+```
+
+**What goes wrong:**
+- Someone walks past the camera while another person talks: they disagree, and FAITH answers in the family's view. Ask again once they're out of view (a face counts for 30 seconds).
+- A photo held up to the camera and a recording of someone's voice could fool it. That's why it's off by default and never says Yes to locks.
+
 ## Voice: a JARVIS for the house
 
 The fully local path, through HA:

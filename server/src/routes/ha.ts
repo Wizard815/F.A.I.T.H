@@ -8,7 +8,7 @@ import type { Agent, AgentEvent } from "../harness/agent.js";
 import type { Approvals } from "../approvals.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Rewards } from "../rewards.js";
-import type { Voices } from "../voice.js";
+import type { Decision, Voices } from "../voice.js";
 import { envValue } from "../config.js";
 import { dashboard } from "../dashboard.js";
 import { ModelError } from "../harness/llm.js";
@@ -104,14 +104,23 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     if (b.audio) {
       const audio = Buffer.from(String(b.audio), "base64"), mime = String(b.mime || "audio/webm");
       heard = await transcribe(x.cfg(), x.env, audio, mime); text = heard;
-      // On a shared screen with nobody signed in, a known voice says who's talking.
+      // On a shared screen, a known voice says who's talking, checked against the face its camera sees.
       if ((caller.scope.kind === "household" || w.hub) && voices.enabled()) {
-        const m = await voices.identify(audio, mime).catch(() => undefined);
-        if (m && caller.scope.kind === "household") { speaker = m.person; if (cfg().voice_id?.trust_for_changes !== false) caller = { ...caller, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen || "HA"}` }; }
-        // Signed in as Sam, but that's Robin talking: Robin gets the family's view, never Sam's things.
-        else if (m && w.hub && m.person.id !== w.hub.person.id) {
-          speaker = m.person;
-          caller = { scope: { kind: "household" }, channel: "ha", deviceId: caller.deviceId, speaker: m.person, audience: "family", label: `${m.person.id} (voice) on ${w.screen} while ${w.hub.person.id} is signed in` };
+        const dev = w.screen ? cfg().hub.devices.find((d) => d.id === w.screen) : undefined;
+        const d = await voices.identifyAt(audio, mime, dev?.face_entity ? presence.face(dev.id) : undefined).catch(() => ({}) as Decision);
+        const m = d.match;
+        if (caller.scope.kind === "household") {
+          // Voice and face agree on a screen that allows it: that person's own view, for this question only.
+          if (m?.how === "both" && dev?.voice_and_face) {
+            speaker = m.person;
+            caller = { scope: { kind: "person", person: m.person }, channel: "ha", deviceId: `ha:${w.screen}`, byVoiceAndFace: true, label: `${m.person.id} (voice and face) on ${w.screen}` };
+          } else if (m) { speaker = m.person; if (cfg().voice_id?.trust_for_changes !== false) caller = { ...caller, speaker: m.person, audience: "family", label: `${m.person.id} (voice${m.how === "voice" ? "" : " and face"}) on ${w.screen || "HA"}` }; }
+        }
+        // Signed in as Sam, but that's Robin talking (or the camera and the voice disagree): the family's view, never Sam's things.
+        else if (w.hub && (d.conflict || (m && m.person.id !== w.hub.person.id))) {
+          speaker = d.conflict ? undefined : m!.person;
+          caller = { scope: { kind: "household" }, channel: "ha", deviceId: caller.deviceId, ...(speaker ? { speaker } : {}), audience: "family",
+            label: d.conflict ? `someone on ${w.screen} (voice and face disagree) while ${w.hub.person.id} is signed in` : `${speaker!.id} (voice) on ${w.screen} while ${w.hub.person.id} is signed in` };
         }
       }
     }
@@ -129,11 +138,12 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
     if (!text) throw new AuthError(400, b.audio ? "I didn't catch that." : "Say something first.");
     auth.touch(caller.sessionHash);
     const events: AgentEvent[] = [];
-    const opts = { caller, text: [text, ...notes].join("\n\n"), images, conversationId: b.conversation_id || undefined, onEvent: (e: AgentEvent) => { if (e.type === "tool") events.push(e); } };
+    const opts = { caller, text: [text, ...notes].join("\n\n"), images, conversationId: b.conversation_id || undefined,
+      ...(caller.byVoiceAndFace ? { extId: `voice-face:${w.screen}`, freshAfterMs: 5 * 60_000 } : {}), onEvent: (e: AgentEvent) => { if (e.type === "tool") events.push(e); } };
     // A bigger job says so; its answer goes to the person's chat and phone (and stays in this conversation).
     const asker = caller.scope.kind === "person" ? caller.scope.person : caller.speaker;
     const r = asker ? await agent.turnOrLater(opts, cfg().model.answer_within_s * 1000, (late) => agent.deliverLate(asker, late)) : await agent.turn(opts);
-    return { text: r.text, heard, speaker: speaker ? pub(speaker) : null, conversation_id: r.conversationId, confirms: r.pending, approvals: r.requests, tools: [...new Set(events.map((e: any) => e.name))] };
+    return { text: r.text, heard, speaker: speaker ? pub(speaker) : null, own_view: !!caller.byVoiceAndFace, conversation_id: r.conversationId, confirms: r.pending, approvals: r.requests, tools: [...new Set(events.map((e: any) => e.name))] };
   });
   app.post("/api/ha/chat/history", async (req) => {
     const c = who(req).caller, id = agent.latest(c);

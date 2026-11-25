@@ -21,6 +21,9 @@ export type Caller = {
    *  everyone in the chat reads the answer; the speaker only decides whose
    *  changes need approval. */
   speaker?: Person;
+  /** Known by voice and face together (a screen's voice_and_face), not signed in: their own view
+   *  for this question, but nothing that waits for a Yes. */
+  byVoiceAndFace?: boolean;
   /** Group chats: who reads the answer. */
   audience?: "family" | "parents";
 };

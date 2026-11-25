@@ -6358,7 +6358,7 @@ function wc(a, u) {
       const Q = await a.call("/api/ha/chat", { ...ne, conversation_id: L.current });
       L.current = Q.conversation_id, w((ie) => [
         ...ie.slice(0, -1),
-        ...Q.heard ? [{ me: !0, text: Q.heard + (Q.speaker ? ` (${Q.speaker.name})` : "") }] : [],
+        ...Q.heard ? [{ me: !0, text: Q.heard + (Q.speaker ? ` (${Q.speaker.name}${Q.own_view ? ", known by voice and face: their own view" : ""})` : "") }] : [],
         ...Q.confirms.map((le) => ({ text: "", confirm: le })),
         ...Q.approvals.map((le) => ({ text: "", waiting: le.summary })),
         { text: Q.text, tools: Q.tools }

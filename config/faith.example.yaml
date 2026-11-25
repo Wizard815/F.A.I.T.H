@@ -164,6 +164,8 @@ hub:
       presence_entity: binary_sensor.kitchen_person_occupancy   # Frigate / camera person detection
       face_entity: sensor.kitchen_last_recognized_face           # optional: Frigate face recognition
       face_unlock: false         # true = a recognized face signs in; false = it only highlights their tile
+      satellites: []             # voice satellites next to this camera: it checks their voices too
+      voice_and_face: false      # true (needs face_unlock): voice and face agree = their own view for that question
 
 personal:
   idle_days: 14
@@ -205,6 +207,7 @@ voice:
 #   token_env: VOICEID_TOKEN     # if the service has VOICEID_TOKEN set
 #   threshold: 0.78              # how sure before naming someone
 #   trust_for_changes: true      # a recognised parent's changes skip approval (false: only logged)
+#   face_helps: 0.08             # a voice this far under the threshold counts when the camera there sees that person
 
 # FAITH as speech-to-text for HA's voice pipeline (Wyoming), so satellites know who's talking.
 # Publish the port in docker compose; in HA add the Wyoming Protocol integration (FAITH's host, this port).

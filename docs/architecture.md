@@ -70,7 +70,7 @@ A request takes one of three ways.
 
 **Where people are stays in Home Assistant.** FAITH sees `person.*` and trackers only as home or away, and never address, GPS or zone sensors, whatever the config exposes.
 
-**Speakers, not sign-ins.** In a group chat, or from a recognised voice on a shared screen or satellite, FAITH knows *who is speaking* but still answers from the household view, because everyone there hears the answer. The speaker only decides whose changes need approval.
+**Speakers, not sign-ins.** In a group chat, or from a recognised voice on a shared screen or satellite, FAITH knows *who is speaking* but still answers from the household view, because everyone there hears the answer. The speaker only decides whose changes need approval. A camera at that screen or satellite checks the voice: if the face and the voice disagree, nobody's voice counts. Only a screen with `voice_and_face` (off by default) lets a voice and face that agree get that person's own view, for one question, and never a Yes ([home-assistant.md](home-assistant.md#voice-and-face-together)).
 
 An approved household request runs with the household's tokens, not the approver's. Approving never lends someone's private access to the shared screen.
 

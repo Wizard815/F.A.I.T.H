@@ -92,7 +92,7 @@ test("several people in one chat: each one's held change waits for their own yes
 
 test("several voices at one satellite: each has their own conversation", async () => {
   const people = A.registry["cfg"]().people;
-  (A.voices as any).recall = (t: string) => (t.startsWith("Sam here") ? people[1] : t.startsWith("Robin here") ? people[2] : undefined);
+  (A.voices as any).recall = (t: string) => ({ match: t.startsWith("Sam here") ? { person: people[1], how: "voice" } : t.startsWith("Robin here") ? { person: people[2], how: "voice" } : undefined });
   let seen: any;
   script = (req) => { seen = req; return { content: "ok" }; };
   const ask = (text: string) => H("/api/ha/conversation", { text, conversation_id: "sat-1", device_id: "kitchen_satellite" });
@@ -109,7 +109,7 @@ test("signed in as Sam on the tablet, but that's Robin talking: Robin gets the f
   A.auth.setPin("sam", "5678");
   const K = { user_id: "ha-family", screen: "kitchen", device_token: kitchen };
   const s = (await H("/api/ha/hub/signin", { ...K, person: "sam", pin: "5678" })).json();
-  (A.voices as any).identify = async () => ({ person: people[2], score: 0.93 });
+  (A.voices as any).identifyAt = async () => ({ match: { person: people[2], score: 0.93, how: "voice" } });
   model.stt.text = "what's on my list?";
   let seen: any;
   script = (req) => { seen = req; return { content: "ok" }; };
@@ -117,7 +117,7 @@ test("signed in as Sam on the tablet, but that's Robin talking: Robin gets the f
   assert.equal(r.speaker?.id, "robin");
   assert.match(seen.messages[0].content, /whole family's|household|shared/i, "answered in the family's view");
   assert.doesNotMatch(seen.messages[0].content, /You are talking with Sam/);
-  (A.voices as any).identify = async () => ({ person: people[1], score: 0.95 });
+  (A.voices as any).identifyAt = async () => ({ match: { person: people[1], score: 0.95, how: "voice" } });
   await H("/api/ha/chat", { ...K, hub_session: s.hub_session, audio: Buffer.from("fake audio").toString("base64"), mime: "audio/webm" });
   assert.match(seen.messages[0].content, /You are talking with Sam/, "Sam's own voice: Sam's view");
 });

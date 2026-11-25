@@ -384,8 +384,13 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
     // Said to a voice satellite: FAITH's own speech-to-text (wyoming.ts) may have heard who it was.
     // Only for a voice pipeline (a satellite or device, no HA user): typed Assist never borrows a voice.
     const fromVoice = !b?.user_id && !!(b?.satellite_id || b?.device_id);
-    const speaker = c.scope.kind === "household" && fromVoice ? voices.recall(String(b?.text || "")) : undefined;
-    if (speaker && cfg().voice_id?.trust_for_changes !== false) c = { ...c, speaker, audience: "family", label: `${speaker.id} (voice) via HA` };
+    // A screen's camera next to the satellite (hub.devices[].satellites) checks the voice against the face it sees.
+    const near = fromVoice ? cfg().hub.devices.find((d) => d.satellites.some((x) => x === b?.device_id || x === b?.satellite_id)) : undefined;
+    const heard = c.scope.kind === "household" && fromVoice ? voices.recall(String(b?.text || ""), near?.face_entity ? presence.face(near.id) : undefined) : {};
+    const m = heard.match;
+    const speaker = m?.person;
+    if (m?.how === "both" && near?.voice_and_face) c = { ...c, scope: { kind: "person", person: m.person }, byVoiceAndFace: true, label: `${m.person.id} (voice and face) via HA` };
+    else if (speaker && cfg().voice_id?.trust_for_changes !== false) c = { ...c, speaker, audience: "family", label: `${speaker.id} (voice${m!.how === "voice" ? "" : " and face"}) via HA` };
     // Which room the satellite (or device) is in: "the lights" means that room.
     const room = await registry.ha?.roomOf(b?.satellite_id, b?.device_id);
     const extra = [
