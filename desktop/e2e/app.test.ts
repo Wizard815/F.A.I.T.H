@@ -110,7 +110,10 @@ test("the inbox: a new item shows, and the tab says how many are new", async () 
   await page.getByRole("button", { name: /Inbox/ }).click();
   await page.getByText("holding a parcel").waitFor();
   await shot("4-inbox");
-  assert.equal(await page.getByRole("button", { name: /new\)/ }).count(), 0, "read once opened");
+  // Marking it read is a round trip to FAITH, so give the tab a moment to update.
+  const unread = page.getByRole("button", { name: /new\)/ });
+  for (let i = 0; i < 50 && (await unread.count()) > 0; i++) await page.waitForTimeout(100);
+  assert.equal(await unread.count(), 0, "read once opened");
 });
 
 test("the board: the day cards, the weather, a project and a log entry", async () => {
