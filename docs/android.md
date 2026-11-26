@@ -12,6 +12,7 @@ FAITH on your phone: ask, talk, show it a photo, say Yes to a held change, and g
 - **The phone's assistant.** Settings → Apps → Default apps → **Digital assistant app** → FAITH. Long-press home (or power, on some phones) opens FAITH listening.
 - **Photos from your library:** "show me photos of Robin at the beach" shows them in the answer, from your own Immich account. Tap one to open it in Immich.
 - **New topic** starts a fresh conversation.
+- **Projects**, the third tab: your family projects ([projects.md](projects.md)). Your own, Family and (for grown-ups) Parents, each with its background threads and whether they're working, done or waiting. Tap one to read it, send it more to do, or put it away. *Start a thread* picks the project. Words going to Family or Parents show a Yes card first, because everyone there reads them.
 - **Board**, the second tab: the info board ([dashboard.md](dashboard.md)). Your morning brief (*Write it now*), the weather, FAITH's day cards, your projects (tap the status to move one), your log (*Log it*), news, and for admins uptime and FAITH's server. Bringing projects over from Pondering Orb is on the desktop app.
 
 ## Three layouts
@@ -20,9 +21,9 @@ Pick one in Settings (the ⋮ menu → Voice focus / Voice panel / Voice dashboa
 
 | Layout | For | What's on screen |
 |---|---|---|
-| **Voice focus** | Just talking: a desk, a bedside, when you don't need a screen | FAITH (tap it, to talk), what it heard, its answer, and a Yes for a held change. Every answer is read aloud. |
-| **Voice panel** | A kitchen or hallway screen, like a smart speaker with a display | A big clock, the weather and a few panels: your brief, next up, dinner, shopping, the house. Tap a panel and FAITH tells you about it. A big Talk button. |
-| **Voice dashboard** | Everything | Ask, the Board (projects, log, brief, weather, news) and the Inbox. |
+| **Voice focus** | Just talking: a desk, a bedside, when you don't need a screen | FAITH (tap it, to talk), what it heard, its answer, and a Yes for a held change. Every answer is read aloud. A small *Projects: 1 needs you* button shows when a thread wants you. |
+| **Voice panel** | A kitchen or hallway screen, like a smart speaker with a display | A big clock, the weather and a few panels: your brief, next up, dinner, shopping, the house, projects. Tap a panel and FAITH tells you about it (Projects opens the list). A big Talk button. |
+| **Voice dashboard** | Everything | Ask, the Board (projects, log, brief, weather, news), Projects (the family threads) and the Inbox. |
 
 - In both voice layouts FAITH answers in a few plain sentences, made for reading aloud, and can still use everything you can (your calendar, the house, your notes, the board).
 - They start on a clean screen. The conversation carries on behind it, so "and tomorrow?" still works.
@@ -33,6 +34,15 @@ Pick one in Settings (the ⋮ menu → Voice focus / Voice panel / Voice dashboa
 **What goes wrong:**
 - Nothing is read aloud: FAITH's voice (Argos's text-to-speech) isn't set up, or the computer's sound is off. The answer still shows.
 - A panel is missing: that part isn't set up on FAITH (no meal plan, no shopping list, no weather entity), so there's nothing to show.
+
+## Get the APK
+
+GitHub builds it for you. In the repository, open **Actions → android**, pick the newest green run, and download **faith-android-apk** at the bottom (a zip with `faith-<version>-<commit>.apk`). Open it on the phone and allow installing from that app once.
+
+- It runs on every push that changes `android/`, or from **Run workflow** on that page.
+- A tag like `android-v0.2.0` also makes a GitHub release with the APK attached, easier to find from a phone: **Releases** on the repository's front page.
+- **Installing over an older APK** needs the same signing key. Each run signs with a new debug key unless you give it one: make it once (`keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -validity 10000 -dname "CN=Android Debug"`), then add `base64 -w0 debug.keystore` as the repository secret `ANDROID_DEBUG_KEYSTORE`. Without it, uninstall the old app first (you sign in again).
+- The run also checks the screen snapshots. If a screen changed on purpose, run `./gradlew recordPaparazziDebug` and commit the images; the run's **paparazzi-diffs** shows what changed.
 
 ## Build it
 
@@ -47,7 +57,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Copy it to the phone and open it (allow installing from that app once).
 
 - For a release build, make your own signing key (`keytool -genkey -v -keystore faith.jks -alias faith -keyalg RSA -keysize 4096 -validity 10000`) and sign it with `apksigner`. Keep the key out of git.
-- **See the screens without a phone:** `./gradlew recordPaparazziDebug` draws the emblem, Voice focus (light and dark) and Voice panel into `app/src/test/snapshots/images/`.
+- **See the screens without a phone:** `./gradlew recordPaparazziDebug` draws the emblem, Voice focus (light and dark, and with a project waiting), Voice panel, and the Projects list and a thread into `app/src/test/snapshots/images/`.
 - **Check it against your FAITH** without a phone: `FAITH_URL=http://<faith>:8097 FAITH_PERSON=sam FAITH_PASSWORD=… ./gradlew testDebugUnitTest --tests '*LiveContractTest*'`. It signs in, asks, says No to a held lock, and signs out. Add `FAITH_HA_TOKEN` (the HA integration's FAITH token) to test the inbox, `FAITH_AUDIO=talk.m4a` to test speech-to-text, and `FAITH_TTS=1` to test reading aloud.
 
 ## On the phone
