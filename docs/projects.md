@@ -80,9 +80,15 @@ projects:
 - **Seeing how threads went:** each finished thread adds a `project_thread_end` row to the action log, with its title and status (not what it said). Overseer reads the action log, so it sees those rows too.
 - **"A thread can't start other threads":** ask the project's coordinator, or start the next thread yourself.
 
+## In the apps
+
+- **Desktop and Android:** a Projects tab (list, thread, send more, put away, start one; the Yes card for Family and Parents). Voice focus shows *Projects: 1 needs you*, and Voice panel has a Projects tile.
+- **D.A.S.H:** a Projects tab and a Home card, from `/api/projects/glance` with the device's FAITH token (D.A.S.H's `firmware/README.md`).
+
 ## Not built yet
 
 - Handoffs: a project asking another one a question, answered with that project's own tokens.
 - Projects for the wiki's groups. FAITH has no groups list yet.
-- A Projects tab in the apps, a Home Assistant card (the HA integration's `CARD_PATHS` doesn't allow `/api/projects` yet), a Mattermost command, and the D.A.S.H screen (the glance route is ready for it).
+- A Home Assistant card (the HA integration's `CARD_PATHS` doesn't allow `/api/projects` yet) and a Mattermost command.
+- Starting or answering threads from D.A.S.H. Its Projects screen reads `/api/projects/glance` and is read-only until hold-to-talk and pairing.
 - Handing a thread's work to Hermes Studio's Projects once those have per-person owners. Today a thread can use `studio_start` as its owner's own Studio account.
