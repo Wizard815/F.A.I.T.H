@@ -36,7 +36,9 @@ export type Board = {
 };
 /** Family projects (docs/projects.md): yours, Family, and Parents for grown-ups. */
 export type ThreadStatus = "working" | "done" | "waiting" | "failed";
-export type ProjectThread = { id: string; project_id: string; title: string; brief: string; status: ThreadStatus; resolved: boolean; depth: number; started_by: string; last_text: string; created_at: number; updated_at: number; throwaway?: boolean };
+/** Same names as Hermes Studio's projects: working, needs_you, review (finished, unread), done (read), resolved (put away). */
+export type ThreadStage = "working" | "needs_you" | "review" | "done" | "resolved";
+export type ProjectThread = { id: string; project_id: string; title: string; brief: string; status: ThreadStatus; resolved: boolean; depth: number; started_by: string; last_text: string; created_at: number; updated_at: number; throwaway?: boolean; stage?: ThreadStage; seen_at?: number | null };
 export type FamilyProject = { id: string; owner: string; name: string; instructions: string; created_at: number; updated_at: number; threads: ProjectThread[] };
 export type ThreadView = { thread: { id: string; title: string; status: ThreadStatus; resolved: boolean; project: string; throwaway?: boolean }; messages: { role: string; text: string; at: number }[] };
 /** A change to a project: done, or held for this person's Yes (pending), or for a grown-up's approval (requests). */

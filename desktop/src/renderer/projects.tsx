@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, CheckCircle2, ChevronRight, CircleAlert, EyeOff, FolderKanban, Loader2, NotebookPen, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { Empty, ErrorText, cn } from "@web/ui";
-import type { FamilyProject, ProjectChange, ProjectThread, ThreadStatus, ThreadView } from "../faith";
+import type { FamilyProject, ProjectChange, ProjectThread, ThreadStage, ThreadStatus, ThreadView } from "../faith";
 import { api, msg, Rich } from "./talk";
 
 /** Family projects (docs/projects.md): your own, Family, and Parents for grown-ups.
@@ -18,21 +18,22 @@ export function projectGlance(list: FamilyProject[] | null) {
   const needs = all.filter((t) => t.status === "waiting" || t.status === "failed");
   const working = all.filter((t) => t.status === "working");
   const done = all.filter((t) => t.status === "done");
-  const top = needs[0] ?? working[0] ?? done[0];
-  return { needs: needs.length, working: working.length, done: done.length, top: top ? { title: top.title, project: top.project, status: top.status } : null };
+  const review = all.filter((t) => stageOf(t) === "review");
+  const top = needs[0] ?? review[0] ?? working[0] ?? done[0];
+  return { needs: needs.length, working: working.length, done: done.length, review: review.length, top: top ? { title: top.title, project: top.project, status: top.status, stage: stageOf(top) } : null };
 }
 
 /** Threads the way Hermes Studio's projects group them: what needs you first, put-away ones last. */
-export type ThreadGroup = { key: "needs" | "working" | "done" | "away"; label: string; threads: ProjectThread[] };
+/** A thread's stage, from FAITH (or worked out, from an older FAITH without stages). */
+export const stageOf = (t: ProjectThread): ThreadStage =>
+  t.stage ?? (t.resolved ? "resolved" : t.status === "working" ? "working" : t.status === "done" ? "done" : "needs_you");
+export const STAGE_LABELS: Record<ThreadStage, string> = { needs_you: "Needs you", working: "Working", review: "Ready for review", done: "Done", resolved: "Put away" };
+export type ThreadGroup = { key: ThreadStage; label: string; threads: ProjectThread[] };
 export function threadGroups(threads: ProjectThread[]): ThreadGroup[] {
   const newest = [...threads].sort((a, b) => b.updated_at - a.updated_at);
-  const groups: ThreadGroup[] = [
-    { key: "needs", label: "Needs you", threads: newest.filter((t) => !t.resolved && (t.status === "waiting" || t.status === "failed")) },
-    { key: "working", label: "Working", threads: newest.filter((t) => !t.resolved && t.status === "working") },
-    { key: "done", label: "Done", threads: newest.filter((t) => !t.resolved && t.status === "done") },
-    { key: "away", label: "Put away", threads: newest.filter((t) => t.resolved) },
-  ];
-  return groups.filter((g) => g.threads.length);
+  return (["needs_you", "working", "review", "done", "resolved"] as ThreadStage[])
+    .map((key) => ({ key, label: STAGE_LABELS[key], threads: newest.filter((t) => stageOf(t) === key) }))
+    .filter((g) => g.threads.length);
 }
 
 /** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago". */
@@ -204,7 +205,7 @@ function ThreadRow({ t, open, onOpen }: { t: ProjectThread; open: boolean; onOpe
       <button className={cn("card w-full p-3 text-left hover:bg-surface-2", open && "border-primary", t.resolved && "opacity-80")} aria-current={open ? "true" : undefined} onClick={onOpen}>
         <span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate font-semibold">{t.title}</span>{t.throwaway && <EyeOff size={14} className="text-muted" aria-label="Throwaway" />}<StatusBadge s={t.status} /></span>
         {t.last_text && <span className="mt-1 line-clamp-2 block text-[13px] text-muted">{preview(t.last_text)}</span>}
-        <span className="mt-1 block text-[12px] text-muted">{ago(t.updated_at)}</span>
+        <span className="mt-1 flex gap-2 text-[12px] text-muted">{stageOf(t) === "review" && <span className="font-semibold text-primary">New</span>}{ago(t.updated_at)}</span>
       </button>
     </li>
   );
@@ -213,7 +214,7 @@ function ThreadRow({ t, open, onOpen }: { t: ProjectThread; open: boolean; onOpe
 /** One project in the list: its threads grouped as Needs you, Working, Done, and Put away (folded). */
 function ProjectSection({ p, open, onOpen, onSaved }: { p: FamilyProject; open?: string; onOpen: (thread: string) => void; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
-  const groups = threadGroups(p.threads), needs = groups.find((g) => g.key === "needs")?.threads.length ?? 0;
+  const groups = threadGroups(p.threads), needs = groups.find((g) => g.key === "needs_you")?.threads.length ?? 0;
   return (
     <section aria-label={projectLabel(p)}>
       <h2 className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-muted">
@@ -224,7 +225,7 @@ function ProjectSection({ p, open, onOpen, onSaved }: { p: FamilyProject; open?:
       {editing && <Instructions p={p} onSaved={onSaved} close={() => setEditing(false)} />}
       {!editing && p.instructions && <p className="mb-2 line-clamp-2 text-[12px] text-muted">Every thread knows: {p.instructions}</p>}
       {!groups.length && <Empty>No threads yet.</Empty>}
-      {groups.map((g) => g.key === "away" ? (
+      {groups.map((g) => g.key === "resolved" ? (
         <details key={g.key} className="group mt-2">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-muted"><ChevronRight size={14} className="transition-transform group-open:rotate-90" />{g.label} · {g.threads.length}</summary>
           <ul className="flex flex-col gap-1.5">{g.threads.map((t) => <ThreadRow key={t.id} t={t} open={open === t.id} onOpen={() => onOpen(t.id)} />)}</ul>

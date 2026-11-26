@@ -20,11 +20,24 @@ import type { Caller } from "../scope.js";
 export type Owner = `person:${string}` | "household" | "parents";
 export type Project = { id: string; owner: Owner; name: string; instructions: string; created_at: number; updated_at: number };
 export type ThreadStatus = "working" | "done" | "waiting" | "failed";
+/** Where a thread is in its life, for lists (the same names as Hermes Studio's projects):
+ *  working; needs_you (waiting for a Yes or an approval, or it failed); review (finished,
+ *  nobody has read it yet); done (finished and read); resolved (put away: hidden, can come back). */
+export type ThreadStage = "working" | "needs_you" | "review" | "done" | "resolved";
+export function stageOf(t: { status: ThreadStatus; resolved: boolean; seen_at: number | null }): ThreadStage {
+  if (t.resolved) return "resolved";
+  if (t.status === "working") return "working";
+  if (t.status === "waiting" || t.status === "failed") return "needs_you";
+  return t.seen_at ? "done" : "review";
+}
 export type Thread = {
   id: string; project_id: string; title: string; brief: string; status: ThreadStatus; resolved: boolean; depth: number;
   started_by: string; last_text: string; created_at: number; updated_at: number;
   /** Keeps nothing: read-only tools, no coordinator, no title in the log, deleted when put away or after `throwaway_hours`. */
   throwaway: boolean;
+  /** When someone last read it since it finished (null: not yet, so it's ready for review). */
+  seen_at: number | null;
+  stage: ThreadStage;
 };
 
 export class ProjectError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -60,6 +73,7 @@ export class Projects {
       CREATE INDEX IF NOT EXISTS project_threads_project ON project_threads(project_id, updated_at);
     `);
     try { db.exec("ALTER TABLE project_threads ADD COLUMN throwaway INTEGER NOT NULL DEFAULT 0"); } catch { /* already there */ }
+    try { db.exec("ALTER TABLE project_threads ADD COLUMN seen_at INTEGER"); } catch { /* already there */ }
     // A thread can't be working after a restart: its turn died with the old process.
     db.prepare("UPDATE project_threads SET status = 'failed', last_text = ? WHERE status = 'working'")
       .run("FAITH restarted while this was running. Send it a message to carry on.");
@@ -76,10 +90,15 @@ export class Projects {
     }
     this.db.prepare("DELETE FROM project_threads WHERE id = ?").run(id);
   }
-  /** Throwaway threads past their time go, unless one is still working. */
+  /** Throwaway threads past their time go, unless one is still working. Done threads that
+   *  someone read `auto_resolve_days` ago are put away (never ones that need you or wait for review). */
   sweep(now = Date.now()) {
-    const cutoff = now - this.cfg().projects.throwaway_hours * 3600_000;
+    const cfg = this.cfg().projects;
+    const cutoff = now - cfg.throwaway_hours * 3600_000;
     for (const r of this.db.prepare("SELECT id FROM project_threads WHERE throwaway = 1 AND status != 'working' AND updated_at < ?").all(cutoff) as any[]) this.forget(r.id);
+    if (cfg.auto_resolve_days > 0)
+      this.db.prepare("UPDATE project_threads SET resolved = 1 WHERE resolved = 0 AND throwaway = 0 AND status = 'done' AND seen_at IS NOT NULL AND seen_at < ? AND updated_at < ?")
+        .run(now - cfg.auto_resolve_days * 86400_000, now - cfg.auto_resolve_days * 86400_000);
   }
 
   /** Every owner the family has: one per person, Family and Parents. */
@@ -125,7 +144,8 @@ export class Projects {
   }
 
   private row = (r: any): Thread => ({ id: r.id, project_id: r.project_id, title: r.title, brief: r.brief, status: r.status, resolved: !!r.resolved, depth: r.depth,
-    started_by: r.started_by, last_text: r.last_text, created_at: r.created_at, updated_at: r.updated_at, throwaway: !!r.throwaway });
+    started_by: r.started_by, last_text: r.last_text, created_at: r.created_at, updated_at: r.updated_at, throwaway: !!r.throwaway,
+    seen_at: r.seen_at ?? null, stage: stageOf({ status: r.status, resolved: !!r.resolved, seen_at: r.seen_at ?? null }) });
   threads(projectId: string, opts: { resolved?: boolean } = {}): Thread[] {
     return (this.db.prepare(`SELECT * FROM project_threads WHERE project_id = ? ${opts.resolved ? "" : "AND resolved = 0"} ORDER BY updated_at DESC LIMIT 50`).all(projectId) as any[]).map(this.row);
   }
@@ -139,10 +159,15 @@ export class Projects {
   }
   /** A thread's latest messages (its background conversation). */
   messages(c: Caller, id: string, limit = 15) {
-    const t = this.thread(c, id);
+    let t = this.thread(c, id);
+    // A person (or the family screen) reading a finished thread has reviewed it. Background work reading doesn't count.
+    if (!c.work && t.status !== "working" && !t.seen_at) {
+      this.db.prepare("UPDATE project_threads SET seen_at = ? WHERE id = ?").run(Date.now(), t.id);
+      t = this.thread(c, id);
+    }
     const conv = (this.db.prepare("SELECT conversation_id FROM project_threads WHERE id = ?").get(t.id) as any)?.conversation_id;
     const rows = conv ? (this.db.prepare("SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?").all(conv, limit) as any[]).reverse() : [];
-    return { thread: { id: t.id, title: t.title, status: t.status, resolved: t.resolved, project: t.project.name, throwaway: t.throwaway }, messages: rows.map((m) => ({ role: m.role, text: String(m.content), at: m.created_at })) };
+    return { thread: { id: t.id, title: t.title, status: t.status, stage: t.stage, resolved: t.resolved, project: t.project.name, throwaway: t.throwaway }, messages: rows.map((m) => ({ role: m.role, text: String(m.content), at: m.created_at })) };
   }
 
   /** The view a project's background work runs in: its owner's, never the person who asked. */
@@ -193,7 +218,7 @@ export class Projects {
     const say = String(text ?? "").trim();
     if (!say) throw new ProjectError(400, "Say what the thread should do next.");
     if (t.status === "working") throw new ProjectError(409, `"${t.title}" is still working. Wait for it to finish.`);
-    this.db.prepare("UPDATE project_threads SET status = 'working', resolved = 0, updated_at = ? WHERE id = ?").run(Date.now(), t.id);
+    this.db.prepare("UPDATE project_threads SET status = 'working', resolved = 0, seen_at = NULL, updated_at = ? WHERE id = ?").run(Date.now(), t.id);
     const from = ownOwner(c) === t.project.owner && !c.work ? "" : `(From ${this.whoLabel(c)}.) `;
     this.track(this.runThread(t.project, { ...t, status: "working" }, from + say));
     return this.thread(c, t.id);
@@ -247,7 +272,8 @@ export class Projects {
       status = "failed"; last = `That didn't work: ${e?.message || e}`;
       this.log.warn({ project: p.id, thread: t.id, err: e?.message }, "project thread failed");
     }
-    this.db.prepare("UPDATE project_threads SET status = ?, last_text = ?, updated_at = ? WHERE id = ?").run(status, last.slice(0, 4000), Date.now(), t.id);
+    // A new result hasn't been read yet: it's ready for review.
+    this.db.prepare("UPDATE project_threads SET status = ?, last_text = ?, seen_at = NULL, updated_at = ? WHERE id = ?").run(status, last.slice(0, 4000), Date.now(), t.id);
     // How it went goes in the action log (which Overseer reads): the title and status, not what it said.
     // A throwaway thread's title stays out of it too: it says only that one ran.
     this.agent.audit(caller, "project_thread_end", t.throwaway ? `${p.name}: a throwaway thread (${status})` : `${p.name}: ${t.title} (${status})`, status !== "failed");
@@ -283,9 +309,10 @@ export class Projects {
     return {
       projects: this.list(c).slice(0, 8).map((p) => ({
         id: p.id, name: clip(p.name, 32),
-        needs_you: p.threads.filter((t) => t.status === "waiting" || t.status === "failed").length,
-        working: p.threads.filter((t) => t.status === "working").length,
-        threads: p.threads.slice(0, 5).map((t) => ({ id: t.id, title: clip(t.title, 32), status: t.status, last: clip(t.last_text.replace(/\s+/g, " "), 60), ...(t.throwaway ? { throwaway: true } : {}) })),
+        needs_you: p.threads.filter((t) => t.stage === "needs_you").length,
+        working: p.threads.filter((t) => t.stage === "working").length,
+        review: p.threads.filter((t) => t.stage === "review").length,
+        threads: p.threads.slice(0, 5).map((t) => ({ id: t.id, title: clip(t.title, 32), status: t.status, stage: t.stage, last: clip(t.last_text.replace(/\s+/g, " "), 60), ...(t.throwaway ? { throwaway: true } : {}) })),
       })),
     };
   }

@@ -106,5 +106,5 @@ test("projects: settings are checked", () => {
   const base = { people: [{ id: "sam", name: "Sam", role: "adult" }] };
   assert.throws(() => parseConfig({ ...base, projects: { max_working: 0 } }, {}), /max_working/);
   assert.throws(() => parseConfig({ ...base, projects: { max_depth: 9 } }, {}), /max_depth/);
-  assert.deepEqual(parseConfig(base, {}).projects, { enabled: true, max_working: 3, wake_coordinator: true, max_depth: 2, throwaway_hours: 24 });
+  assert.deepEqual(parseConfig(base, {}).projects, { enabled: true, max_working: 3, wake_coordinator: true, max_depth: 2, throwaway_hours: 24, auto_resolve_days: 3 });
 });

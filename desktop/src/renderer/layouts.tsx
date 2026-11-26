@@ -9,8 +9,8 @@ import { projectGlance, STATUS_WORDS, useProjects } from "./projects";
 
 /** "1 thread needs you" / "2 working": a few words about projects, or null with nothing to say. */
 export function projectWords(g: ReturnType<typeof projectGlance>) {
-  if (!g || (!g.needs && !g.working)) return null;
-  const parts = [g.needs && `${g.needs} need${g.needs > 1 ? "" : "s"} you`, g.working && `${g.working} working`].filter(Boolean);
+  if (!g || (!g.needs && !g.working && !g.review)) return null;
+  const parts = [g.needs && `${g.needs} need${g.needs > 1 ? "" : "s"} you`, g.review && `${g.review} to review`, g.working && `${g.working} working`].filter(Boolean);
   return parts.join(" · ");
 }
 
@@ -217,7 +217,7 @@ export function Panel({ st, onSettings }: { st: State; onSettings: () => void })
           {g.house && <Tile icon={<Home size={16} />} title="The house" ask={ask("How's the house?")}>{g.house.length ? g.house.map((h) => <span key={h} className="block text-[15px]">{h}</span>) : "All quiet"}</Tile>}
           {pg && (pg.needs || pg.working || pg.top) ? <Tile wide icon={<FolderKanban size={16} />} title="Projects" ask={ask("How are my projects going? Start with anything that needs me.")}>
             {projectWords(pg) ?? "All done"}
-            {pg.top && <span className="block truncate text-[14px] font-normal text-muted">{pg.top.project}: {pg.top.title} ({STATUS_WORDS[pg.top.status].toLowerCase()})</span>}
+            {pg.top && <span className="block truncate text-[14px] font-normal text-muted">{pg.top.project}: {pg.top.title} ({(pg.top.stage === "review" ? "ready for review" : STATUS_WORDS[pg.top.status]).toLowerCase()})</span>}
           </Tile> : null}
           {g.approvals > 0 && <Tile wide icon={<Check size={16} />} title="Waiting for a grown-up" ask={ask("What's waiting for approval?")}>{g.approvals} request{g.approvals > 1 ? "s" : ""} to decide</Tile>}
           {!b && !err && <p className="col-span-2 text-muted">Loading…</p>}

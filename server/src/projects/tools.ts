@@ -32,11 +32,11 @@ export class ProjectTools implements Connector {
       } catch { return null; }
     };
 
-    add({ name: "projects_list", write: false, description: "The family projects you can see and their threads: what's working, done, waiting or failed, with each thread's last line. Start here for thread ids.",
+    add({ name: "projects_list", write: false, description: "The family projects you can see and their threads, each with its stage (working, needs_you, review: finished and not read yet, done: read) and last line. Start here for thread ids.",
       parameters: { type: "object", properties: { resolved: { type: "boolean", description: "Include resolved threads too." } }, additionalProperties: false },
       run: guard((a: any) => ({ projects: P.list(c, { resolved: !!a.resolved }).map((p) => ({ project: label(p.owner), name: p.name,
-        threads: p.threads.map((t) => ({ id: t.id, title: t.title, status: t.status, resolved: t.resolved, last: t.last_text.slice(0, 300), ...(t.throwaway ? { throwaway: true } : {}) })) })) })) });
-    add({ name: "project_thread_read", write: false, description: "The latest messages of one project thread (id from projects_list).",
+        threads: p.threads.map((t) => ({ id: t.id, title: t.title, status: t.status, stage: t.stage, resolved: t.resolved, last: t.last_text.slice(0, 300), ...(t.throwaway ? { throwaway: true } : {}) })) })) })) });
+    add({ name: "project_thread_read", write: false, description: "The latest messages of one project thread (id from projects_list). Reading a finished thread marks it reviewed.",
       parameters: { type: "object", properties: { thread: { type: "string" } }, required: ["thread"], additionalProperties: false },
       run: guard((a: any) => P.messages(c, String(a.thread))) });
     add({ name: "project_thread_start", write: true, explain: (a) => `start a thread in ${a?.project || "my"} project: ${a?.title || String(a?.brief || "").slice(0, 60)}`,
