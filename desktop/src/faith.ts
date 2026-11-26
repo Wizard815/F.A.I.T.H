@@ -34,6 +34,13 @@ export type Board = {
   system: { name: string; cores: number; load: number; memory: number; memory_gib: number; disks: { mount: string; pct: number }[]; uptime_days: number; sources: { label: string; ok: boolean | null; error?: string }[] } | { error: string } | null;
   cards: any[];
 };
+/** Family projects (docs/projects.md): yours, Family, and Parents for grown-ups. */
+export type ThreadStatus = "working" | "done" | "waiting" | "failed";
+export type ProjectThread = { id: string; project_id: string; title: string; brief: string; status: ThreadStatus; resolved: boolean; depth: number; started_by: string; last_text: string; created_at: number; updated_at: number };
+export type FamilyProject = { id: string; owner: string; name: string; instructions: string; created_at: number; updated_at: number; threads: ProjectThread[] };
+export type ThreadView = { thread: { id: string; title: string; status: ThreadStatus; resolved: boolean; project: string }; messages: { role: string; text: string; at: number }[] };
+/** A change to a project: done, or held for this person's Yes (pending), or for a grown-up's approval (requests). */
+export type ProjectChange = { ok?: boolean; thread?: string; pending: { id: string; summary: string }[]; requests: { id: string; summary: string }[] };
 export type InboxItem = { id: number; at: number; kind: "message" | "approval"; title: string; text: string; ref: string | null };
 
 /** "http://faith:8097/" or "faith:8097" -> "http://faith:8097". */
@@ -113,6 +120,11 @@ export class Faith {
   addProject(name: string, status?: string, next?: string) { return this.json("POST", "/api/board/projects", { name, ...(status ? { status } : {}), ...(next ? { next } : {}) }); }
   updateProject(name: string, patch: { status?: string; next?: string; name?: string; starred?: boolean; archived?: boolean }) { return this.json("PATCH", `/api/board/projects/${encodeURIComponent(name)}`, patch); }
   /** Bring projects and the log over from this person's Pondering Orb (FAITH uses their own Orb token). */
+  projects(resolved = false) { return this.json<{ projects: FamilyProject[] }>("GET", `/api/projects${resolved ? "?resolved=1" : ""}`); }
+  projectThread(project: string, thread: string) { return this.json<ThreadView>("GET", `/api/projects/${encodeURIComponent(project)}/threads/${encodeURIComponent(thread)}`); }
+  startThread(project: string, brief: string, title?: string) { return this.json<ProjectChange>("POST", `/api/projects/${encodeURIComponent(project)}/threads`, { brief, ...(title ? { title } : {}) }); }
+  messageThread(project: string, thread: string, text: string) { return this.json<ProjectChange>("POST", `/api/projects/${encodeURIComponent(project)}/threads/${encodeURIComponent(thread)}/message`, { text }); }
+  resolveThread(project: string, thread: string, resolved: boolean) { return this.json<ProjectChange>("PUT", `/api/projects/${encodeURIComponent(project)}/threads/${encodeURIComponent(thread)}/resolved`, { resolved }); }
   importOrb() { return this.json<{ projects: number; logs: number; skipped: string[] }>("POST", "/api/board/import", { from: "orb" }, 60_000); }
   approvals() { return this.json<{ can_approve: boolean; requests: any[] }>("GET", "/api/approvals"); }
   decide(id: string, approve: boolean) { return this.json("POST", `/api/approvals/${encodeURIComponent(id)}`, { approve }); }

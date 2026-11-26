@@ -141,6 +141,39 @@ test("the board: the day cards, the weather, a project and a log entry", async (
   await page.emulateMedia({ colorScheme: "light" });
 });
 
+test("projects: start a background thread, see it finish, and a Family thread waits for a Yes", async () => {
+  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("navigation", { name: "Projects" }).getByText("Mine").waitFor();
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Title").fill("Dinner ideas");
+  await page.getByLabel("What should FAITH do?").fill("Find three dinners everyone will eat this week.");
+  await shot("6-projects-new");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).waitFor();
+  await A.projects.idle();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByText("fish tacos").waitFor({ timeout: 15_000 });
+  assert.equal(A.projects.threads("person-sam")[0].status, "done");
+  await shot("6-projects-thread");
+  // Family: everyone reads it, so the exact words wait for Sam's Yes. (A narrow window shows one pane: go back first.)
+  await page.getByRole("button", { name: "All projects" }).click();
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Project", { exact: true }).selectOption("family");
+  await page.getByText("You'll be asked to say Yes first.").waitFor();
+  await page.getByLabel("What should FAITH do?").fill("Plan Saturday afternoon for everyone.");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByText("Plan Saturday afternoon for everyone.", { exact: false }).waitFor();
+  assert.deepEqual(A.projects.threads("family"), [], "nothing in Family before the Yes");
+  await shot("6-projects-yes");
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByRole("button", { name: "Yes", exact: true }).click();
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByText("Answered").waitFor();
+  await A.projects.idle();
+  assert.equal(A.projects.threads("family").length, 1);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+  await shot("6-projects-dark");
+  await page.emulateMedia({ colorScheme: "light" });
+});
+
 test("the page has no way to Node or the key", async () => {
   const r: any = await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process, bridge: Object.keys((window as any).faith).sort() }));
   assert.equal(r.require, "undefined");
@@ -189,6 +222,7 @@ test("voice panel: a clock, the weather and a few panels; a tap asks FAITH", asy
   assert.match(await page.getByRole("button", { name: /^Weather: 44°F, rainy/ }).getAttribute("aria-label"), /Ask FAITH about the weather/);
   await page.getByRole("button", { name: /The house/ }).waitFor();
   assert.match(await page.getByRole("button", { name: /The house/ }).innerText(), /Front door: locked/);
+  assert.match(await page.getByRole("button", { name: /^Projects/ }).innerText(), /Dinner ideas|Saturday/, "the Projects panel names a thread");
   await shot("8-panel");
   await page.getByRole("button", { name: /The house/ }).click();
   await page.getByText("“How's the house?”").waitFor();

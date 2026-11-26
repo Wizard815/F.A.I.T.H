@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 // Only these calls reach the main process; the page gets no Node, no Electron, no key.
 const CHANNELS = ["state", "signIn", "signOut", "setSettings", "ask", "stop", "newTopic", "latest", "confirm", "approvals", "decide",
-  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb"];
+  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb", "projects", "projectThread", "startThread", "messageThread", "resolveThread"];
 
 const call = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(`faith:${ch}`, ...args);
 const listen = (ch: string) => (cb: (...a: any[]) => void) => {

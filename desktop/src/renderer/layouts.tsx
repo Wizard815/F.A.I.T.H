@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { CalendarClock, Check, CloudSun, Home, Keyboard, Mic, RotateCcw, Settings, ShoppingBasket, Sparkles, Square, UtensilsCrossed, X } from "lucide-react";
+import { CalendarClock, Check, CloudSun, FolderKanban, Home, Keyboard, Mic, RotateCcw, Settings, ShoppingBasket, Sparkles, Square, UtensilsCrossed, X } from "lucide-react";
 import { Emblem } from "@web/emblem/Emblem";
 import { cn, useNow } from "@web/ui";
 import type { Board as BoardData } from "../faith";
 import type { State } from "../shared";
 import { api, msg, Photos, Rich, useDark, useTalk, type Line } from "./talk";
+import { projectGlance, STATUS_WORDS, useProjects } from "./projects";
+
+/** "1 thread needs you" / "2 working": a few words about projects, or null with nothing to say. */
+export function projectWords(g: ReturnType<typeof projectGlance>) {
+  if (!g || (!g.needs && !g.working)) return null;
+  const parts = [g.needs && `${g.needs} need${g.needs > 1 ? "" : "s"} you`, g.working && `${g.working} working`].filter(Boolean);
+  return parts.join(" · ");
+}
 
 /** The last thing said each way, and any change still waiting for a Yes: what the voice layouts show. */
 function lastExchange(lines: Line[]) {
@@ -74,6 +82,7 @@ export function Focus({ st, onSettings }: { st: State; onSettings: () => void })
   const [typing, setTyping] = useState(false);
   useTalkKeys(t.talk, t.cancel);
   const { said, reply, held, notes } = lastExchange(t.lines);
+  const projects = projectWords(projectGlance(useProjects().list));
   const size = Math.min(320, Math.round(Math.min(window.innerWidth * 0.7, window.innerHeight * 0.42)));
   return (
     <main className="relative flex h-full flex-col items-center gap-4 overflow-auto px-6 pb-5 pt-4 text-center" aria-label="FAITH, voice focus">
@@ -86,6 +95,11 @@ export function Focus({ st, onSettings }: { st: State; onSettings: () => void })
         <Emblem size={size} state={t.state} level={t.level} tone={dark ? "dark" : "light"} />
       </button>
       <p className="text-[14px] font-medium text-muted" aria-hidden="true">{hint(t)}</p>
+      {projects && !said && (
+        <button className="btn-soft min-h-[44px] rounded-full text-[14px]" onClick={() => void t.ask("How are my projects going? Start with anything that needs me.")}>
+          <FolderKanban size={15} />Projects: {projects}
+        </button>
+      )}
       <section className="flex w-full max-w-xl flex-col items-center gap-3" aria-live="polite">
         {said && <p className="text-[15px] italic text-muted"><span className="sr-only">You said: </span>“{said.text}”</p>}
         {reply && (reply.busy && !reply.text
@@ -154,6 +168,7 @@ export function Panel({ st, onSettings }: { st: State; onSettings: () => void })
   useEffect(() => { if (!t.busy) void load(); }, [t.busy, load]);   // an answer may have changed something
   useTalkKeys(t.talk, t.cancel);
   const g = glance(b, now), { said, reply, held, notes } = lastExchange(t.lines);
+  const pg = projectGlance(useProjects().list);
   const showing = !!(said || held.length);
   // Back to the panels after half a minute of quiet (nothing waiting for a Yes).
   useEffect(() => {
@@ -200,6 +215,10 @@ export function Panel({ st, onSettings }: { st: State; onSettings: () => void })
           {g.dinner !== undefined && <Tile icon={<UtensilsCrossed size={16} />} title="Dinner" ask={ask("What's for dinner tonight?")}>{g.dinner ?? "Not planned yet"}</Tile>}
           {g.shopping && <Tile icon={<ShoppingBasket size={16} />} title="Shopping" ask={ask("What's on the shopping list?")}>{g.shopping.count ? `${g.shopping.count} item${g.shopping.count > 1 ? "s" : ""}` : "Nothing on the list"}{g.shopping.first.length > 0 && <span className="block truncate text-[14px] font-normal text-muted">{g.shopping.first.join(", ")}</span>}</Tile>}
           {g.house && <Tile icon={<Home size={16} />} title="The house" ask={ask("How's the house?")}>{g.house.length ? g.house.map((h) => <span key={h} className="block text-[15px]">{h}</span>) : "All quiet"}</Tile>}
+          {pg && (pg.needs || pg.working || pg.top) ? <Tile wide icon={<FolderKanban size={16} />} title="Projects" ask={ask("How are my projects going? Start with anything that needs me.")}>
+            {projectWords(pg) ?? "All done"}
+            {pg.top && <span className="block truncate text-[14px] font-normal text-muted">{pg.top.project}: {pg.top.title} ({STATUS_WORDS[pg.top.status].toLowerCase()})</span>}
+          </Tile> : null}
           {g.approvals > 0 && <Tile wide icon={<Check size={16} />} title="Waiting for a grown-up" ask={ask("What's waiting for approval?")}>{g.approvals} request{g.approvals > 1 ? "s" : ""} to decide</Tile>}
           {!b && !err && <p className="col-span-2 text-muted">Loading…</p>}
         </section>
