@@ -253,3 +253,4 @@ dashboard:
 #   wake_coordinator: true  # a finished thread gets a coordinator turn that reports back
 #   max_depth: 2            # follow-up threads a chain of coordinator turns may start
 #   throwaway_hours: 24     # throwaway threads are deleted this long after they last changed
+#   auto_resolve_days: 3    # read, finished threads are put away after this many quiet days (0 off)

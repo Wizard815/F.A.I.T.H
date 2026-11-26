@@ -21,7 +21,7 @@ export class ProjectTools implements Connector {
     const label = (o: string) => (o.startsWith("person:") ? "mine" : o === "household" ? "family" : "parents");
     const names = visibleOwners(c).map(label);
     const here = c.work?.project;
-    const project = { type: "string", enum: names, description: here ? "Leave out for this project." : "mine (your own), family, or parents." };
+    const project = { type: "string", enum: names, description: here ? "Leave out for this project." : "mine (your own; the default), family (everyone sees it), or parents." };
     // Words a person sends into a project others read (Family, Parents) are shown to them first:
     // the model may have put something private in a brief, and the code doesn't let that go out alone.
     const shared = (a: any, thread?: string) => {
@@ -40,7 +40,7 @@ export class ProjectTools implements Connector {
       parameters: { type: "object", properties: { thread: { type: "string" } }, required: ["thread"], additionalProperties: false },
       run: guard((a: any) => P.messages(c, String(a.thread))) });
     add({ name: "project_thread_start", write: true, explain: (a) => `start a thread in ${a?.project || "my"} project: ${a?.title || String(a?.brief || "").slice(0, 60)}`,
-      description: "Start a background thread in a family project. It works on the job with that project's own tools and reports back when it's done (to the person, or the family or parents chat). Write the whole job in brief: the thread doesn't see this conversation.",
+      description: "Start a background thread in one of your projects. Use your own project (mine, the default) unless the job is for the whole family or the parents. It works on the job with that project's own tools and reports back when it's done (to the person, or the family or parents chat). Write the whole job in brief: the thread doesn't see this conversation.",
       parameters: { type: "object", properties: { project, title: { type: "string", description: "A few words." }, brief: { type: "string", description: "The whole job, in plain words." },
         throwaway: { type: "boolean", description: "Only when the person asks for a throwaway, private or incognito thread, in their own project: it can look things up but not change anything, and it's deleted when put away or after a day." } }, required: ["brief"], additionalProperties: false },
       redact: (a) => (a?.throwaway === true ? JSON.stringify({ project: a.project ?? "mine", throwaway: true }) : null),
