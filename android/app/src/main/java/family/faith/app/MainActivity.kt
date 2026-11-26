@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private val chat: ChatModel by viewModels()
     private val board: BoardModel by viewModels()
+    private val projects: ProjectsModel by viewModels()
     private var pendingIntent by mutableStateOf<Intent?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +61,7 @@ class MainActivity : ComponentActivity() {
         pendingIntent = intent
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        setContent { FaithTheme { Root(chat, board, pendingIntent) { pendingIntent = null } } }
+        setContent { FaithTheme { Root(chat, board, projects, pendingIntent) { pendingIntent = null } } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); pendingIntent = intent }
     override fun onStart() { super.onStart(); chat.startInbox() }
@@ -81,7 +82,7 @@ fun FaithTheme(content: @Composable () -> Unit) {
 val Serif = FontFamily.Serif
 
 @Composable
-fun Root(chat: ChatModel, board: BoardModel, intent: Intent?, consumed: () -> Unit) {
+fun Root(chat: ChatModel, board: BoardModel, projects: ProjectsModel, intent: Intent?, consumed: () -> Unit) {
     var signedIn by remember { mutableStateOf(chat.store.signedIn) }
     var tab by remember { mutableStateOf(0) }
     var layout by remember { mutableStateOf(chat.store.layout) }
@@ -98,18 +99,19 @@ fun Root(chat: ChatModel, board: BoardModel, intent: Intent?, consumed: () -> Un
                 scope.launch { withContext(Dispatchers.IO) { try { api.removeClient(name) } catch (_: Exception) { } }; chat.store.signOut(); chat.lines.clear(); board.board.value = null; signedIn = false }
                 Unit
             }
-            if (layout == Layouts.FOCUS) FocusScreen(chat, changed, out) else PanelScreen(chat, board, changed, out)
+            if (layout == Layouts.FOCUS) FocusScreen(chat, changed, out, projects) else PanelScreen(chat, board, changed, out, projects)
         }
         else Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-            // Two views: Ask (the helper) and Board (the info board, docs/dashboard.md).
+            // Three views: Ask (the helper), Board (the info board, docs/dashboard.md) and Projects (docs/projects.md).
             TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
-                listOf("Ask", "Board").forEachIndexed { i, label ->
+                listOf("Ask", "Board", "Projects").forEachIndexed { i, label ->
                     Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.heightIn(min = 48.dp), text = { Text(label, fontSize = 16.sp) })
                 }
             }
             Box(Modifier.weight(1f)) {
                 if (tab == 0) Chat(chat, intent, consumed, changed) { chat.store.signOut(); chat.lines.clear(); board.board.value = null; signedIn = false }
-                else BoardScreen(board)
+                else if (tab == 1) BoardScreen(board)
+                else ProjectsScreen(projects)
             }
         }
     }

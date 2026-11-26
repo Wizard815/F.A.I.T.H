@@ -106,6 +106,27 @@ class ScreensTest {
               {"id":"meals","title":"Meals","kind":"meals","items":[{"title":"Fish tacos","label":"dinner"}]},
               {"id":"shopping","title":"Shopping","kind":"checklist","items":[{"title":"Tortillas"},{"title":"Limes"},{"title":"Coriander"}]},
               {"id":"home","title":"Home","kind":"entities","entities":[{"entity_id":"lock.front_door","name":"Front door","state":"locked"},{"entity_id":"light.kitchen","name":"Kitchen lights","state":"on"}]}]}"""))
-        paparazzi.snapshot { Screen { PanelScreen(c, b, {}, {}) } }
+        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { PanelScreen(c, b, {}, {}, p) } }
+    }
+
+    @Test fun projects() {
+        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { ProjectsScreen(p) } }
+    }
+
+    @Test fun projectsThread() {
+        val p = ProjectsModel(app()).apply {
+            list.value = ProjectsJson.projects(ProjectsTest().sample)
+            open.value = "person-sam" to "t1"
+            messages.value = listOf(ThreadMessage(false, "Find three dinners"), ThreadMessage(true, "Tonight is **fish tacos**. Tortillas and limes are on the list."))
+        }
+        paparazzi.snapshot { Screen { ProjectsScreen(p) } }
+    }
+
+    @Test fun voiceFocusProjects() {
+        val c = chat().apply { lines.clear() }
+        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { FocusScreen(c, {}, {}, p) } }
     }
 }
