@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, CheckCircle2, CircleAlert, FolderKanban, Loader2, Plus, RotateCcw, Send, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, CircleAlert, EyeOff, FolderKanban, Loader2, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { Empty, ErrorText, cn } from "@web/ui";
 import type { FamilyProject, ProjectChange, ProjectThread, ThreadStatus, ThreadView } from "../faith";
 import { api, msg, Rich } from "./talk";
@@ -42,6 +42,9 @@ export function useProjects() {
   return { list, err, load };
 }
 
+/** Marks a throwaway thread, in words. */
+export const ThrowawayBadge = () => <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-[12px] font-medium text-muted"><EyeOff size={13} />Throwaway</span>;
+
 export function StatusBadge({ s }: { s: ThreadStatus }) {
   const icon = s === "working" ? <Loader2 size={13} className="animate-spin" /> : s === "done" ? <CheckCircle2 size={13} /> : <CircleAlert size={13} />;
   return <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium", s === "done" ? "bg-surface-2 text-muted" : s === "working" ? "bg-primary-soft" : "bg-danger/15 text-danger")}>{icon}{STATUS_WORDS[s]}</span>;
@@ -72,11 +75,12 @@ function Held({ change, onDone }: { change: ProjectChange; onDone: (said: string
 
 function NewThread({ projects, onStarted }: { projects: FamilyProject[]; onStarted: (c: ProjectChange, project: string) => void }) {
   const [project, setProject] = useState(projects[0]?.id ?? ""), [title, setTitle] = useState(""), [brief, setBrief] = useState("");
-  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [throwaway, setThrowaway] = useState(false);
   const shared = projects.find((p) => p.id === project && !p.owner.startsWith("person:"));
+  const away = throwaway && !shared;
   const go = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr("");
-    try { onStarted(await api.startThread(project, brief, title || undefined), project); setTitle(""); setBrief(""); } catch (x) { setErr(msg(x)); } finally { setBusy(false); }
+    try { onStarted(await api.startThread(project, brief, title || undefined, away), project); setTitle(""); setBrief(""); setThrowaway(false); } catch (x) { setErr(msg(x)); } finally { setBusy(false); }
   };
   return (
     <form className="card flex flex-col gap-3 p-4" onSubmit={go} aria-label="Start a thread">
@@ -93,7 +97,13 @@ function NewThread({ projects, onStarted }: { projects: FamilyProject[]; onStart
         <textarea className="field min-h-[88px] py-2.5" value={brief} onChange={(e) => setBrief(e.target.value)} required maxLength={4000}
           placeholder="Find three dinners everyone will eat this week, using what's in the pantry." />
       </label>
-      {shared && <p className="text-[13px] text-muted">Everyone who can see {shared.name} will read this. You'll be asked to say Yes first.</p>}
+      {shared ? <p className="text-[13px] text-muted">Everyone who can see {shared.name} will read this. You'll be asked to say Yes first.</p> : (
+        <label className="flex min-h-[44px] cursor-pointer items-start gap-3 text-[14px]">
+          <input type="checkbox" className="mt-1 h-5 w-5 accent-[rgb(var(--primary))]" checked={throwaway} onChange={(e) => setThrowaway(e.target.checked)} />
+          <span><span className="font-semibold">Throwaway</span>
+            <span className="block text-[13px] text-muted">Keeps nothing. It only looks things up, nobody is told what it said, and it's deleted when you put it away or after a day.</span></span>
+        </label>
+      )}
       {err && <ErrorText>{err}</ErrorText>}
       <button className="btn-primary self-start" disabled={busy || !brief.trim()}><Plus size={16} />{busy ? "Starting…" : "Start"}</button>
     </form>
@@ -110,13 +120,17 @@ function ThreadPane({ project, thread, onChanged }: { project: string; thread: P
     try { const c = await api.messageThread(project, thread.id, text); setText(""); setChange(c); onChanged(); } catch (x) { setErr(msg(x)); }
   };
   const resolve = async () => { try { await api.resolveThread(project, thread.id, !thread.resolved); onChanged(); } catch (x) { setErr(msg(x)); } };
+  const away = !!thread.throwaway;
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3" aria-label={`Thread: ${thread.title}`}>
       <header className="flex flex-wrap items-center gap-2">
         <h2 className="font-serif text-[20px] font-semibold">{thread.title}</h2>
         <StatusBadge s={thread.status} />
-        <button className="btn-ghost ml-auto min-h-[44px] text-[13px]" onClick={() => void resolve()}>{thread.resolved ? <><RotateCcw size={14} />Bring back</> : <><Check size={14} />Put away</>}</button>
+        {away && <ThrowawayBadge />}
+        <button className="btn-ghost ml-auto min-h-[44px] text-[13px]" onClick={() => void resolve()} disabled={away && thread.status === "working"}>
+          {away ? <><Trash2 size={14} />Delete</> : thread.resolved ? <><RotateCcw size={14} />Bring back</> : <><Check size={14} />Put away</>}</button>
       </header>
+      {away && <p className="text-[13px] text-muted">A throwaway thread: it only looks things up and keeps nothing. Delete it when you're done, or it goes by itself after a day.</p>}
       {err && <ErrorText>{err}</ErrorText>}
       <ol className="flex flex-col gap-3 overflow-auto" aria-live="polite">
         {v?.messages.map((m, i) => (
@@ -161,7 +175,7 @@ export function Projects() {
                   <li key={t.id}>
                     <button className={cn("card w-full p-3 text-left hover:bg-surface-2", open?.thread === t.id && "border-primary")} aria-current={open?.thread === t.id ? "true" : undefined}
                       onClick={() => { setOpen({ project: p.id, thread: t.id }); setStarting(false); }}>
-                      <span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate font-semibold">{t.title}</span><StatusBadge s={t.status} /></span>
+                      <span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate font-semibold">{t.title}</span>{t.throwaway && <EyeOff size={14} className="text-muted" aria-label="Throwaway" />}<StatusBadge s={t.status} /></span>
                       {t.last_text && <span className="mt-1 line-clamp-2 block text-[13px] text-muted">{preview(t.last_text)}</span>}
                     </button>
                   </li>

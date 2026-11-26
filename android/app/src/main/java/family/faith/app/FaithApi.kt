@@ -148,9 +148,11 @@ class FaithApi(baseUrl: String, private val token: String?) {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
     fun projects(): List<FamilyProject> = ProjectsJson.projects(json("/api/projects"))
     fun projectThread(project: String, thread: String): List<ThreadMessage> = ProjectsJson.messages(json("/api/projects/${enc(project)}/threads/${enc(thread)}"))
-    fun startThread(project: String, brief: String, title: String?): ProjectChange {
+    /** `throwaway`: a private thread that keeps nothing, in your own project only. */
+    fun startThread(project: String, brief: String, title: String?, throwaway: Boolean = false): ProjectChange {
         val b = JSONObject().put("brief", brief)
         if (!title.isNullOrBlank()) b.put("title", title)
+        if (throwaway) b.put("throwaway", true)
         return ProjectsJson.change(json("/api/projects/${enc(project)}/threads", "POST", b))
     }
     fun messageThread(project: String, thread: String, text: String): ProjectChange =

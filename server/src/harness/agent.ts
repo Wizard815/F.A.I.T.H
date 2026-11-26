@@ -151,9 +151,9 @@ export class Agent {
           if (t.media) seen.media = true;
           const pics = t.show?.(args, out);
           if (pics?.length) emit({ type: "photos", items: pics });
-          if (t.write) this.audit(c, t.name, JSON.stringify(args ?? {}), !(out && typeof out === "object" && "error" in (out as any)));
+          if (t.write) this.audit(c, t.name, t.redact?.(args) ?? JSON.stringify(args ?? {}), !(out && typeof out === "object" && "error" in (out as any)));
           return out;
-        } catch (e: any) { if (t.write) this.audit(c, t.name, `${JSON.stringify(args ?? {})} -> ${e.message}`, false); throw e; }
+        } catch (e: any) { if (t.write) this.audit(c, t.name, `${t.redact?.(args) ?? JSON.stringify(args ?? {})} -> ${e.message}`, false); throw e; }
       },
     }));
   }

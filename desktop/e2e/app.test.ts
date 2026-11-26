@@ -174,6 +174,30 @@ test("projects: start a background thread, see it finish, and a Family thread wa
   await page.emulateMedia({ colorScheme: "light" });
 });
 
+test("projects: a throwaway thread keeps nothing and is deleted", async () => {
+  await page.getByRole("button", { name: "All projects" }).click().catch(() => {});
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Project", { exact: true }).selectOption("person-sam");
+  await page.getByLabel("Title").fill("Gift idea");
+  await page.getByLabel("What should FAITH do?").fill("Something for Kit's birthday, a surprise.");
+  await page.getByRole("checkbox", { name: /Throwaway/ }).check();
+  await shot("6-projects-throwaway-new");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  const pane = page.getByRole("region", { name: "Thread: Gift idea" });
+  await pane.waitFor();
+  await A.projects.idle();
+  await pane.getByText("fish tacos").waitFor({ timeout: 15_000 });
+  await pane.getByText("Throwaway", { exact: true }).waitFor();
+  const t = A.projects.threads("person-sam").find((x) => x.title === "Gift idea")!;
+  assert.equal(t.throwaway, true);
+  await shot("6-projects-throwaway");
+  // The Family project can't have one: the box isn't offered there.
+  await pane.getByRole("button", { name: "Delete" }).click();
+  for (let i = 0; i < 50 && A.projects.threads("person-sam").some((x) => x.id === t.id); i++) await page.waitForTimeout(100);
+  assert.equal((A.db.prepare("SELECT COUNT(*) AS n FROM project_threads WHERE id = ?").get(t.id) as any).n, 0, "deleted on FAITH");
+  await page.getByRole("region", { name: "Thread: Gift idea" }).waitFor({ state: "detached" });
+});
+
 test("the page has no way to Node or the key", async () => {
   const r: any = await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process, bridge: Object.keys((window as any).faith).sort() }));
   assert.equal(r.require, "undefined");

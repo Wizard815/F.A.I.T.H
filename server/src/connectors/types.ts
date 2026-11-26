@@ -25,6 +25,8 @@ export type Tool = {
   selfApproves?: boolean;
   /** A plain sentence for what this call would do (approval cards); defaults to the tool name and arguments. */
   explain?: (args: any) => string;
+  /** What the action log keeps of this call, when the arguments themselves shouldn't be kept (a throwaway thread's words). */
+  redact?: (args: any) => string | null;
   /** Its result describes a picture (a camera). Like a photo the person sent, what's in it
    *  can read like a request, so changes later in that turn wait for the person's Yes. */
   media?: boolean;

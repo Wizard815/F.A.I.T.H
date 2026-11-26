@@ -3,6 +3,7 @@ package family.faith.app
 import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -32,7 +34,8 @@ import org.json.JSONObject
 
 // ---------------------------------------------------------------- family projects (docs/projects.md)
 
-data class FamilyThread(val id: String, val title: String, val brief: String, val status: String, val resolved: Boolean, val last: String) {
+/** `throwaway`: keeps nothing, read-only, deleted when put away or after a day (docs/projects.md). */
+data class FamilyThread(val id: String, val title: String, val brief: String, val status: String, val resolved: Boolean, val last: String, val throwaway: Boolean = false) {
     val needsYou get() = status == "waiting" || status == "failed"
 }
 data class FamilyProject(val id: String, val owner: String, val name: String, val threads: List<FamilyThread>) {
@@ -41,17 +44,17 @@ data class FamilyProject(val id: String, val owner: String, val name: String, va
 }
 data class ThreadMessage(val fromFaith: Boolean, val text: String)
 /** A change: done, or waiting for this person's Yes (pending), or for a grown-up's approval (requests). */
-data class ProjectChange(val thread: String?, val pending: List<Pair<String, String>>, val requests: List<String>)
+data class ProjectChange(val thread: String?, val pending: List<Pair<String, String>>, val requests: List<String>, val deleted: Boolean = false)
 
 object ProjectsJson {
     private fun <T> JSONArray?.list(f: (JSONObject) -> T): List<T> = if (this == null) emptyList() else (0 until length()).map { f(getJSONObject(it)) }
     fun projects(d: JSONObject): List<FamilyProject> = d.optJSONArray("projects").list { p ->
         FamilyProject(p.optString("id"), p.optString("owner"), p.optString("name"), p.optJSONArray("threads").list { t ->
-            FamilyThread(t.optString("id"), t.optString("title"), t.optString("brief"), t.optString("status"), t.optBoolean("resolved"), t.optString("last_text")) })
+            FamilyThread(t.optString("id"), t.optString("title"), t.optString("brief"), t.optString("status"), t.optBoolean("resolved"), t.optString("last_text"), t.optBoolean("throwaway")) })
     }
     fun messages(d: JSONObject): List<ThreadMessage> = d.optJSONArray("messages").list { ThreadMessage(it.optString("role") != "user", it.optString("text")) }
     fun change(d: JSONObject) = ProjectChange(d.optString("thread").ifBlank { null },
-        d.optJSONArray("pending").list { it.optString("id") to it.optString("summary") }, d.optJSONArray("requests").list { it.optString("summary") })
+        d.optJSONArray("pending").list { it.optString("id") to it.optString("summary") }, d.optJSONArray("requests").list { it.optString("summary") }, d.optBoolean("deleted"))
 
     fun statusWord(s: String) = when (s) { "working" -> "Working"; "waiting" -> "Waiting for approval"; "failed" -> "Didn't work"; "done" -> "Done"; else -> s }
     /** A one-line preview: Markdown marks taken out. */
@@ -93,15 +96,17 @@ class ProjectsModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val c = io(block)
+                if (c.deleted) open.value = null
                 change.value = if (c.pending.isNotEmpty() || c.requests.isNotEmpty()) c else null
                 status.value = if (c.pending.isNotEmpty()) "Waiting for your Yes." else if (c.requests.isNotEmpty()) "Sent to a grown-up for approval." else done
                 list.value = io { store.api().projects() }; reloadOpen()
             } catch (e: FaithError) { status.value = e.message ?: "That didn't work." }
         }
     }
-    fun start(project: String, title: String, brief: String) = act("Started. FAITH will tell you when it's done.") { store.api().startThread(project, brief, title.ifBlank { null }) }
+    fun start(project: String, title: String, brief: String, throwaway: Boolean = false) =
+        act(if (throwaway) "Started. It keeps nothing: read the answer here." else "Started. FAITH will tell you when it's done.") { store.api().startThread(project, brief, title.ifBlank { null }, throwaway) }
     fun message(text: String) { val (p, t) = open.value ?: return; act("Sent.") { store.api().messageThread(p, t, text) } }
-    fun resolve(resolved: Boolean) { val (p, t) = open.value ?: return; act(if (resolved) "Put away." else "Brought back.") { store.api().resolveThread(p, t, resolved) } }
+    fun resolve(resolved: Boolean, throwaway: Boolean = false) { val (p, t) = open.value ?: return; act(if (throwaway) "Deleted." else if (resolved) "Put away." else "Brought back.") { store.api().resolveThread(p, t, resolved) } }
     fun answer(id: String, yes: Boolean) {
         viewModelScope.launch {
             try { status.value = io { store.api().confirm(id, yes) }; change.value = null; load() } catch (e: FaithError) { status.value = e.message ?: "" }
@@ -118,6 +123,12 @@ private fun StatusChip(s: String) {
     val bad = s == "waiting" || s == "failed"
     Text(ProjectsJson.statusWord(s), fontSize = 12.sp, fontWeight = FontWeight.Medium,
         color = if (bad) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 3.dp))
+}
+
+@Composable
+private fun ThrowawayChip() {
+    Text("Throwaway", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 3.dp))
 }
 
@@ -161,6 +172,7 @@ fun ProjectsScreen(m: ProjectsModel) {
                         .clickable(onClickLabel = "Open ${t.title}") { m.openThread(p.id, t.id) }.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(t.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            if (t.throwaway) { ThrowawayChip(); Spacer(Modifier.width(6.dp)) }
                             StatusChip(t.status)
                         }
                         if (t.last.isNotBlank()) Text(ProjectsJson.preview(t.last), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -169,7 +181,7 @@ fun ProjectsScreen(m: ProjectsModel) {
             }
         }
     }
-    if (starting) StartDialog(m.list.value.orEmpty(), { starting = false }) { p, title, brief -> m.start(p, title, brief); starting = false }
+    if (starting) StartDialog(m.list.value.orEmpty(), { starting = false }) { p, title, brief, away -> m.start(p, title, brief, away); starting = false }
 }
 
 @Composable
@@ -178,12 +190,16 @@ private fun ColumnScope.ThreadDetail(m: ProjectsModel, t: FamilyThread) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { m.close() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("←  All projects") }
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = { m.resolve(!t.resolved) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (t.resolved) "Bring back" else "Put away") }
+        TextButton(onClick = { m.resolve(!t.resolved, t.throwaway) }, enabled = !(t.throwaway && t.status == "working"), modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(if (t.throwaway) "Delete" else if (t.resolved) "Bring back" else "Put away") }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(t.title, fontFamily = Serif, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false).semantics { heading() })
         StatusChip(t.status)
+        if (t.throwaway) ThrowawayChip()
     }
+    if (t.throwaway) Text("A throwaway thread: it only looks things up and keeps nothing. Delete it when you're done, or it goes by itself after a day.",
+        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
     LazyColumn(Modifier.weight(1f).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(m.messages.value.withIndex().toList()) { (i, msg) ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
@@ -202,10 +218,11 @@ private fun ColumnScope.ThreadDetail(m: ProjectsModel, t: FamilyThread) {
 }
 
 @Composable
-private fun StartDialog(projects: List<FamilyProject>, close: () -> Unit, start: (String, String, String) -> Unit) {
+private fun StartDialog(projects: List<FamilyProject>, close: () -> Unit, start: (String, String, String, Boolean) -> Unit) {
     var project by remember { mutableStateOf(projects.firstOrNull()?.id ?: "mine") }
     var title by remember { mutableStateOf("") }
     var brief by remember { mutableStateOf("") }
+    var throwaway by remember { mutableStateOf(false) }
     val shared = projects.firstOrNull { it.id == project && !it.owner.startsWith("person:") }
     AlertDialog(onDismissRequest = close, title = { Text("Start a thread") },
         text = {
@@ -216,8 +233,17 @@ private fun StartDialog(projects: List<FamilyProject>, close: () -> Unit, start:
                 OutlinedTextField(title, { title = it.take(80) }, label = { Text("Title (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(brief, { brief = it.take(4000) }, label = { Text("What should FAITH do?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                 if (shared != null) Text("Everyone who can see ${shared.name} will read this. You'll be asked to say Yes first.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = throwaway, role = Role.Checkbox, onValueChange = { throwaway = it }),
+                    verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Checkbox(checked = throwaway, onCheckedChange = null)
+                    Column {
+                        Text("Throwaway", fontWeight = FontWeight.SemiBold)
+                        Text("Keeps nothing. It only looks things up, nobody is told what it said, and it's deleted when you put it away or after a day.",
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         },
-        confirmButton = { Button(onClick = { start(project, title, brief) }, enabled = brief.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp)) { Text("Start") } },
+        confirmButton = { Button(onClick = { start(project, title, brief, throwaway && shared == null) }, enabled = brief.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp)) { Text("Start") } },
         dismissButton = { TextButton(onClick = close, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } })
 }

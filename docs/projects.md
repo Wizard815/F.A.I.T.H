@@ -22,6 +22,17 @@ A project's owner decides whose tokens its threads use. It's the same split as t
 - **The wiki.** A person's thread uses their own wiki token, so it reads their `people/<id>/` folder and `household/`. A Family or Parents thread uses the household token: `household/` only, never anyone's folder. The wiki enforces this, not FAITH's prompt.
 - Children: the project tools follow the child allowlist. `project_thread_start` isn't on it, so a child can read their projects but not start threads. Add it to `roles.child.allow_writes` to change that.
 
+## Throwaway threads
+
+A throwaway thread is for a quick private question you don't want kept: a gift idea, a surprise, something you're just wondering about. Tick **Throwaway** when you start one, or ask in a chat for "a throwaway thread".
+
+- **Only in your own project, started by you.** Family and Parents, the shared screen, voice and coordinators can't make one.
+- **It only looks things up.** It gets no tools that change anything, so it can't add to the calendar, write a wiki note, ask Hermes (which remembers) or start other threads. Your chat isn't filed to the wiki either.
+- **Nobody hears what it said.** No coordinator turn. Your inbox and phone get "Your throwaway thread has an answer", not the answer. Read it in Projects.
+- **The action log keeps only that one ran** (`a throwaway thread (done)`), never its title, brief or answer. Overseer sees the same.
+- **It's deleted** when you put it away, or `throwaway_hours` (24 by default) after it last changed: its messages and conversation go too. It can't be reopened.
+- If you started it from a chat, your own chat still has what you typed there. Start it from Projects to keep even that out.
+
 ## How a thread runs
 
 1. Someone asks in a chat ("look into this in the background"), and FAITH calls `project_thread_start`. Or an app calls the API below.
@@ -51,12 +62,12 @@ Every route shows only this caller's projects and goes through the tools above.
 | `GET /api/projects` (`?resolved=1`) | Your projects, each with its threads |
 | `GET /api/projects/glance` | For little screens (D.A.S.H): at most 8 projects and 5 threads, short lines, counts of `needs_you` and `working` |
 | `PUT /api/projects/:id` `{ "instructions" }` | The project's standing instructions, given to every thread (2000 characters at most) |
-| `POST /api/projects/:id/threads` `{ "brief", "title"? }` | Start one. Returns `{ thread }`, or `pending` (a Yes to tap) or `requests` (waiting for approval) |
+| `POST /api/projects/:id/threads` `{ "brief", "title"?, "throwaway"? }` | Start one. Returns `{ thread }`, or `pending` (a Yes to tap) or `requests` (waiting for approval). `throwaway: true` only in your own project |
 | `GET /api/projects/:id/threads/:thread` | Its latest messages |
 | `POST /api/projects/:id/threads/:thread/message` `{ "text" }` | More to do |
-| `PUT /api/projects/:id/threads/:thread/resolved` `{ "resolved" }` | Put away or bring back |
+| `PUT /api/projects/:id/threads/:thread/resolved` `{ "resolved" }` | Put away or bring back. A throwaway one is deleted (`deleted: true`) |
 
-A thread's `status` is `working`, `done`, `waiting` (an approval is open) or `failed`.
+Threads carry `throwaway: true` when they are one. A thread's `status` is `working`, `done`, `waiting` (an approval is open) or `failed`.
 
 ## Set it up
 
@@ -68,6 +79,7 @@ projects:
   max_working: 3         # threads working at once in one project (1 to 10)
   wake_coordinator: true # false: a finished thread's own summary is sent, with no coordinator turn
   max_depth: 2           # follow-up threads a chain of coordinator turns may start (0 to 5)
+  throwaway_hours: 24    # throwaway threads are deleted this long after they last changed (1 to 168)
 ```
 
 ## What goes wrong
@@ -78,6 +90,8 @@ projects:
 - **A thread says it needs a Yes:** do that part yourself in a chat, where FAITH can ask you.
 - **Someone left the family:** their project and threads stay in FAITH's database but nobody can open them, not even with an old sign-in. Add them back to `people:` to see them again.
 - **Seeing how threads went:** each finished thread adds a `project_thread_end` row to the action log, with its title and status (not what it said). Overseer reads the action log, so it sees those rows too.
+- **"Throwaway threads are only for your own project":** start it from your own project, signed in as yourself.
+- **A throwaway thread says it can't do something:** it only looks things up. Ask in a normal chat to change anything.
 - **"A thread can't start other threads":** ask the project's coordinator, or start the next thread yourself.
 
 ## In the apps

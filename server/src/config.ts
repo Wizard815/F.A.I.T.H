@@ -185,6 +185,8 @@ export type ProjectsConfig = {
   wake_coordinator: boolean;
   /** How many follow-up threads a chain of wake-ups may start (stops a coordinator looping). */
   max_depth: number;
+  /** Throwaway threads are deleted this many hours after they last changed (or when put away). */
+  throwaway_hours: number;
 };
 
 /** The info board (docs/dashboard.md). Everything here is optional; a part that isn't set up doesn't show. */
@@ -411,10 +413,11 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     board: parseBoard(raw.board || {}, people),
     projects: (() => {
       const p = raw.projects || {};
-      const max_working = num(p.max_working, 3), max_depth = num(p.max_depth, 2);
+      const max_working = num(p.max_working, 3), max_depth = num(p.max_depth, 2), throwaway_hours = num(p.throwaway_hours, 24);
       if (!(max_working >= 1 && max_working <= 10)) throw new ConfigError("projects.max_working is 1 to 10.");
       if (!(max_depth >= 0 && max_depth <= 5)) throw new ConfigError("projects.max_depth is 0 to 5.");
-      return { enabled: bool(p.enabled, true), max_working: Math.floor(max_working), wake_coordinator: bool(p.wake_coordinator, true), max_depth: Math.floor(max_depth) };
+      if (!(throwaway_hours >= 1 && throwaway_hours <= 168)) throw new ConfigError("projects.throwaway_hours is 1 to 168.");
+      return { enabled: bool(p.enabled, true), max_working: Math.floor(max_working), wake_coordinator: bool(p.wake_coordinator, true), max_depth: Math.floor(max_depth), throwaway_hours };
     })(),
   };
 }

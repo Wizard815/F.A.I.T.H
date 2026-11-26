@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Agent } from "../harness/agent.js";
 import type { Caller } from "../scope.js";
-import { ProjectError, type Projects } from "../projects/projects.js";
+import { ownOwner, ProjectError, type Projects } from "../projects/projects.js";
 
 type Ctx = { projects: Projects; agent: Agent; need: (req: FastifyRequest) => Caller };
 
@@ -30,7 +30,10 @@ export function registerProjectRoutes(app: FastifyInstance, x: Ctx) {
   app.put("/api/projects/:id", async (req) => projects.setInstructions(x.need(req), String((req.params as any).id), (req.body as any)?.instructions));
   app.post("/api/projects/:id/threads", async (req) => {
     const c = x.need(req), b = (req.body as any) || {};
-    return run(c, "project_thread_start", { project: label(c, String((req.params as any).id)), brief: String(b.brief ?? ""), ...(b.title ? { title: String(b.title) } : {}) });
+    // Refuse a throwaway here before it turns into an approval request or a Yes card.
+    if (b.throwaway === true && (c.scope.kind !== "person" || c.audience || projects.get(c, String((req.params as any).id)).owner !== ownOwner(c)))
+      throw new ProjectError(400, "Throwaway threads are only for your own project, started by you.");
+    return run(c, "project_thread_start", { project: label(c, String((req.params as any).id)), brief: String(b.brief ?? ""), ...(b.title ? { title: String(b.title) } : {}), ...(b.throwaway === true ? { throwaway: true } : {}) });
   });
   app.get("/api/projects/:id/threads/:thread", async (req) => projects.messages(x.need(req), String((req.params as any).thread)));
   // Check the thread is this caller's first: the shared view's changes become approval

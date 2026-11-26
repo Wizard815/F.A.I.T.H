@@ -252,3 +252,4 @@ dashboard:
 #   max_working: 3          # threads working at once in one project
 #   wake_coordinator: true  # a finished thread gets a coordinator turn that reports back
 #   max_depth: 2            # follow-up threads a chain of coordinator turns may start
+#   throwaway_hours: 24     # throwaway threads are deleted this long after they last changed

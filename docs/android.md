@@ -12,7 +12,7 @@ FAITH on your phone: ask, talk, show it a photo, say Yes to a held change, and g
 - **The phone's assistant.** Settings → Apps → Default apps → **Digital assistant app** → FAITH. Long-press home (or power, on some phones) opens FAITH listening.
 - **Photos from your library:** "show me photos of Robin at the beach" shows them in the answer, from your own Immich account. Tap one to open it in Immich.
 - **New topic** starts a fresh conversation.
-- **Projects**, the third tab: your family projects ([projects.md](projects.md)). Your own, Family and (for grown-ups) Parents, each with its background threads and whether they're working, done or waiting. Tap one to read it, send it more to do, or put it away. *Start a thread* picks the project. Words going to Family or Parents show a Yes card first, because everyone there reads them.
+- **Projects**, the third tab: your family projects ([projects.md](projects.md)). Your own, Family and (for grown-ups) Parents, each with its background threads and whether they're working, done or waiting. Tap one to read it, send it more to do, or put it away. *Start a thread* picks the project. Words going to Family or Parents show a Yes card first, because everyone there reads them. Tick *Throwaway* (your own project only) for a private thread that keeps nothing and is deleted when you put it away.
 - **Board**, the second tab: the info board ([dashboard.md](dashboard.md)). Your morning brief (*Write it now*), the weather, FAITH's day cards, your projects (tap the status to move one), your log (*Log it*), news, and for admins uptime and FAITH's server. Bringing projects over from Pondering Orb is on the desktop app.
 
 ## Three layouts

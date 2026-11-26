@@ -66,6 +66,9 @@ export class Registry {
         for (const t of ts) {
           if (anyGlob(pol.deny_tools, t.name)) continue;
           if (t.write && !this.writeAllowed(caller, t.name)) continue;
+          // A throwaway thread only looks things up: a change (or a note to the wiki, or a
+          // question to Hermes, which remembers) would outlive it.
+          if (t.write && caller.work?.throwaway) continue;
           out.push(t.write && !t.selfApproves && this.needsApproval(caller, t.name) ? { ...t, approval: true } : t);
         }
       } catch (e: any) { problems.push(`${c.id}: ${e.message}`); }

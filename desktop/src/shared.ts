@@ -37,7 +37,8 @@ export type FaithBridge = {
   /** Family projects (docs/projects.md). */
   projects(resolved?: boolean): Promise<{ projects: FamilyProject[] }>;
   projectThread(project: string, thread: string): Promise<ThreadView>;
-  startThread(project: string, brief: string, title?: string): Promise<ProjectChange>;
+  /** `throwaway`: a private thread that keeps nothing, in your own project only. */
+  startThread(project: string, brief: string, title?: string, throwaway?: boolean): Promise<ProjectChange>;
   messageThread(project: string, thread: string, text: string): Promise<ProjectChange>;
   resolveThread(project: string, thread: string, resolved: boolean): Promise<ProjectChange>;
   transcribe(audio: ArrayBuffer, mime: string): Promise<string>;

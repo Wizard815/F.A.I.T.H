@@ -23,6 +23,8 @@ export type ThreadStatus = "working" | "done" | "waiting" | "failed";
 export type Thread = {
   id: string; project_id: string; title: string; brief: string; status: ThreadStatus; resolved: boolean; depth: number;
   started_by: string; last_text: string; created_at: number; updated_at: number;
+  /** Keeps nothing: read-only tools, no coordinator, no title in the log, deleted when put away or after `throwaway_hours`. */
+  throwaway: boolean;
 };
 
 export class ProjectError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -57,9 +59,27 @@ export class Projects {
         conversation_id TEXT, last_text TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS project_threads_project ON project_threads(project_id, updated_at);
     `);
+    try { db.exec("ALTER TABLE project_threads ADD COLUMN throwaway INTEGER NOT NULL DEFAULT 0"); } catch { /* already there */ }
     // A thread can't be working after a restart: its turn died with the old process.
     db.prepare("UPDATE project_threads SET status = 'failed', last_text = ? WHERE status = 'working'")
       .run("FAITH restarted while this was running. Send it a message to carry on.");
+    this.sweep();
+  }
+
+  /** Deletes a throwaway thread and everything it said: its conversation, messages and held Yeses. */
+  private forget(id: string) {
+    const conv = (this.db.prepare("SELECT conversation_id FROM project_threads WHERE id = ?").get(id) as any)?.conversation_id;
+    if (conv) {
+      this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conv);
+      this.db.prepare("DELETE FROM pending WHERE conversation_id = ?").run(conv);
+      this.db.prepare("DELETE FROM conversations WHERE id = ?").run(conv);
+    }
+    this.db.prepare("DELETE FROM project_threads WHERE id = ?").run(id);
+  }
+  /** Throwaway threads past their time go, unless one is still working. */
+  sweep(now = Date.now()) {
+    const cutoff = now - this.cfg().projects.throwaway_hours * 3600_000;
+    for (const r of this.db.prepare("SELECT id FROM project_threads WHERE throwaway = 1 AND status != 'working' AND updated_at < ?").all(cutoff) as any[]) this.forget(r.id);
   }
 
   /** Every owner the family has: one per person, Family and Parents. */
@@ -78,6 +98,7 @@ export class Projects {
 
   /** The projects this caller may see, each with its threads (newest first). */
   list(c: Caller, opts: { resolved?: boolean } = {}) {
+    this.sweep();
     return visibleOwners(c).filter((o) => this.owners().includes(o)).map((o) => {
       const p = this.ensure(o);
       return { ...p, threads: this.threads(p.id, opts) };
@@ -104,7 +125,7 @@ export class Projects {
   }
 
   private row = (r: any): Thread => ({ id: r.id, project_id: r.project_id, title: r.title, brief: r.brief, status: r.status, resolved: !!r.resolved, depth: r.depth,
-    started_by: r.started_by, last_text: r.last_text, created_at: r.created_at, updated_at: r.updated_at });
+    started_by: r.started_by, last_text: r.last_text, created_at: r.created_at, updated_at: r.updated_at, throwaway: !!r.throwaway });
   threads(projectId: string, opts: { resolved?: boolean } = {}): Thread[] {
     return (this.db.prepare(`SELECT * FROM project_threads WHERE project_id = ? ${opts.resolved ? "" : "AND resolved = 0"} ORDER BY updated_at DESC LIMIT 50`).all(projectId) as any[]).map(this.row);
   }
@@ -121,7 +142,7 @@ export class Projects {
     const t = this.thread(c, id);
     const conv = (this.db.prepare("SELECT conversation_id FROM project_threads WHERE id = ?").get(t.id) as any)?.conversation_id;
     const rows = conv ? (this.db.prepare("SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?").all(conv, limit) as any[]).reverse() : [];
-    return { thread: { id: t.id, title: t.title, status: t.status, resolved: t.resolved, project: t.project.name }, messages: rows.map((m) => ({ role: m.role, text: String(m.content), at: m.created_at })) };
+    return { thread: { id: t.id, title: t.title, status: t.status, resolved: t.resolved, project: t.project.name, throwaway: t.throwaway }, messages: rows.map((m) => ({ role: m.role, text: String(m.content), at: m.created_at })) };
   }
 
   /** The view a project's background work runs in: its owner's, never the person who asked. */
@@ -139,12 +160,17 @@ export class Projects {
   private whoLabel(c: Caller) { return c.work ? `the ${c.work.project} coordinator` : c.scope.kind === "person" ? c.scope.person.id : c.speaker?.id ?? "household"; }
 
   /** Start a thread: it runs in the background with the project owner's tools. */
-  start(c: Caller, projectId: string, input: { title?: unknown; brief: unknown }): Thread {
+  start(c: Caller, projectId: string, input: { title?: unknown; brief: unknown; throwaway?: unknown }): Thread {
     const cfg = this.cfg().projects;
     if (!cfg.enabled) throw new ProjectError(400, "Projects are turned off (projects.enabled).");
     if (c.work?.thread) throw new ProjectError(400, "A thread can't start other threads. Say what's needed in your summary.");
     const p = this.get(c, projectId);
     this.ownProjectOnly(c, p);
+    const throwaway = input.throwaway === true;
+    // Only a person, for themselves: a shared project's threads belong to everyone in it, and a
+    // coordinator's follow-up is part of the project's record.
+    if (throwaway && (c.work || p.owner !== ownOwner(c) || c.scope.kind !== "person" || c.audience))
+      throw new ProjectError(400, "Throwaway threads are only for your own project, started by you.");
     const brief = String(input.brief ?? "").trim();
     if (!brief) throw new ProjectError(400, "A thread needs a brief: what to do.");
     if (brief.length > 4000) throw new ProjectError(400, "A brief is at most 4000 characters.");
@@ -153,8 +179,8 @@ export class Projects {
     if (working >= cfg.max_working) throw new ProjectError(409, `${p.name} already has ${working} threads working. Wait for one to finish.`);
     const depth = c.work ? c.work.depth + 1 : 0;
     const id = newId(), now = Date.now();
-    this.db.prepare("INSERT INTO project_threads (id, project_id, title, brief, status, resolved, depth, started_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'working', 0, ?, ?, ?, ?)")
-      .run(id, p.id, title, brief, depth, this.whoLabel(c), now, now);
+    this.db.prepare("INSERT INTO project_threads (id, project_id, title, brief, status, resolved, depth, started_by, created_at, updated_at, throwaway) VALUES (?, ?, ?, ?, 'working', 0, ?, ?, ?, ?, ?)")
+      .run(id, p.id, title, brief, depth, this.whoLabel(c), now, now, throwaway ? 1 : 0);
     const t = this.thread(this.runAs(p, undefined), id);
     this.track(this.runThread(p, t, this.firstPrompt(p, t)));
     return t;
@@ -179,14 +205,23 @@ export class Projects {
     if (c.work && c.work.project !== p.id) throw new ProjectError(403, "A project's coordinator works only in its own project.");
   }
 
-  resolve(c: Caller, threadId: string, resolved = true) {
+  resolve(c: Caller, threadId: string, resolved = true): Thread & { project: Project; deleted?: boolean } {
     const t = this.thread(c, threadId);
     this.ownProjectOnly(c, t.project);
+    if (t.throwaway && resolved) {
+      if (t.status === "working") throw new ProjectError(409, `"${t.title}" is still working. Put it away when it's done.`);
+      this.forget(t.id);
+      return { ...t, resolved: true, deleted: true };
+    }
     this.db.prepare("UPDATE project_threads SET resolved = ?, updated_at = ? WHERE id = ?").run(resolved ? 1 : 0, Date.now(), t.id);
     return this.thread(c, t.id);
   }
 
   private firstPrompt(p: Project, t: Thread) {
+    if (t.throwaway) return [
+      `A throwaway thread for ${this.person(p.owner)?.name ?? "them"}: answer from what you know and what your tools can look up. You can't change anything here and nothing is kept, so don't offer to save, remember or do things; say they can ask in a normal chat for that.`,
+      `The question (${t.title}):\n${t.brief}`,
+    ].join("\n\n");
     const who = p.owner === "household" ? "the whole family" : p.owner === "parents" ? "the parents" : this.person(p.owner)?.name ?? "them";
     return [
       `You're working in the background on a thread of the project "${p.name}", for ${who}. Nobody is reading along: do the job with your tools, then end with a short summary of what you did and anything still needed.`,
@@ -201,7 +236,7 @@ export class Projects {
   async idle() { while (this.runs.size) await Promise.allSettled([...this.runs]); }
 
   private async runThread(p: Project, t: Thread, text: string) {
-    const caller = this.runAs(p, { project: p.id, thread: t.id, depth: t.depth });
+    const caller = this.runAs(p, { project: p.id, thread: t.id, depth: t.depth, ...(t.throwaway ? { throwaway: true } : {}) });
     let result: TurnResult | undefined, status: ThreadStatus, last: string;
     try {
       result = await this.agent.turn({ caller, text, extId: `project:${p.id}:thread:${t.id}`, job: { background: true } });
@@ -214,7 +249,14 @@ export class Projects {
     }
     this.db.prepare("UPDATE project_threads SET status = ?, last_text = ?, updated_at = ? WHERE id = ?").run(status, last.slice(0, 4000), Date.now(), t.id);
     // How it went goes in the action log (which Overseer reads): the title and status, not what it said.
-    this.agent.audit(caller, "project_thread_end", `${p.name}: ${t.title} (${status})`, status !== "failed");
+    // A throwaway thread's title stays out of it too: it says only that one ran.
+    this.agent.audit(caller, "project_thread_end", t.throwaway ? `${p.name}: a throwaway thread (${status})` : `${p.name}: ${t.title} (${status})`, status !== "failed");
+    if (t.throwaway) {
+      // No coordinator (its conversation is kept) and nothing of what it said in the chat or on the phone.
+      await this.notifier?.send(this.deliverTo(p), status === "failed" ? "Your throwaway thread didn't work. Open Projects to see why." : "Your throwaway thread has an answer. Open Projects to read it.", { title: p.name, from: "faith" })
+        .catch((e) => this.log.warn({ project: p.id, err: e?.message }, "project notice failed"));
+      return;
+    }
     await this.wake(p, { ...t, status, last_text: last }).catch((e) => this.log.warn({ project: p.id, err: e?.message }, "project wake-up failed"));
   }
 
@@ -243,7 +285,7 @@ export class Projects {
         id: p.id, name: clip(p.name, 32),
         needs_you: p.threads.filter((t) => t.status === "waiting" || t.status === "failed").length,
         working: p.threads.filter((t) => t.status === "working").length,
-        threads: p.threads.slice(0, 5).map((t) => ({ id: t.id, title: clip(t.title, 32), status: t.status, last: clip(t.last_text.replace(/\s+/g, " "), 60) })),
+        threads: p.threads.slice(0, 5).map((t) => ({ id: t.id, title: clip(t.title, 32), status: t.status, last: clip(t.last_text.replace(/\s+/g, " "), 60), ...(t.throwaway ? { throwaway: true } : {}) })),
       })),
     };
   }

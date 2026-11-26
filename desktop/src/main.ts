@@ -179,7 +179,7 @@ function registerIpc() {
   handle("importOrb", () => guarded((f) => f.importOrb()));
   handle("projects", (resolved?: boolean) => guarded((f) => f.projects(!!resolved)));
   handle("projectThread", (p: string, t: string) => guarded((f) => f.projectThread(String(p), String(t))));
-  handle("startThread", (p: string, brief: string, title?: string) => guarded((f) => f.startThread(String(p), String(brief), title ? String(title) : undefined)));
+  handle("startThread", (p: string, brief: string, title?: string, throwaway?: boolean) => guarded((f) => f.startThread(String(p), String(brief), title ? String(title) : undefined, throwaway === true)));
   handle("messageThread", (p: string, t: string, text: string) => guarded((f) => f.messageThread(String(p), String(t), String(text))));
   handle("resolveThread", (p: string, t: string, resolved: boolean) => guarded((f) => f.resolveThread(String(p), String(t), !!resolved)));
   handle("transcribe", (audio: ArrayBuffer, mime: string) => guarded((f) => f.transcribe(new Uint8Array(audio), mime)));
