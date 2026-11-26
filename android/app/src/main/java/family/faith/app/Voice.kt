@@ -181,12 +181,12 @@ fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit, proje
 
 /** Like a kitchen speaker's screen: a clock, the weather and a few panels; a tap asks FAITH. */
 @Composable
-fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut: () -> Unit, projects: ProjectsModel? = null) {
+fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut: () -> Unit, projects: ProjectsModel? = null, clock: () -> LocalDateTime = LocalDateTime::now) {
     val talk = rememberTalk(chat)
     if (projects != null) LaunchedEffect(Unit) { projects.keepFresh() }
     val pg = ProjectGlance.from(projects?.list?.value)
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) { while (true) { board.load(); repeat(4) { delay(15_000); now = LocalDateTime.now() } } }
+    var now by remember { mutableStateOf(clock()) }
+    LaunchedEffect(Unit) { while (true) { board.load(); repeat(4) { delay(15_000); now = clock() } } }
     DisposableEffect(Unit) { chat.voice = true; onDispose { chat.voice = false } }
     LaunchedEffect(chat.busy.value) { if (!chat.busy.value) board.load() }
     // A fresh screen: the conversation carries on, but the panel starts on its panels.
