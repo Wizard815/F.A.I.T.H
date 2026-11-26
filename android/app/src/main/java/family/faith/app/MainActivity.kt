@@ -102,9 +102,12 @@ fun Root(chat: ChatModel, board: BoardModel, projects: ProjectsModel, intent: In
             if (layout == Layouts.FOCUS) FocusScreen(chat, changed, out, projects) else PanelScreen(chat, board, changed, out, projects)
         }
         else Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+            LaunchedEffect(Unit) { projects.load() }
             // Three views: Ask (the helper), Board (the info board, docs/dashboard.md) and Projects (docs/projects.md).
             TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
-                listOf("Ask", "Board", "Projects").forEachIndexed { i, label ->
+                // Like the counts on Studio's Projects button: what needs you shows on the tab.
+                val needs = ProjectGlance.from(projects.list.value)?.needs ?: 0
+                listOf("Ask", "Board", if (needs > 0) "Projects ($needs)" else "Projects").forEachIndexed { i, label ->
                     Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.heightIn(min = 48.dp), text = { Text(label, fontSize = 16.sp) })
                 }
             }

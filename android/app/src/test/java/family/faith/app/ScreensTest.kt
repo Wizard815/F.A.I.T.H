@@ -107,17 +107,18 @@ class ScreensTest {
               {"id":"meals","title":"Meals","kind":"meals","items":[{"title":"Fish tacos","label":"dinner"}]},
               {"id":"shopping","title":"Shopping","kind":"checklist","items":[{"title":"Tortillas"},{"title":"Limes"},{"title":"Coriander"}]},
               {"id":"home","title":"Home","kind":"entities","entities":[{"entity_id":"lock.front_door","name":"Front door","state":"locked"},{"entity_id":"light.kitchen","name":"Kitchen lights","state":"on"}]}]}"""))
-        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
         paparazzi.snapshot { Screen { PanelScreen(c, b, {}, {}, p) { java.time.LocalDateTime.of(2026, 11, 26, 20, 51) } } }
     }
 
     @Test fun projects() {
-        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
         paparazzi.snapshot { Screen { ProjectsScreen(p) } }
     }
 
     @Test fun projectsThread() {
         val p = ProjectsModel(app()).apply {
+            now = { 1795730000000 }
             list.value = ProjectsJson.projects(ProjectsTest().sample)
             open.value = "person-sam" to "t1"
             messages.value = listOf(ThreadMessage(false, "Find three dinners"), ThreadMessage(true, "Tonight is **fish tacos**. Tortillas and limes are on the list."))
@@ -127,6 +128,7 @@ class ScreensTest {
 
     @Test fun projectsThrowaway() {
         val p = ProjectsModel(app()).apply {
+            now = { 1795730000000 }
             list.value = ProjectsJson.projects(ProjectsTest().sample)
             open.value = "person-sam" to "t4"
             messages.value = listOf(ThreadMessage(false, "Ideas for Kit's party"), ThreadMessage(true, "A picnic at the lake, with the cake from the bakery on Main Street."))
@@ -136,7 +138,7 @@ class ScreensTest {
 
     /** Voice dashboard on the Projects tab: the same tab bar as Root (MainActivity.kt). */
     @Test fun voiceDashboardProjects() {
-        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
         paparazzi.snapshot { Screen { androidx.compose.foundation.layout.Column {
             androidx.compose.material3.TabRow(selectedTabIndex = 2, containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background) {
                 listOf("Ask", "Board", "Projects").forEachIndexed { i, label ->
@@ -149,7 +151,7 @@ class ScreensTest {
 
     @Test fun voiceFocusProjects() {
         val c = chat().apply { lines.clear() }
-        val p = ProjectsModel(app()).apply { list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
         paparazzi.snapshot { Screen { FocusScreen(c, {}, {}, p) } }
     }
 }

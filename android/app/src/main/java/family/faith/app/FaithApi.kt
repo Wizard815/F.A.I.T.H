@@ -146,7 +146,10 @@ class FaithApi(baseUrl: String, private val token: String?) {
 
     // Family projects (docs/projects.md): yours, Family, and Parents for grown-ups.
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
-    fun projects(): List<FamilyProject> = ProjectsJson.projects(json("/api/projects"))
+    /** `withPutAway`: resolved threads too, for the folded Put away group. */
+    fun projects(withPutAway: Boolean = true): List<FamilyProject> = ProjectsJson.projects(json(if (withPutAway) "/api/projects?resolved=1" else "/api/projects"))
+    /** What every thread in a project should know (2000 characters at most). */
+    fun setProjectInstructions(project: String, text: String) { json("/api/projects/${enc(project)}", "PUT", JSONObject().put("instructions", text)) }
     fun projectThread(project: String, thread: String): List<ThreadMessage> = ProjectsJson.messages(json("/api/projects/${enc(project)}/threads/${enc(thread)}"))
     /** `throwaway`: a private thread that keeps nothing, in your own project only. */
     fun startThread(project: String, brief: String, title: String?, throwaway: Boolean = false): ProjectChange {
