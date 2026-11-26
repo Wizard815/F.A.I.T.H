@@ -120,6 +120,8 @@ export class Faith {
   addProject(name: string, status?: string, next?: string) { return this.json("POST", "/api/board/projects", { name, ...(status ? { status } : {}), ...(next ? { next } : {}) }); }
   updateProject(name: string, patch: { status?: string; next?: string; name?: string; starred?: boolean; archived?: boolean }) { return this.json("PATCH", `/api/board/projects/${encodeURIComponent(name)}`, patch); }
   /** Bring projects and the log over from this person's Pondering Orb (FAITH uses their own Orb token). */
+  /** What every thread in a project should know (2000 characters at most). */
+  setProjectInstructions(project: string, instructions: string) { return this.json<FamilyProject>("PUT", `/api/projects/${encodeURIComponent(project)}`, { instructions }); }
   projects(resolved = false) { return this.json<{ projects: FamilyProject[] }>("GET", `/api/projects${resolved ? "?resolved=1" : ""}`); }
   projectThread(project: string, thread: string) { return this.json<ThreadView>("GET", `/api/projects/${encodeURIComponent(project)}/threads/${encodeURIComponent(thread)}`); }
   /** `throwaway`: keeps nothing, own project only (docs/projects.md). */

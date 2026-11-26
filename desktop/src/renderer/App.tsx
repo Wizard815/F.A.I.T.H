@@ -5,7 +5,7 @@ import type { Board as BoardData, InboxItem } from "../faith";
 import type { State } from "../shared";
 import { api, msg, Photos, Rich, shrink, useTalk } from "./talk";
 import { Focus, Panel } from "./layouts";
-import { Projects } from "./projects";
+import { projectGlance, Projects, useProjects } from "./projects";
 
 /** Follow the computer's light or dark setting. */
 function useOsTheme() {
@@ -85,11 +85,13 @@ function Main({ st, setSt }: { st: State; setSt: (s: State) => void }) {
     return () => offs.forEach((f) => f());
   }, []);
   useEffect(() => { if (tab === "inbox" && unread) { api.markRead(); setUnread(0); } }, [tab, unread]);
+  // Like the counts on Studio's Projects button: what needs you shows on the tab.
+  const needs = projectGlance(useProjects().list)?.needs ?? 0;
   const sheet = settings && <SettingsSheet st={st} setSt={setSt} onClose={() => setSettings(false)} />;
   const banner = problem && <p className="bg-primary-soft px-4 py-2 text-[14px]" role="status">{problem}</p>;
   if (st.settings.layout === "voice-focus") return <div className="flex h-full flex-col">{banner}<div className="min-h-0 flex-1"><Focus st={st} onSettings={() => setSettings(true)} /></div>{sheet}</div>;
   if (st.settings.layout === "voice-panel") return <div className="flex h-full flex-col">{banner}<div className="min-h-0 flex-1"><Panel st={st} onSettings={() => setSettings(true)} /></div>{sheet}</div>;
-  const tabs: [Tab, string, ReactNode][] = [["ask", "Ask", <MessageCircle size={17} />], ["board", "Board", <LayoutDashboard size={17} />], ["projects", "Projects", <FolderKanban size={17} />], ["inbox", unread ? `Inbox (${unread} new)` : "Inbox", <Bell size={17} />]];
+  const tabs: [Tab, string, ReactNode][] = [["ask", "Ask", <MessageCircle size={17} />], ["board", "Board", <LayoutDashboard size={17} />], ["projects", needs ? `Projects (${needs} need${needs === 1 ? "s" : ""} you)` : "Projects", <FolderKanban size={17} />], ["inbox", unread ? `Inbox (${unread} new)` : "Inbox", <Bell size={17} />]];
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">

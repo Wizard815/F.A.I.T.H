@@ -198,6 +198,28 @@ test("projects: a throwaway thread keeps nothing and is deleted", async () => {
   await page.getByRole("region", { name: "Thread: Gift idea" }).waitFor({ state: "detached" });
 });
 
+test("projects: grouped like Studio's, instructions every thread gets, and put-away threads fold away", async () => {
+  const mine = page.getByRole("region", { name: "Mine" });
+  await mine.getByRole("heading", { name: /^Done · \d+$/ }).waitFor();
+  assert.ok(await page.getByRole("button", { name: /Projects/ }).first().isVisible());
+  // Instructions: saved on FAITH and given to the next thread.
+  await page.getByRole("button", { name: "Instructions for Mine" }).click();
+  await page.getByLabel("What every thread here should know").fill("I'm vegetarian.");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await mine.getByText("Every thread knows: I'm vegetarian.").waitFor();
+  assert.equal(A.projects.get({ scope: { kind: "person", person: A.projects.person("person:sam")! }, channel: "personal", label: "sam" }, "mine").instructions, "I'm vegetarian.");
+  await shot("6-projects-groups");
+  // Put one away: it moves to the folded "Put away" group and can come back.
+  await mine.getByRole("button", { name: /Dinner ideas/ }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByRole("button", { name: "Put away" }).click();
+  await page.getByRole("button", { name: "All projects" }).click().catch(() => {});
+  await mine.getByText(/^Put away · 1$/).click();
+  await mine.getByRole("button", { name: /Dinner ideas/ }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByRole("button", { name: "Bring back" }).click();
+  for (let i = 0; i < 50 && A.projects.threads("person-sam").every((x) => x.title !== "Dinner ideas"); i++) await page.waitForTimeout(100);
+  assert.ok(A.projects.threads("person-sam").some((x) => x.title === "Dinner ideas"), "brought back");
+});
+
 test("the page has no way to Node or the key", async () => {
   const r: any = await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process, bridge: Object.keys((window as any).faith).sort() }));
   assert.equal(r.require, "undefined");

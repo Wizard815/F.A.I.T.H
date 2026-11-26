@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, CheckCircle2, CircleAlert, EyeOff, FolderKanban, Loader2, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, ChevronRight, CircleAlert, EyeOff, FolderKanban, Loader2, NotebookPen, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { Empty, ErrorText, cn } from "@web/ui";
 import type { FamilyProject, ProjectChange, ProjectThread, ThreadStatus, ThreadView } from "../faith";
 import { api, msg, Rich } from "./talk";
@@ -8,19 +8,42 @@ import { api, msg, Rich } from "./talk";
  *  FAITH works on a thread in the background and tells you when it's done. */
 
 export const STATUS_WORDS: Record<ThreadStatus, string> = { working: "Working", waiting: "Waiting for approval", failed: "Didn't work", done: "Done" };
-const ORDER: ThreadStatus[] = ["waiting", "failed", "working", "done"];
 /** Mine, Family, Parents: what people call them. */
 export const projectLabel = (p: FamilyProject) => (p.owner.startsWith("person:") ? "Mine" : p.name);
 
 /** What the voice layouts say about projects: what needs you, what's working, and the one to mention. */
 export function projectGlance(list: FamilyProject[] | null) {
   if (!list) return null;
-  const all = list.flatMap((p) => p.threads.map((t) => ({ ...t, project: projectLabel(p) })));
+  const all = list.flatMap((p) => p.threads.filter((t) => !t.resolved).map((t) => ({ ...t, project: projectLabel(p) })));
   const needs = all.filter((t) => t.status === "waiting" || t.status === "failed");
   const working = all.filter((t) => t.status === "working");
   const done = all.filter((t) => t.status === "done");
   const top = needs[0] ?? working[0] ?? done[0];
   return { needs: needs.length, working: working.length, done: done.length, top: top ? { title: top.title, project: top.project, status: top.status } : null };
+}
+
+/** Threads the way Hermes Studio's projects group them: what needs you first, put-away ones last. */
+export type ThreadGroup = { key: "needs" | "working" | "done" | "away"; label: string; threads: ProjectThread[] };
+export function threadGroups(threads: ProjectThread[]): ThreadGroup[] {
+  const newest = [...threads].sort((a, b) => b.updated_at - a.updated_at);
+  const groups: ThreadGroup[] = [
+    { key: "needs", label: "Needs you", threads: newest.filter((t) => !t.resolved && (t.status === "waiting" || t.status === "failed")) },
+    { key: "working", label: "Working", threads: newest.filter((t) => !t.resolved && t.status === "working") },
+    { key: "done", label: "Done", threads: newest.filter((t) => !t.resolved && t.status === "done") },
+    { key: "away", label: "Put away", threads: newest.filter((t) => t.resolved) },
+  ];
+  return groups.filter((g) => g.threads.length);
+}
+
+/** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago". */
+export function ago(at: number, now = Date.now()) {
+  const m = Math.max(0, Math.round((now - at) / 60_000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  return d === 1 ? "yesterday" : `${d} days ago`;
 }
 
 /** A thread's last words as a one-line preview: Markdown marks taken out. */
@@ -34,9 +57,9 @@ function useNarrow() {
 }
 
 /** Projects, refreshed every 10 seconds while something is working (every minute otherwise). */
-export function useProjects() {
+export function useProjects(withPutAway = false) {
   const [list, setList] = useState<FamilyProject[] | null>(null), [err, setErr] = useState("");
-  const load = useCallback(() => api.projects().then((d) => { setList(d.projects); setErr(""); }).catch((e) => setErr(msg(e))), []);
+  const load = useCallback(() => api.projects(withPutAway).then((d) => { setList(d.projects); setErr(""); }).catch((e) => setErr(msg(e))), [withPutAway]);
   const busy = !!list?.some((p) => p.threads.some((t) => t.status === "working"));
   useEffect(() => { void load(); const i = setInterval(load, busy ? 10_000 : 60_000); return () => clearInterval(i); }, [load, busy]);
   return { list, err, load };
@@ -152,9 +175,73 @@ function ThreadPane({ project, thread, onChanged }: { project: string; thread: P
   );
 }
 
+/** What every thread in a project should know: Studio's Context tab, for a family. */
+function Instructions({ p, onSaved, close }: { p: FamilyProject; onSaved: () => void; close: () => void }) {
+  const [text, setText] = useState(p.instructions ?? ""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true); setErr("");
+    try { await api.setProjectInstructions(p.id, text); onSaved(); close(); } catch (x) { setErr(msg(x)); } finally { setBusy(false); }
+  };
+  return (
+    <form className="card mb-2 flex flex-col gap-2 p-3" onSubmit={save} aria-label={`Instructions for ${projectLabel(p)}`}>
+      <label className="label">What every thread here should know
+        <textarea className="field min-h-[88px] py-2 text-[14px]" value={text} onChange={(e) => setText(e.target.value)} maxLength={2000}
+          placeholder={p.owner.startsWith("person:") ? "I'm vegetarian. Keep plans under $50." : "Robin doesn't eat mushrooms. Saturdays start at 9."} />
+      </label>
+      <span className="text-[12px] text-muted">{text.length} / 2000{p.owner.startsWith("person:") ? "" : `. Everyone who can see ${p.name} reads these.`}</span>
+      {err && <ErrorText>{err}</ErrorText>}
+      <div className="flex gap-2">
+        <button className="btn-primary min-h-[44px]" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" className="btn-ghost min-h-[44px]" onClick={close}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function ThreadRow({ t, open, onOpen }: { t: ProjectThread; open: boolean; onOpen: () => void }) {
+  return (
+    <li>
+      <button className={cn("card w-full p-3 text-left hover:bg-surface-2", open && "border-primary", t.resolved && "opacity-80")} aria-current={open ? "true" : undefined} onClick={onOpen}>
+        <span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate font-semibold">{t.title}</span>{t.throwaway && <EyeOff size={14} className="text-muted" aria-label="Throwaway" />}<StatusBadge s={t.status} /></span>
+        {t.last_text && <span className="mt-1 line-clamp-2 block text-[13px] text-muted">{preview(t.last_text)}</span>}
+        <span className="mt-1 block text-[12px] text-muted">{ago(t.updated_at)}</span>
+      </button>
+    </li>
+  );
+}
+
+/** One project in the list: its threads grouped as Needs you, Working, Done, and Put away (folded). */
+function ProjectSection({ p, open, onOpen, onSaved }: { p: FamilyProject; open?: string; onOpen: (thread: string) => void; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const groups = threadGroups(p.threads), needs = groups.find((g) => g.key === "needs")?.threads.length ?? 0;
+  return (
+    <section aria-label={projectLabel(p)}>
+      <h2 className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-muted">
+        <FolderKanban size={14} />{projectLabel(p)}
+        {needs > 0 && <span className="rounded-full bg-danger/15 px-2 py-0.5 text-[11px] normal-case tracking-normal text-danger">{needs} need{needs === 1 ? "s" : ""} you</span>}
+        <button className="icon-btn ml-auto h-11 w-11 border-transparent" aria-label={`Instructions for ${projectLabel(p)}`} aria-expanded={editing} onClick={() => setEditing(!editing)}><NotebookPen size={15} /></button>
+      </h2>
+      {editing && <Instructions p={p} onSaved={onSaved} close={() => setEditing(false)} />}
+      {!editing && p.instructions && <p className="mb-2 line-clamp-2 text-[12px] text-muted">Every thread knows: {p.instructions}</p>}
+      {!groups.length && <Empty>No threads yet.</Empty>}
+      {groups.map((g) => g.key === "away" ? (
+        <details key={g.key} className="group mt-2">
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-muted"><ChevronRight size={14} className="transition-transform group-open:rotate-90" />{g.label} · {g.threads.length}</summary>
+          <ul className="flex flex-col gap-1.5">{g.threads.map((t) => <ThreadRow key={t.id} t={t} open={open === t.id} onOpen={() => onOpen(t.id)} />)}</ul>
+        </details>
+      ) : (
+        <div key={g.key} className="mt-2">
+          <h3 className="mb-1 text-[13px] font-medium text-muted">{g.label} · {g.threads.length}</h3>
+          <ul className="flex flex-col gap-1.5">{g.threads.map((t) => <ThreadRow key={t.id} t={t} open={open === t.id} onOpen={() => onOpen(t.id)} />)}</ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Voice dashboard's Projects tab: projects on the left, the open thread on the right. */
 export function Projects() {
-  const { list, err, load } = useProjects();
+  const { list, err, load } = useProjects(true);
   const [open, setOpen] = useState<{ project: string; thread: string } | null>(null);
   const [starting, setStarting] = useState(false), [change, setChange] = useState<ProjectChange | null>(null);
   const openThread = list?.find((p) => p.id === open?.project)?.threads.find((t) => t.id === open?.thread);
@@ -166,24 +253,7 @@ export function Projects() {
         <button className="btn-primary" onClick={() => { setStarting(true); setOpen(null); }}><Plus size={16} />Start a thread</button>
         {err && <ErrorText>{err}</ErrorText>}
         {!list && !err && <p className="text-muted">Loading…</p>}
-        {list?.map((p) => (
-          <section key={p.id} aria-label={projectLabel(p)}>
-            <h2 className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-muted"><FolderKanban size={14} />{projectLabel(p)}</h2>
-            {!p.threads.length ? <Empty>No threads yet.</Empty> : (
-              <ul className="flex flex-col gap-1.5">
-                {[...p.threads].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status)).map((t) => (
-                  <li key={t.id}>
-                    <button className={cn("card w-full p-3 text-left hover:bg-surface-2", open?.thread === t.id && "border-primary")} aria-current={open?.thread === t.id ? "true" : undefined}
-                      onClick={() => { setOpen({ project: p.id, thread: t.id }); setStarting(false); }}>
-                      <span className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate font-semibold">{t.title}</span>{t.throwaway && <EyeOff size={14} className="text-muted" aria-label="Throwaway" />}<StatusBadge s={t.status} /></span>
-                      {t.last_text && <span className="mt-1 line-clamp-2 block text-[13px] text-muted">{preview(t.last_text)}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
+        {list?.map((p) => <ProjectSection key={p.id} p={p} open={open?.thread} onOpen={(t) => { setOpen({ project: p.id, thread: t }); setStarting(false); }} onSaved={() => void load()} />)}
       </nav>
       <div className={cn("flex min-w-0 flex-1 flex-col gap-3 overflow-auto", narrow && !detail && "hidden")}>
         {narrow && <button className="btn-ghost -ml-2 min-h-[44px] self-start text-[14px]" onClick={back}><ArrowLeft size={16} />All projects</button>}

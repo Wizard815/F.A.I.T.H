@@ -36,6 +36,8 @@ export type FaithBridge = {
   importOrb(): Promise<{ projects: number; logs: number; skipped: string[] }>;
   /** Family projects (docs/projects.md). */
   projects(resolved?: boolean): Promise<{ projects: FamilyProject[] }>;
+  /** A project's standing instructions, given to every thread. */
+  setProjectInstructions(project: string, instructions: string): Promise<FamilyProject>;
   projectThread(project: string, thread: string): Promise<ThreadView>;
   /** `throwaway`: a private thread that keeps nothing, in your own project only. */
   startThread(project: string, brief: string, title?: string, throwaway?: boolean): Promise<ProjectChange>;
@@ -63,5 +65,5 @@ export type FaithBridge = {
 
 export const CHANNELS = [
   "state", "signIn", "signOut", "setSettings", "ask", "stop", "newTopic", "latest", "confirm", "approvals", "decide",
-  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb", "projects", "projectThread", "startThread", "messageThread", "resolveThread",
+  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb", "projects", "setProjectInstructions", "projectThread", "startThread", "messageThread", "resolveThread",
 ] as const;

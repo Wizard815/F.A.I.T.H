@@ -178,6 +178,7 @@ function registerIpc() {
   handle("updateProject", (name: string, patch: any) => guarded((f) => f.updateProject(String(name), { status: patch?.status, next: patch?.next, starred: patch?.starred, archived: patch?.archived })));
   handle("importOrb", () => guarded((f) => f.importOrb()));
   handle("projects", (resolved?: boolean) => guarded((f) => f.projects(!!resolved)));
+  handle("setProjectInstructions", (p: string, text: string) => guarded((f) => f.setProjectInstructions(String(p), String(text ?? ""))));
   handle("projectThread", (p: string, t: string) => guarded((f) => f.projectThread(String(p), String(t))));
   handle("startThread", (p: string, brief: string, title?: string, throwaway?: boolean) => guarded((f) => f.startThread(String(p), String(brief), title ? String(title) : undefined, throwaway === true)));
   handle("messageThread", (p: string, t: string, text: string) => guarded((f) => f.messageThread(String(p), String(t), String(text))));
