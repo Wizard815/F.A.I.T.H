@@ -144,6 +144,7 @@ export class Projects {
     if (!cfg.enabled) throw new ProjectError(400, "Projects are turned off (projects.enabled).");
     if (c.work?.thread) throw new ProjectError(400, "A thread can't start other threads. Say what's needed in your summary.");
     const p = this.get(c, projectId);
+    this.ownProjectOnly(c, p);
     const brief = String(input.brief ?? "").trim();
     if (!brief) throw new ProjectError(400, "A thread needs a brief: what to do.");
     if (brief.length > 4000) throw new ProjectError(400, "A brief is at most 4000 characters.");
@@ -162,6 +163,7 @@ export class Projects {
   /** Send a thread more to do. It picks up its own conversation where it left off. */
   message(c: Caller, threadId: string, text: unknown): Thread {
     const t = this.thread(c, threadId);
+    this.ownProjectOnly(c, t.project);
     const say = String(text ?? "").trim();
     if (!say) throw new ProjectError(400, "Say what the thread should do next.");
     if (t.status === "working") throw new ProjectError(409, `"${t.title}" is still working. Wait for it to finish.`);
@@ -171,8 +173,15 @@ export class Projects {
     return this.thread(c, t.id);
   }
 
+  /** A coordinator turn runs with its owner's tokens and nobody watching, so it may only
+   *  send work into its own project: Sam's coordinator can't put Sam's things into Family. */
+  private ownProjectOnly(c: Caller, p: Project) {
+    if (c.work && c.work.project !== p.id) throw new ProjectError(403, "A project's coordinator works only in its own project.");
+  }
+
   resolve(c: Caller, threadId: string, resolved = true) {
     const t = this.thread(c, threadId);
+    this.ownProjectOnly(c, t.project);
     this.db.prepare("UPDATE project_threads SET resolved = ?, updated_at = ? WHERE id = ?").run(resolved ? 1 : 0, Date.now(), t.id);
     return this.thread(c, t.id);
   }

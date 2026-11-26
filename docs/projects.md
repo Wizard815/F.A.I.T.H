@@ -17,7 +17,9 @@ A project's owner decides whose tokens its threads use. It's the same split as t
 - Nobody opens another person's project, not even an admin. A wrong id answers "There's no such thread in your projects."
 - A thread runs as its project's owner, never as the person who asked. Sam starting a Family thread doesn't lend it Sam's wiki.
 - **Words going to a shared project wait for a Yes.** When a signed-in person starts or messages a thread in Family or Parents, they see the exact words first ("send this to the Family project, where the whole family can read it: …") and tap Yes. The model can't send something private there by itself. From voice or an API token, that's refused.
+- **A coordinator works only in its own project.** It runs with nobody watching, so Sam's coordinator can't start or message a Family thread, even if something it read tells it to. It refuses with "A project's coordinator works only in its own project."
 - From the shared screen, starting a thread is a household change, so a grown-up approves it first.
+- **The wiki.** A person's thread uses their own wiki token, so it reads their `people/<id>/` folder and `household/`. A Family or Parents thread uses the household token: `household/` only, never anyone's folder. The wiki enforces this, not FAITH's prompt.
 - Children: the project tools follow the child allowlist. `project_thread_start` isn't on it, so a child can read their projects but not start threads. Add it to `roles.child.allow_writes` to change that.
 
 ## How a thread runs

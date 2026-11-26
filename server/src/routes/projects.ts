@@ -33,8 +33,15 @@ export function registerProjectRoutes(app: FastifyInstance, x: Ctx) {
     return run(c, "project_thread_start", { project: label(c, String((req.params as any).id)), brief: String(b.brief ?? ""), ...(b.title ? { title: String(b.title) } : {}) });
   });
   app.get("/api/projects/:id/threads/:thread", async (req) => projects.messages(x.need(req), String((req.params as any).thread)));
-  app.post("/api/projects/:id/threads/:thread/message", async (req) =>
-    run(x.need(req), "project_thread_message", { thread: String((req.params as any).thread), text: String((req.body as any)?.text ?? "") }));
-  app.put("/api/projects/:id/threads/:thread/resolved", async (req) =>
-    run(x.need(req), "project_thread_resolve", { thread: String((req.params as any).thread), resolved: (req.body as any)?.resolved !== false }));
+  // Check the thread is this caller's first: the shared view's changes become approval
+  // requests before they run, and a request for someone else's thread shouldn't be made at all.
+  const mine = (c: Caller, req: FastifyRequest) => projects.thread(c, String((req.params as any).thread)).id;
+  app.post("/api/projects/:id/threads/:thread/message", async (req) => {
+    const c = x.need(req);
+    return run(c, "project_thread_message", { thread: mine(c, req), text: String((req.body as any)?.text ?? "") });
+  });
+  app.put("/api/projects/:id/threads/:thread/resolved", async (req) => {
+    const c = x.need(req);
+    return run(c, "project_thread_resolve", { thread: mine(c, req), resolved: (req.body as any)?.resolved !== false });
+  });
 }

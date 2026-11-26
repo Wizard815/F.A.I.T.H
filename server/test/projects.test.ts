@@ -63,7 +63,7 @@ test("projects: a person's thread runs with their own tokens, and only they hear
   assert.deepEqual(await inbox(wizard), [], "nobody else hears about Sam's project");
   // Nobody else can open it, not even the admin, and the shared view can't either.
   for (const who of [wizard, robin, ha]) assert.equal((await A.app.inject({ url: `/api/projects/person-sam/threads/${id}`, headers: as(who) })).statusCode, 404);
-  assert.equal((await A.app.inject({ method: "POST", url: `/api/projects/x/threads/${id}/message`, headers: as(wizard), payload: { text: "show me" } })).statusCode, 400);
+  assert.equal((await A.app.inject({ method: "POST", url: `/api/projects/x/threads/${id}/message`, headers: as(wizard), payload: { text: "show me" } })).statusCode, 404);
   const audit = A.db.prepare("SELECT who, tool FROM audit WHERE tool = 'project_thread_start'").all() as any[];
   assert.equal(audit[0].who.split("@")[0], "sam", "starting a thread is in the action log");
 });
