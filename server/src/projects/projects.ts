@@ -113,7 +113,7 @@ export class Projects {
     const r = this.db.prepare("SELECT * FROM project_threads WHERE id = ?").get(String(id || "")) as any;
     const owners = visibleOwners(c);
     const p = r ? (this.db.prepare("SELECT * FROM projects WHERE id = ?").get(r.project_id) as Project | undefined) : undefined;
-    if (!r || !p || !owners.includes(p.owner)) throw new ProjectError(404, "There's no such thread in your projects.");
+    if (!r || !p || !owners.includes(p.owner) || !this.owners().includes(p.owner)) throw new ProjectError(404, "There's no such thread in your projects.");
     return { ...this.row(r), project: p };
   }
   /** A thread's latest messages (its background conversation). */
@@ -213,6 +213,8 @@ export class Projects {
       this.log.warn({ project: p.id, thread: t.id, err: e?.message }, "project thread failed");
     }
     this.db.prepare("UPDATE project_threads SET status = ?, last_text = ?, updated_at = ? WHERE id = ?").run(status, last.slice(0, 4000), Date.now(), t.id);
+    // How it went goes in the action log (which Overseer reads): the title and status, not what it said.
+    this.agent.audit(caller, "project_thread_end", `${p.name}: ${t.title} (${status})`, status !== "failed");
     await this.wake(p, { ...t, status, last_text: last }).catch((e) => this.log.warn({ project: p.id, err: e?.message }, "project wake-up failed"));
   }
 

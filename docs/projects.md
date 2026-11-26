@@ -76,11 +76,13 @@ projects:
 - **"FAITH restarted while this was running":** the thread's turn stopped with the old process. Send it a message to carry on.
 - **Nobody heard back:** news goes through Mattermost and HA phone notifications. With neither set up, it's only in the person's inbox in FAITH's apps.
 - **A thread says it needs a Yes:** do that part yourself in a chat, where FAITH can ask you.
+- **Someone left the family:** their project and threads stay in FAITH's database but nobody can open them, not even with an old sign-in. Add them back to `people:` to see them again.
+- **Seeing how threads went:** each finished thread adds a `project_thread_end` row to the action log, with its title and status (not what it said). Overseer reads the action log, so it sees those rows too.
 - **"A thread can't start other threads":** ask the project's coordinator, or start the next thread yourself.
 
 ## Not built yet
 
 - Handoffs: a project asking another one a question, answered with that project's own tokens.
 - Projects for the wiki's groups. FAITH has no groups list yet.
-- A Projects tab in the apps, and the D.A.S.H screen (the glance route is ready for it).
+- A Projects tab in the apps, a Home Assistant card (the HA integration's `CARD_PATHS` doesn't allow `/api/projects` yet), a Mattermost command, and the D.A.S.H screen (the glance route is ready for it).
 - Handing a thread's work to Hermes Studio's Projects once those have per-person owners. Today a thread can use `studio_start` as its owner's own Studio account.
