@@ -172,6 +172,19 @@ export type Config = {
   health: { interval_s: number };
   /** The info board for FAITH's apps (board/), brought over from Pondering Orb. */
   board: BoardConfig;
+  /** Family projects (projects/): a background project per person, plus Family and Parents. */
+  projects: ProjectsConfig;
+};
+
+/** Family projects (docs/projects.md). Threads run in the background with the project owner's own tokens. */
+export type ProjectsConfig = {
+  enabled: boolean;
+  /** Threads working at once in one project. */
+  max_working: number;
+  /** When a thread finishes, its project's coordinator gets a turn to report or start the next step. */
+  wake_coordinator: boolean;
+  /** How many follow-up threads a chain of wake-ups may start (stops a coordinator looping). */
+  max_depth: number;
 };
 
 /** The info board (docs/dashboard.md). Everything here is optional; a part that isn't set up doesn't show. */
@@ -396,6 +409,13 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
     health: { interval_s: num(raw.health?.interval_s, 120) },
     board: parseBoard(raw.board || {}, people),
+    projects: (() => {
+      const p = raw.projects || {};
+      const max_working = num(p.max_working, 3), max_depth = num(p.max_depth, 2);
+      if (!(max_working >= 1 && max_working <= 10)) throw new ConfigError("projects.max_working is 1 to 10.");
+      if (!(max_depth >= 0 && max_depth <= 5)) throw new ConfigError("projects.max_depth is 0 to 5.");
+      return { enabled: bool(p.enabled, true), max_working: Math.floor(max_working), wake_coordinator: bool(p.wake_coordinator, true), max_depth: Math.floor(max_depth) };
+    })(),
   };
 }
 

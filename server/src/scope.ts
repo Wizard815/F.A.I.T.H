@@ -26,6 +26,9 @@ export type Caller = {
   byVoiceAndFace?: boolean;
   /** Group chats: who reads the answer. */
   audience?: "family" | "parents";
+  /** A family project's background work (projects/): its coordinator's turn, or one of its threads.
+   *  Threads get no project tools, so a thread can't start more threads. */
+  work?: { project: string; thread?: string; depth: number };
 };
 
 /** The role policy that applies: the parents' chat has its own. */

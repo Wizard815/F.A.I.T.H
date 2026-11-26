@@ -121,6 +121,8 @@ Changes (a signed-in person's own; each goes through FAITH's rules and the actio
 
 Errors come back as `{ "error": "…" }` with 400 (a wrong value), 403 (not for your role, e.g. a child) or 409 (the brief is already being written).
 
+**Family projects** ([projects.md](projects.md)): `GET /api/projects` and `GET /api/projects/glance` (for little screens), and the thread calls listed there. A start into Family or Parents comes back with `pending`: show its Yes card.
+
 ## 7. Rules for every app
 
 - **Local first.** Talk to FAITH on your own network; use https beyond it. No analytics, no cloud services.

@@ -52,7 +52,7 @@ export class Health {
       if (c.voice_id) jobs.push({ id: "voice_id", label: "voice ID", run: async () => { await this.probe(`${c.voice_id!.url}/health`); return true; } });
       if (c.mattermost) jobs.push({ id: "mattermost", label: "Mattermost", run: async () => { if (!this.bot?.familyId) throw new Error("the bot isn't connected"); return true; } });
       for (const conn of this.registry.connectors) {
-        if (conn.id === "faith" || conn.id === "board") continue;   // FAITH itself
+        if (conn.id === "faith" || conn.id === "board" || conn.id === "projects") continue;   // FAITH itself
         jobs.push({ id: conn.id, label: conn.id, run: async () => {
           for (const caller of this.callers()) {
             if (!this.registry.allowedConnector(caller, conn.id)) continue;

@@ -35,7 +35,7 @@ export class Registry {
   allowedConnector(caller: Caller, id: string) {
     const cfg = this.cfg(), role = policyOf(caller);
     const c = cfg.connectors.find((x) => x.id === id);
-    if (!c && id !== "faith" && id !== "board") return false; // "faith" and "board" are FAITH's own tools, always there
+    if (!c && id !== "faith" && id !== "board" && id !== "projects") return false; // FAITH's own tools, always there
     if (c?.roles && !c.roles.includes(role)) return false;
     const pol = cfg.roles[role];
     return !pol.connectors || pol.connectors.includes(id);

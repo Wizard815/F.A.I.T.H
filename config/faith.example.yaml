@@ -244,3 +244,11 @@ dashboard:
 #   system: { roles: [admin], disks: [/data] }
 #   brief: { people: [wizard], time: "07:00", days: daily, send: false }
 #   log_max: 120
+
+# Family projects (docs/projects.md): background threads in each person's project, Family and Parents.
+# On by default; threads use only the tools FAITH already has, as the project's owner.
+# projects:
+#   enabled: true
+#   max_working: 3          # threads working at once in one project
+#   wake_coordinator: true  # a finished thread gets a coordinator turn that reports back
+#   max_depth: 2            # follow-up threads a chain of coordinator turns may start
