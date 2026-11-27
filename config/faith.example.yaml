@@ -148,6 +148,14 @@ connectors:
     roles: [admin, adult]
     # household_profile: household
 
+  # Hermes Studio: its chats, jobs and Projects (herdr threads). owner: only that one person
+  # (whoever runs the homelab) links Studio, with one Studio account (STUDIO_USER, STUDIO_PASSWORD).
+  # Leave owner out to give each person their own account (STUDIO_USER_{ID}).
+  # - id: studio
+  #   type: studio
+  #   url: http://<server-ip>:8648
+  #   owner: wizard
+
 # Mattermost: a DM with each person, a family channel, a parents channel (docs/mattermost.md).
 mattermost:
   url: http://<server-ip>:8065

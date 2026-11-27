@@ -14,6 +14,8 @@ export class Studio implements Connector {
 
   private creds(caller: Caller) {
     if (caller.scope.kind !== "person") return undefined;
+    // One owner (the person who runs the homelab): only they reach Studio, with its one account.
+    if (this.cfg.owner && caller.scope.person.id !== this.cfg.owner) return undefined;
     const user = envValue(personEnv(this.cfg.user_env, caller.scope.person.id), this.env), pass = envValue(personEnv(this.cfg.password_env, caller.scope.person.id), this.env);
     return user && pass ? { user, pass } : undefined;
   }

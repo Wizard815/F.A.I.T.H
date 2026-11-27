@@ -117,8 +117,10 @@ projects:
 Studio has its own Projects for coding work. herdr is the engine behind its threads, and Studios pair into groups (about 6) through a bridge on each one. FAITH connects to that as the person, never as a Studio in the group:
 
 - **As the person.** FAITH signs in to Studio with the person's own Studio account (`STUDIO_USER_{ID}`), the same as `studio_start`. A household view, a group chat or someone without a Studio account gets no Studio tools.
+- **Or one owner.** Set `owner:` on the Studio connector to the family member who runs the homelab. Only they link Studio, with one Studio account (`STUDIO_USER`, `STUDIO_PASSWORD`): its chats, herdr threads and projects. Nobody else gets Studio tools, not even another admin, and the household view never does. Their own FAITH threads can hand Studio a job too.
 - **`studio_projects`** lists that person's Studio projects with their open threads and stages (the same names as here). **`studio_project_message`** sends a project's coordinator a job or a question (Studio shows it as sent through FAITH). **`studio_project_task`** adds a task to its board, with the whole job in its notes. Both are changes, so they need a Yes like any other.
 - **Studio decides.** FAITH never starts a Studio thread or a coding agent itself. Studio's coordinator, or the person, starts the task. If the work belongs on another Studio in the group, that coordinator sends it there through the bridge.
+- **Studio's agents can still use the wiki and FAITH.** Studio's agents reach the LLM wiki through Studio's own wiki connection (hermes-studio `docs/llm-wiki.md`), with the owner's wiki token. To let them ask FAITH for something ("add milk to the list"), add FAITH's MCP server to Studio: `http://<faith-host>:8090/mcp` with the owner's person token (`docker exec faith faith token add person wizard studio`). It acts as the owner, so it sees only what they see, and the riskiest changes are refused there because nobody can tap Yes.
 - **Why not join the group?** A paired Studio has one key for the whole box. FAITH's privacy comes from each person's own tokens, so a box-wide key would let one family member's work reach another's.
 
 What goes wrong:
@@ -137,4 +139,4 @@ What goes wrong:
 - Projects for the wiki's groups. FAITH has no groups list yet.
 - A Home Assistant card (the HA integration's `CARD_PATHS` doesn't allow `/api/projects` yet) and a Mattermost command.
 - Starting or answering threads from D.A.S.H. Its Projects screen reads `/api/projects/glance` and is read-only until hold-to-talk and pairing.
-- Studio projects for family members who aren't Studio super admins (Studio would need a project member role). News from a Studio project coming back into a FAITH thread.
+- Studio projects for more than one family member who isn't a Studio super admin (Studio would need a project member role). With `owner:` that isn't needed. News from a Studio project coming back into a FAITH thread.

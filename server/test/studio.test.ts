@@ -66,3 +66,22 @@ test("studio projects: not a super admin gets a plain answer; no account, the ho
   const thr = await tools(person("wiz", { project: "person-wiz", depth: 0, throwaway: true }));
   assert.ok(thr.some((t) => t.name === "studio_projects") && !thr.some((t) => t.name === "studio_project_task" || t.name === "studio_project_message"), "a throwaway thread can look but not add");
 });
+
+test("studio owner: only that one person gets Studio, with the one account; nobody else, not even an admin", async () => {
+  const c = parseConfig({ model: { base_url: "http://127.0.0.1:9" },
+    people: [{ id: "wiz", name: "Wiz", role: "admin" }, { id: "ana", name: "Ana", role: "admin" }, { id: "sam", name: "Sam", role: "adult" }],
+    connectors: [{ id: "studio", type: "studio", url, owner: "wiz" }] }, {});
+  assert.deepEqual([c.connectors[0].user_env, c.connectors[0].password_env], ["STUDIO_USER", "STUDIO_PASSWORD"]);
+  // Ana and Sam even have per-person variables set: the owner setting ignores them.
+  const B = await buildApp({ config: () => c, dataFile: ":memory:", env: { STUDIO_USER: "wiz", STUDIO_PASSWORD: "pw", STUDIO_USER_ANA: "wiz", STUDIO_PASSWORD_ANA: "pw", STUDIO_USER_SAM: "sam", STUDIO_PASSWORD_SAM: "pw" } });
+  try {
+    const of = async (id: string, work?: Caller["work"]) => (await B.registry.toolsFor({ scope: { kind: "person", person: c.people.find((p) => p.id === id)! }, channel: "personal", label: id, work })).tools.filter((t) => t.name.startsWith("studio")).map((t) => t.name);
+    assert.ok((await of("wiz")).includes("studio_project_message"));
+    assert.ok((await of("wiz", { project: "person-wiz", depth: 0 })).includes("studio_project_task"), "the owner's own background threads can hand Studio a job");
+    assert.deepEqual(await of("ana"), [], "another admin gets nothing");
+    assert.deepEqual(await of("sam"), []);
+    const r: any = await (await B.registry.toolsFor({ scope: { kind: "person", person: c.people[0] }, channel: "personal", label: "wiz" })).tools.find((t) => t.name === "studio_projects")!.run({});
+    assert.equal(r.projects[0].name, "Overseer", "signed in with the one account");
+  } finally { await B.app.close(); }
+  assert.throws(() => parseConfig({ people: [{ id: "wiz", name: "Wiz", role: "admin" }], connectors: [{ id: "studio", type: "studio", url, owner: "nobody" }] }, {}), /owner: no one with the id "nobody"/);
+});

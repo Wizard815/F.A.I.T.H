@@ -85,6 +85,7 @@ export type StudioConnector = {
   id: string; type: "studio"; url: string;
   user_env: string;              // per-person Studio account, e.g. STUDIO_USER_{ID}
   password_env: string;          // e.g. STUDIO_PASSWORD_{ID}
+  owner?: string;                // only this person links Studio, with one account (STUDIO_USER, STUDIO_PASSWORD)
   roles?: PolicyName[];
 };
 export type MealieConnector = {
@@ -314,7 +315,12 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
           return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who, ...(face ? { face_entity: face } : {}) };
         }) } as HomeAssistantConnector;
     }
-    if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
+    if (type === "studio") {
+      const owner = c.owner ? str(c.owner) : undefined;
+      if (owner && !people.some((p) => p.id === owner)) throw new ConfigError(`connectors.${id}.owner: no one with the id "${owner}". Use an id from people:.`);
+      return { id, type, url, user_env: str(c.user_env, owner ? "STUDIO_USER" : "STUDIO_USER_{ID}"), password_env: str(c.password_env, owner ? "STUDIO_PASSWORD" : "STUDIO_PASSWORD_{ID}"),
+        ...(owner ? { owner } : {}), roles: roles ?? ["admin", "adult"] } as StudioConnector;
+    }
     if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "adult", "parents", "household"] } as MealieConnector;
     if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
       household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
