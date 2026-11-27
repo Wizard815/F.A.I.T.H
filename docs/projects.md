@@ -112,6 +112,33 @@ projects:
 - **A thread vanished from the list:** it was put away (by hand or after `auto_resolve_days`). Open *Put away* to bring it back. Throwaway threads are deleted instead.
 - **"A thread can't start other threads":** ask the project's coordinator, or start the next thread yourself.
 
+## FAITH's own Hermes
+
+FAITH can hold its own Hermes, just for project work. Threads hand it the long jobs (research, planning, many steps) with `hermes_project_job`. Chats never get it.
+
+- **Each person has their own profile** (`/p/<person>/`), with its own key (`FAITH_HERMES_KEY_SAM`), so each person's Hermes memory stays theirs. A person without a key gets no Hermes in their threads.
+- **Family and Parents** get it only if you add `household` and `parents` to its `roles`, and each has its own profile (`household_profile`, `parents_profile`). Parents work never lands in the Family profile. With no `parents_profile`, Parents threads get no Hermes.
+- **Throwaway threads** don't get it: it can change things.
+- It's a separate Hermes from the admin's own, so family project work never reaches the admin's cluster.
+
+```yaml
+connectors:
+  - id: faith-hermes
+    type: hermes
+    url: http://faith-hermes:8642
+    key_env: FAITH_HERMES_KEY_{PROFILE}
+    projects_only: true
+    roles: [admin, adult]
+```
+
+The `faith-hermes` service in `docker-compose.example.yml` runs it. Make one profile per person (`docker exec faith-hermes hermes profile create sam`), give each its own `API_SERVER_KEY`, and point its model at Argos.
+
+**The admin's own Hermes cluster.** Set `owner: wizard` on your other Hermes connector, and on the Studio one (below). Then only you get them, in your chats and in your own threads, so your FAITH projects can hand work to your cluster and to Studio's projects. Nobody else does, not even another admin.
+
+What goes wrong:
+- **A thread says it has no Hermes:** that person's profile has no key in FAITH's `.env`, or Family and Parents aren't in `roles`.
+- **401 from FAITH's Hermes:** each profile takes only its own `API_SERVER_KEY`. Copy it from `/opt/data/profiles/<person>/.env`.
+
 ## Hermes Studio
 
 Studio has its own Projects for coding work. herdr is the engine behind its threads, and Studios pair into groups (about 6) through a bridge on each one. FAITH connects to that as the person, never as a Studio in the group:

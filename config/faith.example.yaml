@@ -140,13 +140,24 @@ connectors:
     person_token_env: ORB_TOKEN_{ID}         # one Orb per person
     roles: [admin, adult]
 
+  # FAITH's own Hermes (the faith-hermes service in docker-compose.example.yml): for project
+  # threads only, never a chat. One profile per person, so each person's Hermes memory stays theirs.
+  - id: faith-hermes
+    type: hermes
+    url: http://faith-hermes:8642
+    key_env: FAITH_HERMES_KEY_{PROFILE}     # each profile's own API_SERVER_KEY; FAITH_HERMES_KEY_WIZARD
+    projects_only: true
+    roles: [admin, adult]                   # add household, parents to give Family and Parents threads Hermes too
+    # household_profile: family             # the Family project's profile
+    # parents_profile: parents              # the Parents project's profile (kept apart from Family)
+
+  # The admin's own Hermes cluster. owner: only that one person gets it, in chats and in their threads.
   - id: hermes
     type: hermes
     url: http://<server-ip>:8642
     key_env: HERMES_API_KEY_{PROFILE}       # each profile's own API_SERVER_KEY; HERMES_API_KEY_WIZARD
     model: hermes-agent
-    roles: [admin, adult]
-    # household_profile: household
+    owner: wizard
 
   # Hermes Studio: its chats, jobs and Projects (herdr threads). owner: only that one person
   # (whoever runs the homelab) links Studio, with one Studio account (STUDIO_USER, STUDIO_PASSWORD).

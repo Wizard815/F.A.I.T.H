@@ -30,6 +30,25 @@ services:
       - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/wake:/config
     networks: [ai_net]
 
+  # FAITH's own Hermes, for project threads only (docs/projects.md, "FAITH's own Hermes").
+  # Build it from hermes-agent (docker build -t hermes-agent .). It's separate from your other
+  # Hermes, so the family's project work never lands in the admin's cluster. One profile per person:
+  #   docker exec faith-hermes hermes profile create sam
+  # then give each profile its own API_SERVER_KEY (in /opt/data/profiles/sam/.env) and copy it
+  # into FAITH's .env as FAITH_HERMES_KEY_SAM. Point its model at Argos (docker exec -it faith-hermes
+  # hermes setup), so it stays local.
+  # faith-hermes:
+  #   image: hermes-agent
+  #   container_name: faith-hermes
+  #   restart: unless-stopped
+  #   command: ["gateway", "run"]
+  #   environment:
+  #     API_SERVER_HOST: 0.0.0.0          # reachable from faith on ai_net only (no ports: published)
+  #     API_SERVER_KEY: ${FAITH_HERMES_KEY_DEFAULT}   # Hermes won't serve 0.0.0.0 without a key
+  #   volumes:
+  #     - ${FAITH_APPDATA:-/mnt/user/appdata/faith}/hermes:/opt/data
+  #   networks: [ai_net]
+
 networks:
   ai_net:
     external: true   # where Argos, the wiki, ALLGlance, Coinpile and Orb already are

@@ -79,6 +79,9 @@ export type HermesConnector = {
   id: string; type: "hermes"; url: string; model: string;
   key_env?: string;                // HERMES_API_KEY_{PROFILE}: each profile's own API_SERVER_KEY (Hermes refuses a shared one)
   household_profile?: string;      // profile for the household view; unset = no Hermes when nobody is signed in
+  parents_profile?: string;        // with projects_only: the Parents project's profile; unset = no Hermes there
+  projects_only?: boolean;         // only project threads and coordinators get it, never a chat (FAITH's own Hermes)
+  owner?: string;                  // only this person gets it (e.g. the admin's own Hermes cluster)
   roles?: PolicyName[];
 };
 export type StudioConnector = {
@@ -325,7 +328,12 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
       household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
       share_days: Math.min(30, Math.max(1, num(c.share_days, 7))), roles } as ImmichConnector;
-    if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
+    if (type === "hermes") {
+      const owner = c.owner ? str(c.owner) : undefined;
+      if (owner && !people.some((p) => p.id === owner)) throw new ConfigError(`connectors.${id}.owner: no one with the id "${owner}". Use an id from people:.`);
+      return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined,
+        ...(c.parents_profile ? { parents_profile: str(c.parents_profile) } : {}), ...(c.projects_only === true ? { projects_only: true } : {}), ...(owner ? { owner } : {}), roles: roles ?? ["admin", "adult"] } as HermesConnector;
+    }
     throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie or immich.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
