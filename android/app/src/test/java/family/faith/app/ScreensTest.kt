@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import android.app.Application
 import org.json.JSONObject
 import org.junit.Rule
@@ -106,6 +107,51 @@ class ScreensTest {
               {"id":"meals","title":"Meals","kind":"meals","items":[{"title":"Fish tacos","label":"dinner"}]},
               {"id":"shopping","title":"Shopping","kind":"checklist","items":[{"title":"Tortillas"},{"title":"Limes"},{"title":"Coriander"}]},
               {"id":"home","title":"Home","kind":"entities","entities":[{"entity_id":"lock.front_door","name":"Front door","state":"locked"},{"entity_id":"light.kitchen","name":"Kitchen lights","state":"on"}]}]}"""))
-        paparazzi.snapshot { Screen { PanelScreen(c, b, {}, {}) } }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { PanelScreen(c, b, {}, {}, p) { java.time.LocalDateTime.of(2026, 11, 26, 20, 51) } } }
+    }
+
+    @Test fun projects() {
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { ProjectsScreen(p) } }
+    }
+
+    @Test fun projectsThread() {
+        val p = ProjectsModel(app()).apply {
+            now = { 1795730000000 }
+            list.value = ProjectsJson.projects(ProjectsTest().sample)
+            open.value = "person-sam" to "t1"
+            messages.value = listOf(ThreadMessage(false, "Find three dinners"), ThreadMessage(true, "Tonight is **fish tacos**. Tortillas and limes are on the list."))
+        }
+        paparazzi.snapshot { Screen { ProjectsScreen(p) } }
+    }
+
+    @Test fun projectsThrowaway() {
+        val p = ProjectsModel(app()).apply {
+            now = { 1795730000000 }
+            list.value = ProjectsJson.projects(ProjectsTest().sample)
+            open.value = "person-sam" to "t4"
+            messages.value = listOf(ThreadMessage(false, "Ideas for Kit's party"), ThreadMessage(true, "A picnic at the lake, with the cake from the bakery on Main Street."))
+        }
+        paparazzi.snapshot { Screen { ProjectsScreen(p) } }
+    }
+
+    /** Voice dashboard on the Projects tab: the same tab bar as Root (MainActivity.kt). */
+    @Test fun voiceDashboardProjects() {
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { androidx.compose.foundation.layout.Column {
+            androidx.compose.material3.TabRow(selectedTabIndex = 2, containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                listOf("Ask", "Board", "Projects").forEachIndexed { i, label ->
+                    androidx.compose.material3.Tab(selected = i == 2, onClick = {}, text = { androidx.compose.material3.Text(label, fontSize = 16.sp) })
+                }
+            }
+            ProjectsScreen(p)
+        } } }
+    }
+
+    @Test fun voiceFocusProjects() {
+        val c = chat().apply { lines.clear() }
+        val p = ProjectsModel(app()).apply { now = { 1795730000000 }; list.value = ProjectsJson.projects(ProjectsTest().sample) }
+        paparazzi.snapshot { Screen { FocusScreen(c, {}, {}, p) } }
     }
 }

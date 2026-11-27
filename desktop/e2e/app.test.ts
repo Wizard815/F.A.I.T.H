@@ -110,7 +110,10 @@ test("the inbox: a new item shows, and the tab says how many are new", async () 
   await page.getByRole("button", { name: /Inbox/ }).click();
   await page.getByText("holding a parcel").waitFor();
   await shot("4-inbox");
-  assert.equal(await page.getByRole("button", { name: /new\)/ }).count(), 0, "read once opened");
+  // Marking it read is a round trip to FAITH, so give the tab a moment to update.
+  const unread = page.getByRole("button", { name: /new\)/ });
+  for (let i = 0; i < 50 && (await unread.count()) > 0; i++) await page.waitForTimeout(100);
+  assert.equal(await unread.count(), 0, "read once opened");
 });
 
 test("the board: the day cards, the weather, a project and a log entry", async () => {
@@ -136,6 +139,85 @@ test("the board: the day cards, the weather, a project and a log entry", async (
   await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
   await shot("5-board-dark");
   await page.emulateMedia({ colorScheme: "light" });
+});
+
+test("projects: start a background thread, see it finish, and a Family thread waits for a Yes", async () => {
+  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("navigation", { name: "Projects" }).getByText("Mine").waitFor();
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Title").fill("Dinner ideas");
+  await page.getByLabel("What should FAITH do?").fill("Find three dinners everyone will eat this week.");
+  await shot("6-projects-new");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).waitFor();
+  await A.projects.idle();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByText("fish tacos").waitFor({ timeout: 15_000 });
+  assert.equal(A.projects.threads("person-sam")[0].status, "done");
+  await shot("6-projects-thread");
+  // Family: everyone reads it, so the exact words wait for Sam's Yes. (A narrow window shows one pane: go back first.)
+  await page.getByRole("button", { name: "All projects" }).click();
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Project", { exact: true }).selectOption("family");
+  await page.getByText("You'll be asked to say Yes first.").waitFor();
+  await page.getByLabel("What should FAITH do?").fill("Plan Saturday afternoon for everyone.");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByText("Plan Saturday afternoon for everyone.", { exact: false }).waitFor();
+  assert.deepEqual(A.projects.threads("family"), [], "nothing in Family before the Yes");
+  await shot("6-projects-yes");
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByRole("button", { name: "Yes", exact: true }).click();
+  await page.getByRole("group", { name: "Waiting for your Yes" }).getByText("Answered").waitFor();
+  await A.projects.idle();
+  assert.equal(A.projects.threads("family").length, 1);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+  await shot("6-projects-dark");
+  await page.emulateMedia({ colorScheme: "light" });
+});
+
+test("projects: a throwaway thread keeps nothing and is deleted", async () => {
+  await page.getByRole("button", { name: "All projects" }).click().catch(() => {});
+  await page.getByRole("button", { name: "Start a thread" }).first().click();
+  await page.getByLabel("Project", { exact: true }).selectOption("person-sam");
+  await page.getByLabel("Title").fill("Gift idea");
+  await page.getByLabel("What should FAITH do?").fill("Something for Kit's birthday, a surprise.");
+  await page.getByRole("checkbox", { name: /Throwaway/ }).check();
+  await shot("6-projects-throwaway-new");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  const pane = page.getByRole("region", { name: "Thread: Gift idea" });
+  await pane.waitFor();
+  await A.projects.idle();
+  await pane.getByText("fish tacos").waitFor({ timeout: 15_000 });
+  await pane.getByText("Throwaway", { exact: true }).waitFor();
+  const t = A.projects.threads("person-sam").find((x) => x.title === "Gift idea")!;
+  assert.equal(t.throwaway, true);
+  await shot("6-projects-throwaway");
+  // The Family project can't have one: the box isn't offered there.
+  await pane.getByRole("button", { name: "Delete" }).click();
+  for (let i = 0; i < 50 && A.projects.threads("person-sam").some((x) => x.id === t.id); i++) await page.waitForTimeout(100);
+  assert.equal((A.db.prepare("SELECT COUNT(*) AS n FROM project_threads WHERE id = ?").get(t.id) as any).n, 0, "deleted on FAITH");
+  await page.getByRole("region", { name: "Thread: Gift idea" }).waitFor({ state: "detached" });
+});
+
+test("projects: grouped like Studio's, instructions every thread gets, and put-away threads fold away", async () => {
+  const mine = page.getByRole("region", { name: "Mine" });
+  await mine.getByRole("heading", { name: /^Done · \d+$/ }).waitFor();
+  assert.ok(await page.getByRole("button", { name: /Projects/ }).first().isVisible());
+  // Instructions: saved on FAITH and given to the next thread.
+  await page.getByRole("button", { name: "Instructions for Mine" }).click();
+  await page.getByLabel("What every thread here should know").fill("I'm vegetarian.");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await mine.getByText("Every thread knows: I'm vegetarian.").waitFor();
+  assert.equal(A.projects.get({ scope: { kind: "person", person: A.projects.person("person:sam")! }, channel: "personal", label: "sam" }, "mine").instructions, "I'm vegetarian.");
+  await shot("6-projects-groups");
+  // Put one away: it moves to the folded "Put away" group and can come back.
+  await mine.getByRole("button", { name: /Dinner ideas/ }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByRole("button", { name: "Put away" }).click();
+  await page.getByRole("button", { name: "All projects" }).click().catch(() => {});
+  await mine.getByText(/^Put away · 1$/).click();
+  await mine.getByRole("button", { name: /Dinner ideas/ }).click();
+  await page.getByRole("region", { name: "Thread: Dinner ideas" }).getByRole("button", { name: "Bring back" }).click();
+  for (let i = 0; i < 50 && A.projects.threads("person-sam").every((x) => x.title !== "Dinner ideas"); i++) await page.waitForTimeout(100);
+  assert.ok(A.projects.threads("person-sam").some((x) => x.title === "Dinner ideas"), "brought back");
 });
 
 test("the page has no way to Node or the key", async () => {
@@ -186,6 +268,7 @@ test("voice panel: a clock, the weather and a few panels; a tap asks FAITH", asy
   assert.match(await page.getByRole("button", { name: /^Weather: 44°F, rainy/ }).getAttribute("aria-label"), /Ask FAITH about the weather/);
   await page.getByRole("button", { name: /The house/ }).waitFor();
   assert.match(await page.getByRole("button", { name: /The house/ }).innerText(), /Front door: locked/);
+  assert.match(await page.getByRole("button", { name: /^Projects/ }).innerText(), /Dinner ideas|Saturday/, "the Projects panel names a thread");
   await shot("8-panel");
   await page.getByRole("button", { name: /The house/ }).click();
   await page.getByText("“How's the house?”").waitFor();

@@ -30,6 +30,9 @@ import { registerBoardRoutes } from "./routes/board.js";
 import { Board } from "./board/board.js";
 import { BoardTools } from "./board/tools.js";
 import { BoardError } from "./board/store.js";
+import { Projects, ProjectError } from "./projects/projects.js";
+import { ProjectTools } from "./projects/tools.js";
+import { registerProjectRoutes } from "./routes/projects.js";
 
 const SESSION = "faith_session", DEVICE = "faith_device";
 
@@ -67,6 +70,9 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   // The info board (Pondering Orb's Main and Daily pages), with its tools for FAITH's agent.
   const board = new Board(db, cfg, registry, agent, { approvals, notifier, health, log: app.log });
   registry.add(new BoardTools(board));
+  // Family projects: a background project per person, plus Family and Parents (docs/projects.md).
+  const projects = new Projects(db, cfg, agent, notifier, app.log);
+  registry.add(new ProjectTools(projects));
   // Audio for speech-to-text arrives as raw bytes.
   app.addContentTypeParser(/^audio\/|^application\/octet-stream/, { parseAs: "buffer", bodyLimit: 15_000_000 }, (_req, body, done) => done(null, body));
 
@@ -82,7 +88,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   });
 
   app.setErrorHandler((err: any, _req, reply) => {
-    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError || err instanceof RewardsError || err instanceof RoutineError || err instanceof VoiceError || err instanceof BoardError ? err.status : err instanceof SkillError ? 400 : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
+    const status = err instanceof AuthError || err instanceof ModelError || err instanceof ApprovalError || err instanceof RewardsError || err instanceof RoutineError || err instanceof VoiceError || err instanceof BoardError || err instanceof ProjectError ? err.status : err instanceof SkillError ? 400 : err instanceof ToolError ? 502 : err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) app.log.error(err);
     reply.status(status).send({ error: status === 500 ? "Something went wrong on FAITH's side." : err.message });
   });
@@ -439,6 +445,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   registerMcpRoutes(app, { agent, registry, apiCaller, name: () => cfg().name });
   const omi = registerOmiRoutes(app, { cfg, db, auth, notifier });
   registerBoardRoutes(app, { cfg, env, board, agent, registry, need, needPerson });
+  registerProjectRoutes(app, { projects, agent, need });
 
   // ---------- the web app ----------
   if (opts.webDir && existsSync(opts.webDir)) {
@@ -454,5 +461,5 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   sweeper.unref();
   app.addHook("onClose", async () => { clearInterval(sweeper); presence.stop(); routines.stop(); board.stop(); });
 
-  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health, omi, board };
+  return { app, auth, passkeys, presence, registry, agent, approvals, db, rewards, routines, skills, voices, notifier, faithTools, health, omi, board, projects };
 }

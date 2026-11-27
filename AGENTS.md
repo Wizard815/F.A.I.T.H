@@ -12,6 +12,7 @@ FAITH is the family's front-end agent: one container (server + web app) and a Ho
 | `server/scripts/demo.ts` | the whole thing with fakes | `node --import tsx server/scripts/demo.ts` |
 | `server/scripts/eval.ts` | 15 family requests against a real model (Argos by default), with checks | `EVAL_MODEL_URL=… EVAL_MODEL=… node --import tsx server/scripts/eval.ts`; after prompt or tool changes |
 | `server/scripts/eval-live.ts` | the same idea against a real setup (`FAITH_CONFIG`), checking HA, Firefly and the wiki afterwards; it changes things, so use a test setup | `FAITH_CONFIG=… FAITH_DATA=… EVAL_VAULT=… node --import tsx server/scripts/eval-live.ts` |
+| `server/scripts/eval-projects.ts` | family projects against a real model: thread stages, throwaways, a private note that tries to leak into Family | `EVAL_MODEL_URL=… EVAL_MODEL=… node --import tsx server/scripts/eval-projects.ts`; after projects prompt or tool changes |
 | `wakeword/` | wake words for HA's voice pipeline (Wyoming, Python): any phrase (Vosk) and trained openWakeWord models | `cd wakeword && python fetch_models.py --example && python -m pytest` (needs espeak-ng, ffmpeg) |
 | `server/src/wyoming.ts` | speech-to-text for HA's voice pipeline (Wyoming), which also notes who spoke | `npm test`; HA's own client: see `docs/home-assistant.md` |
 | `android/` | the Android app ([docs/android.md](docs/android.md)), on the [clients contract](docs/clients.md) | `cd android && ./gradlew assembleDebug testDebugUnitTest` |

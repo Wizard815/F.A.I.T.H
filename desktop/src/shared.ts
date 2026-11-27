@@ -1,4 +1,4 @@
-import type { Board, ChatEvent, InboxItem, Person } from "./faith.js";
+import type { Board, ChatEvent, FamilyProject, InboxItem, Person, ProjectChange, ThreadView } from "./faith.js";
 import type { Settings } from "./store.js";
 
 /** What the page may ask the main process for. The page never sees the key:
@@ -34,6 +34,15 @@ export type FaithBridge = {
   addProject(name: string, status?: string, next?: string): Promise<unknown>;
   updateProject(name: string, patch: { status?: string; next?: string; starred?: boolean; archived?: boolean }): Promise<unknown>;
   importOrb(): Promise<{ projects: number; logs: number; skipped: string[] }>;
+  /** Family projects (docs/projects.md). */
+  projects(resolved?: boolean): Promise<{ projects: FamilyProject[] }>;
+  /** A project's standing instructions, given to every thread. */
+  setProjectInstructions(project: string, instructions: string): Promise<FamilyProject>;
+  projectThread(project: string, thread: string): Promise<ThreadView>;
+  /** `throwaway`: a private thread that keeps nothing, in your own project only. */
+  startThread(project: string, brief: string, title?: string, throwaway?: boolean): Promise<ProjectChange>;
+  messageThread(project: string, thread: string, text: string): Promise<ProjectChange>;
+  resolveThread(project: string, thread: string, resolved: boolean): Promise<ProjectChange>;
   transcribe(audio: ArrayBuffer, mime: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;
   /** A photo's picture (data URL), fetched by the main process with this computer's key. */
@@ -49,12 +58,12 @@ export type FaithBridge = {
   /** The global shortcut or the tray's "Ask FAITH": focus the question box. */
   onAsk(cb: () => void): () => void;
   /** A notification or the tray asked to show a tab. */
-  onShow(cb: (tab: "ask" | "board" | "inbox") => void): () => void;
+  onShow(cb: (tab: "ask" | "board" | "projects" | "inbox") => void): () => void;
   /** The tray changed the layout. */
   onLayout(cb: (layout: State["settings"]["layout"]) => void): () => void;
 };
 
 export const CHANNELS = [
   "state", "signIn", "signOut", "setSettings", "ask", "stop", "newTopic", "latest", "confirm", "approvals", "decide",
-  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb",
+  "dashboard", "transcribe", "speak", "photo", "openLink", "inbox", "markRead", "board", "writeBrief", "addLog", "addProject", "updateProject", "importOrb", "projects", "setProjectInstructions", "projectThread", "startThread", "messageThread", "resolveThread",
 ] as const;

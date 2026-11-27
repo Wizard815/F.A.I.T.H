@@ -144,6 +144,25 @@ class FaithApi(baseUrl: String, private val token: String?) {
         json("/api/board/projects/" + URLEncoder.encode(name, "UTF-8").replace("+", "%20"), "POST", JSONObject().put("status", status))
     }
 
+    // Family projects (docs/projects.md): yours, Family, and Parents for grown-ups.
+    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    /** `withPutAway`: resolved threads too, for the folded Put away group. */
+    fun projects(withPutAway: Boolean = true): List<FamilyProject> = ProjectsJson.projects(json(if (withPutAway) "/api/projects?resolved=1" else "/api/projects"))
+    /** What every thread in a project should know (2000 characters at most). */
+    fun setProjectInstructions(project: String, text: String) { json("/api/projects/${enc(project)}", "PUT", JSONObject().put("instructions", text)) }
+    fun projectThread(project: String, thread: String): List<ThreadMessage> = ProjectsJson.messages(json("/api/projects/${enc(project)}/threads/${enc(thread)}"))
+    /** `throwaway`: a private thread that keeps nothing, in your own project only. */
+    fun startThread(project: String, brief: String, title: String?, throwaway: Boolean = false): ProjectChange {
+        val b = JSONObject().put("brief", brief)
+        if (!title.isNullOrBlank()) b.put("title", title)
+        if (throwaway) b.put("throwaway", true)
+        return ProjectsJson.change(json("/api/projects/${enc(project)}/threads", "POST", b))
+    }
+    fun messageThread(project: String, thread: String, text: String): ProjectChange =
+        ProjectsJson.change(json("/api/projects/${enc(project)}/threads/${enc(thread)}/message", "POST", JSONObject().put("text", text)))
+    fun resolveThread(project: String, thread: String, resolved: Boolean): ProjectChange =
+        ProjectsJson.change(json("/api/projects/${enc(project)}/threads/${enc(thread)}/resolved", "PUT", JSONObject().put("resolved", resolved)))
+
     /** What FAITH sent this person since `after` (section 5). `waitSeconds` > 0 long-polls. */
     fun inbox(after: Long, waitSeconds: Int): Pair<List<InboxItem>, Long> {
         val d = json("/api/inbox?after=$after&wait=$waitSeconds", readTimeoutMs = (waitSeconds + 15) * 1000)

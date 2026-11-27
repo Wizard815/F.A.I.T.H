@@ -16,7 +16,7 @@ An app signs in as **one person** and counts as **their own screen**:
 | Client | How it signs in |
 |---|---|
 | Android, desktop (has a keyboard) | `POST /api/auth/client` `{ "person": "sam", "password": "…", "name": "Pixel 8" }` → `{ "token": "fapp_…", "name": "sam-pixel-8-x7k2" }`. Once. |
-| D.A.S.H (no keyboard) | On the server: `docker exec faith faith token add client wizard dash`. Type the token into D.A.S.H's phone setup. |
+| D.A.S.H (the DASH phone app and the ESP bound to it) | The DASH app signs in like Android, at once twice: one token for the phone (`"name": "DASH phone"`) and one it uploads to its ESP with the FAITH mod (`"name": "DASH"`). Each can be removed alone, so a lost handheld doesn't sign out the phone. Without the app: `docker exec faith faith token add client wizard dash`. |
 
 - **Keep only the token,** never the password: the Android Keystore, the OS keychain, or the ESP32's NVS.
 - **Removing an app:** `GET /api/me/clients` lists a person's apps, and `DELETE /api/me/clients/<name>` removes one. Or on the server: `faith token revoke <name>`. Do this when a phone is lost.
@@ -120,6 +120,8 @@ Changes (a signed-in person's own; each goes through FAITH's rules and the actio
 | `POST /api/board/import` `{ "from": "orb" }` or `{ "projects", "logs" }` | Brings projects and the log over from Pondering Orb → `{ projects, logs, skipped }`. |
 
 Errors come back as `{ "error": "…" }` with 400 (a wrong value), 403 (not for your role, e.g. a child) or 409 (the brief is already being written).
+
+**Family projects** ([projects.md](projects.md)): `GET /api/projects` and `GET /api/projects/glance` (for little screens), and the thread calls listed there. A start into Family or Parents comes back with `pending`: show its Yes card.
 
 ## 7. Rules for every app
 

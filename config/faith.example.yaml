@@ -140,13 +140,32 @@ connectors:
     person_token_env: ORB_TOKEN_{ID}         # one Orb per person
     roles: [admin, adult]
 
+  # FAITH's own Hermes (the faith-hermes service in docker-compose.example.yml): for project
+  # threads only, never a chat. One profile per person, so each person's Hermes memory stays theirs.
+  # - id: faith-hermes
+  #   type: hermes
+  #   url: http://faith-hermes:8642
+  #   key_env: FAITH_HERMES_KEY_{PROFILE}   # each profile's own API_SERVER_KEY; FAITH_HERMES_KEY_WIZARD
+  #   projects_only: true
+  #   roles: [admin, adult]                 # add household, parents to give Family and Parents threads Hermes too
+  #   household_profile: family             # the Family project's profile
+  #   parents_profile: parents              # the Parents project's profile (kept apart from Family)
+
+  # The admin's own Hermes cluster. owner: only that one person gets it, in chats and in their threads.
   - id: hermes
     type: hermes
     url: http://<server-ip>:8642
     key_env: HERMES_API_KEY_{PROFILE}       # each profile's own API_SERVER_KEY; HERMES_API_KEY_WIZARD
     model: hermes-agent
-    roles: [admin, adult]
-    # household_profile: household
+    owner: wizard
+
+  # Hermes Studio: its chats, jobs and Projects (herdr threads). owner: only that one person
+  # (whoever runs the homelab) links Studio, with one Studio account (STUDIO_USER, STUDIO_PASSWORD).
+  # Leave owner out to give each person their own account (STUDIO_USER_{ID}).
+  # - id: studio
+  #   type: studio
+  #   url: http://<server-ip>:8648
+  #   owner: wizard
 
 # Mattermost: a DM with each person, a family channel, a parents channel (docs/mattermost.md).
 mattermost:
@@ -244,3 +263,13 @@ dashboard:
 #   system: { roles: [admin], disks: [/data] }
 #   brief: { people: [wizard], time: "07:00", days: daily, send: false }
 #   log_max: 120
+
+# Family projects (docs/projects.md): background threads in each person's project, Family and Parents.
+# On by default; threads use only the tools FAITH already has, as the project's owner.
+# projects:
+#   enabled: true
+#   max_working: 3          # threads working at once in one project
+#   wake_coordinator: true  # a finished thread gets a coordinator turn that reports back
+#   max_depth: 2            # follow-up threads a chain of coordinator turns may start
+#   throwaway_hours: 24     # throwaway threads are deleted this long after they last changed
+#   auto_resolve_days: 3    # read, finished threads are put away after this many quiet days (0 off)

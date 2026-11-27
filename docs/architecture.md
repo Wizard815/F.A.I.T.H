@@ -90,6 +90,7 @@ An approved household request runs with the household's tokens, not the approver
 | `voiceprints` | one averaged voiceprint per person (never audio) |
 | `person_prefs` | each person's arrangement of their day card |
 | `board_projects`, `board_log`, `board_briefs` | each person's projects, work log and morning briefs (the board, from Pondering Orb: they had no other home) |
+| `projects`, `project_threads` | family projects (one per person, Family, Parents) and their background threads ([projects.md](projects.md)) |
 | `mm_state` | the Mattermost bot's channels and welcome messages |
 
 Secrets never go in `faith.yaml`. It names environment variables, the same convention as Orb, Coinpile and ALLGlance.
@@ -114,6 +115,7 @@ The loop is OpenAI-compatible, so the model is whatever Argos serves, and FAITH 
 ## What runs in the background
 
 - **Routines** (`routines.ts`): scheduled skills, checked every 30 seconds, caught up within the hour.
+- **Project threads** (`projects/`): background jobs in a family project, run as the project's owner (a person, or the household), behind quick questions. When one ends, its coordinator tells the owner ([projects.md](projects.md)).
 - **The morning brief** (`board/board.ts`): for the people in `board.brief.people`, once a day ([dashboard.md](dashboard.md)).
 - **The integrations watch** (`health.ts`): every source checked every two minutes; the parents hear when one goes down and when it's back.
 - **Presence** (`auth/presence.ts`): each screen's camera sensors for sign-out, and HA's `person.*` entities for who's home.

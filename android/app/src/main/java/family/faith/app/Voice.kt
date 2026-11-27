@@ -153,8 +153,10 @@ private fun MenuButton(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit
 
 /** Just talk: a big FAITH button, what was heard and the answer, read aloud. */
 @Composable
-fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit) {
+fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit, projects: ProjectsModel? = null) {
     val talk = rememberTalk(chat)
+    if (projects != null) LaunchedEffect(Unit) { projects.keepFresh() }
+    val pw = ProjectGlance.from(projects?.list?.value)?.words
     var typing by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     DisposableEffect(Unit) { chat.voice = true; onDispose { chat.voice = false } }
@@ -162,6 +164,8 @@ fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit) {
         TopBar(chat, "FAITH · ${chat.store.personName}", changed, signOut)
         TalkEmblem(chat, 260, talk)
         Text(stateWord(chat), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        // Something needs you or is working: one button that asks FAITH, read aloud.
+        if (pw != null) OutlinedButton(onClick = { chat.ask("How are my projects going? Start with anything that needs me.") }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Projects: $pw") }
         Caption(chat, big = true)
         Text(chat.status.value, fontSize = 1.sp, color = Color.Transparent, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         Spacer(Modifier.weight(1f))
@@ -177,10 +181,12 @@ fun FocusScreen(chat: ChatModel, changed: () -> Unit, signOut: () -> Unit) {
 
 /** Like a kitchen speaker's screen: a clock, the weather and a few panels; a tap asks FAITH. */
 @Composable
-fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut: () -> Unit) {
+fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut: () -> Unit, projects: ProjectsModel? = null, clock: () -> LocalDateTime = LocalDateTime::now) {
     val talk = rememberTalk(chat)
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) { while (true) { board.load(); repeat(4) { delay(15_000); now = LocalDateTime.now() } } }
+    if (projects != null) LaunchedEffect(Unit) { projects.keepFresh() }
+    val pg = ProjectGlance.from(projects?.list?.value)
+    var now by remember { mutableStateOf(clock()) }
+    LaunchedEffect(Unit) { while (true) { board.load(); repeat(4) { delay(15_000); now = clock() } } }
     DisposableEffect(Unit) { chat.voice = true; onDispose { chat.voice = false } }
     LaunchedEffect(chat.busy.value) { if (!chat.busy.value) board.load() }
     // A fresh screen: the conversation carries on, but the panel starts on its panels.
@@ -223,6 +229,7 @@ fun PanelScreen(chat: ChatModel, board: BoardModel, changed: () -> Unit, signOut
                     g.shopping?.let { n -> Tile("Shopping", (if (n == 0) "Nothing on the list" else "$n item${if (n > 1) "s" else ""}") + (if (g.shoppingFirst.isNotEmpty()) "\n" + g.shoppingFirst.joinToString(", ") else ""), "What's on the shopping list?", ask, Modifier.weight(1f)) }
                     g.house?.let { Tile("The house", it.joinToString("\n").ifBlank { "All quiet" }, "How's the house?", ask, Modifier.weight(1f)) }
                 }
+                pg?.let { p -> if (p.top != null) Tile("Projects", (p.words ?: "All done") + "\n" + p.top, "How are my projects going? Start with anything that needs me.", ask) }
                 if (board.board.value == null) Text(board.error.value.ifBlank { "Loading…" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

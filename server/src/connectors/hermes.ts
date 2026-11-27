@@ -16,7 +16,10 @@ export class Hermes implements Connector {
   describe() { return "Hermes: a slower, more capable agent for research and long multi-step jobs"; }
 
   profileFor(caller: Caller) {
-    return caller.scope.kind === "person" ? caller.scope.person.hermes_profile || caller.scope.person.id : this.cfg.household_profile;
+    if (caller.scope.kind === "person") return caller.scope.person.hermes_profile || caller.scope.person.id;
+    // FAITH's own Hermes keeps the Parents project's memory apart from the Family one.
+    if (this.cfg.projects_only && caller.audience === "parents") return this.cfg.parents_profile;
+    return this.cfg.household_profile;
   }
 
   /** The key for one profile: HERMES_API_KEY_{PROFILE} -> HERMES_API_KEY_WIZARD. */
@@ -33,12 +36,15 @@ export class Hermes implements Connector {
   }
 
   async tools(caller: Caller): Promise<Tool[]> {
+    // FAITH's own Hermes is for project work only: chats ask FAITH, threads hand Hermes the long jobs.
+    if (this.cfg.projects_only && !caller.work) return [];
+    if (this.cfg.owner && (caller.scope.kind !== "person" || caller.scope.person.id !== this.cfg.owner)) return [];
     const profile = this.profileFor(caller);
     if (!profile) return [];
     const key = this.keyFor(profile);
     if (!key && this.perProfile()) return [];
     return [{
-      name: "hermes_ask", connector: this.id, write: true,
+      name: this.cfg.projects_only ? "hermes_project_job" : "hermes_ask", connector: this.id, write: true,
       description: "Hand a bigger job to Hermes (research, planning, long multi-step work, anything needing tools FAITH doesn't have). Write the task in full: Hermes doesn't see this conversation. Slow: only use it when the person wants that.",
       parameters: { type: "object", properties: { task: { type: "string" } }, required: ["task"], additionalProperties: false },
       run: async (a) => {

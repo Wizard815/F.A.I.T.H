@@ -79,12 +79,16 @@ export type HermesConnector = {
   id: string; type: "hermes"; url: string; model: string;
   key_env?: string;                // HERMES_API_KEY_{PROFILE}: each profile's own API_SERVER_KEY (Hermes refuses a shared one)
   household_profile?: string;      // profile for the household view; unset = no Hermes when nobody is signed in
+  parents_profile?: string;        // with projects_only: the Parents project's profile; unset = no Hermes there
+  projects_only?: boolean;         // only project threads and coordinators get it, never a chat (FAITH's own Hermes)
+  owner?: string;                  // only this person gets it (e.g. the admin's own Hermes cluster)
   roles?: PolicyName[];
 };
 export type StudioConnector = {
   id: string; type: "studio"; url: string;
   user_env: string;              // per-person Studio account, e.g. STUDIO_USER_{ID}
   password_env: string;          // e.g. STUDIO_PASSWORD_{ID}
+  owner?: string;                // only this person links Studio, with one account (STUDIO_USER, STUDIO_PASSWORD)
   roles?: PolicyName[];
 };
 export type MealieConnector = {
@@ -172,6 +176,23 @@ export type Config = {
   health: { interval_s: number };
   /** The info board for FAITH's apps (board/), brought over from Pondering Orb. */
   board: BoardConfig;
+  /** Family projects (projects/): a background project per person, plus Family and Parents. */
+  projects: ProjectsConfig;
+};
+
+/** Family projects (docs/projects.md). Threads run in the background with the project owner's own tokens. */
+export type ProjectsConfig = {
+  enabled: boolean;
+  /** Threads working at once in one project. */
+  max_working: number;
+  /** When a thread finishes, its project's coordinator gets a turn to report or start the next step. */
+  wake_coordinator: boolean;
+  /** How many follow-up threads a chain of wake-ups may start (stops a coordinator looping). */
+  max_depth: number;
+  /** Throwaway threads are deleted this many hours after they last changed (or when put away). */
+  throwaway_hours: number;
+  /** Done threads that someone has read are put away by themselves after this many days (0: never). */
+  auto_resolve_days: number;
 };
 
 /** The info board (docs/dashboard.md). Everything here is optional; a part that isn't set up doesn't show. */
@@ -297,12 +318,22 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
           return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who, ...(face ? { face_entity: face } : {}) };
         }) } as HomeAssistantConnector;
     }
-    if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
+    if (type === "studio") {
+      const owner = c.owner ? str(c.owner) : undefined;
+      if (owner && !people.some((p) => p.id === owner)) throw new ConfigError(`connectors.${id}.owner: no one with the id "${owner}". Use an id from people:.`);
+      return { id, type, url, user_env: str(c.user_env, owner ? "STUDIO_USER" : "STUDIO_USER_{ID}"), password_env: str(c.password_env, owner ? "STUDIO_PASSWORD" : "STUDIO_PASSWORD_{ID}"),
+        ...(owner ? { owner } : {}), roles: roles ?? ["admin", "adult"] } as StudioConnector;
+    }
     if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "adult", "parents", "household"] } as MealieConnector;
     if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
       household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
       share_days: Math.min(30, Math.max(1, num(c.share_days, 7))), roles } as ImmichConnector;
-    if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
+    if (type === "hermes") {
+      const owner = c.owner ? str(c.owner) : undefined;
+      if (owner && !people.some((p) => p.id === owner)) throw new ConfigError(`connectors.${id}.owner: no one with the id "${owner}". Use an id from people:.`);
+      return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined,
+        ...(c.parents_profile ? { parents_profile: str(c.parents_profile) } : {}), ...(c.projects_only === true ? { projects_only: true } : {}), ...(owner ? { owner } : {}), roles: roles ?? ["admin", "adult"] } as HermesConnector;
+    }
     throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie or immich.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
@@ -396,6 +427,15 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
     health: { interval_s: num(raw.health?.interval_s, 120) },
     board: parseBoard(raw.board || {}, people),
+    projects: (() => {
+      const p = raw.projects || {};
+      const max_working = num(p.max_working, 3), max_depth = num(p.max_depth, 2), throwaway_hours = num(p.throwaway_hours, 24), auto_resolve_days = num(p.auto_resolve_days, 3);
+      if (!(max_working >= 1 && max_working <= 10)) throw new ConfigError("projects.max_working is 1 to 10.");
+      if (!(max_depth >= 0 && max_depth <= 5)) throw new ConfigError("projects.max_depth is 0 to 5.");
+      if (!(throwaway_hours >= 1 && throwaway_hours <= 168)) throw new ConfigError("projects.throwaway_hours is 1 to 168.");
+      if (!(auto_resolve_days >= 0 && auto_resolve_days <= 60)) throw new ConfigError("projects.auto_resolve_days is 0 (never) to 60.");
+      return { enabled: bool(p.enabled, true), max_working: Math.floor(max_working), wake_coordinator: bool(p.wake_coordinator, true), max_depth: Math.floor(max_depth), throwaway_hours, auto_resolve_days };
+    })(),
   };
 }
 

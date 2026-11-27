@@ -163,8 +163,9 @@ people:
   - Give each profile its own key: `API_SERVER_KEY` in `~/.hermes/profiles/wizard/.env`. Put it in FAITH's `HERMES_API_KEY_WIZARD` (`key_env: HERMES_API_KEY_{PROFILE}`).
   - Hermes refuses one shared key on a person's profile (401). A person whose key is missing gets no Hermes in FAITH.
   - Children don't get Hermes by default.
-- **Hermes Studio:** each person signs in with their own Studio account (`STUDIO_USER_<ID>`, `STUDIO_PASSWORD_<ID>`).
-  - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio.
+  - **FAITH's own Hermes** (`projects_only: true`): a second Hermes just for project threads, one profile per person. **The admin's cluster** (`owner: wizard`): only that person gets it. See [projects.md](projects.md#faiths-own-hermes).
+- **Hermes Studio:** each person signs in with their own Studio account (`STUDIO_USER_<ID>`, `STUDIO_PASSWORD_<ID>`). Or set `owner: wizard` on the connector: then only that person links Studio, with one account (`STUDIO_USER`, `STUDIO_PASSWORD`), and nobody else gets Studio tools.
+  - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio. Studio's super admins also get their Studio projects (`studio_projects`) and can message one's coordinator or add a task to it (`studio_project_message`, `studio_project_task`); see [projects.md](projects.md#hermes-studio).
   - Studio's MCP bridge is stdio-only, so this goes through Studio's REST API, like Orb does.
 
 ## Mattermost

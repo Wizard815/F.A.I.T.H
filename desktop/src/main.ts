@@ -29,7 +29,7 @@ const state = (): State => ({
   keyring: store.keeping === "os" ? "os" : "file", platform: process.platform,
 });
 
-function show(tab?: "ask" | "board" | "inbox") {
+function show(tab?: "ask" | "board" | "projects" | "inbox") {
   if (!win || win.isDestroyed()) createWindow();
   win!.show(); win!.focus();
   if (tab) send("show", tab);
@@ -58,6 +58,7 @@ function setTray() {
     { label: "Ask FAITH", accelerator: store.settings.shortcut, click: () => { show("ask"); send("askFocus"); } },
     { label: n ? `Inbox (${n} new)` : "Inbox", click: () => show("inbox") },
     { label: "Board", click: () => show("board") },
+    { label: "Projects", click: () => show("projects") },
     { type: "separator" },
     { label: "Layout", submenu: LAYOUTS.map((l) => ({ label: LAYOUT_NAMES[l], type: "radio" as const, checked: store.settings.layout === l, click: () => { setSettings({ layout: l }); send("layout", l); } })) },
     { label: "Notifications", type: "checkbox", checked: store.settings.notifications, click: (i) => setSettings({ notifications: i.checked }) },
@@ -176,6 +177,12 @@ function registerIpc() {
   handle("addProject", (name: string, status?: string, next?: string) => guarded((f) => f.addProject(String(name), status, next)));
   handle("updateProject", (name: string, patch: any) => guarded((f) => f.updateProject(String(name), { status: patch?.status, next: patch?.next, starred: patch?.starred, archived: patch?.archived })));
   handle("importOrb", () => guarded((f) => f.importOrb()));
+  handle("projects", (resolved?: boolean) => guarded((f) => f.projects(!!resolved)));
+  handle("setProjectInstructions", (p: string, text: string) => guarded((f) => f.setProjectInstructions(String(p), String(text ?? ""))));
+  handle("projectThread", (p: string, t: string) => guarded((f) => f.projectThread(String(p), String(t))));
+  handle("startThread", (p: string, brief: string, title?: string, throwaway?: boolean) => guarded((f) => f.startThread(String(p), String(brief), title ? String(title) : undefined, throwaway === true)));
+  handle("messageThread", (p: string, t: string, text: string) => guarded((f) => f.messageThread(String(p), String(t), String(text))));
+  handle("resolveThread", (p: string, t: string, resolved: boolean) => guarded((f) => f.resolveThread(String(p), String(t), !!resolved)));
   handle("transcribe", (audio: ArrayBuffer, mime: string) => guarded((f) => f.transcribe(new Uint8Array(audio), mime)));
   handle("speak", (text: string) => guarded(async (f) => (await f.speak(text)).buffer));
   handle("photo", (source: string, id: string) => guarded((f) => f.photo(source, id)));
