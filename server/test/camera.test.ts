@@ -41,7 +41,7 @@ const names = async (c: any) => (await A.registry.toolsFor(c)).tools.map((t) => 
 
 test("cameras in the config: a camera entity, and who is a real role", () => {
   const cfg = (cameras: any) => parseConfig({ model: { base_url: "http://x" }, connectors: [{ id: "ha", type: "homeassistant", url: "http://h", cameras }] }, {});
-  assert.deepEqual((cfg(["camera.drive_way"]).connectors[0] as any).cameras, [{ entity: "camera.drive_way", name: "drive way", who: ["admin", "adult"] }]);
+  assert.deepEqual((cfg(["camera.drive_way"]).connectors[0] as any).cameras, [{ entity: "camera.drive_way", name: "drive way", who: ["admin", "parent"] }]);
   assert.throws(() => cfg([{ entity: "light.porch" }]), ConfigError);
   assert.throws(() => cfg([{ entity: "camera.x", who: ["everyone"] }]), ConfigError);
 });

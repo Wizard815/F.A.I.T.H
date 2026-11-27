@@ -2,7 +2,7 @@
 name: plan-week-dinners
 title: "Plan the week's dinners"
 description: "Pick dinners for the next 7 days around the family's schedule, put them on Mealie's meal plan and add what's missing to the shopping list."
-who: [admin, adult, parents]
+who: [admin, parent, parents]
 ---
 1. Find the busy evenings: call allglance_get_day for each of the next 7 days and note evenings with something after 17:00.
 2. See what's already planned with meals (start today, days 7). Don't replace planned dinners.

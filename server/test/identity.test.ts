@@ -47,7 +47,7 @@ test("wrong tokens give the view no wiki at all, and say why", async () => {
   assert.equal(await wikiTools(as(1)), 0);
   assert.match(await why(as(1)), /W_SAM belongs to wizard, not Sam/);
   assert.equal(await wikiTools(as(2)), 0);
-  assert.match(await why(as(2)), /Robin is a child in FAITH but not in wiki/);
+  assert.match(await why(as(2)), /Robin is a kid in FAITH \(kid-lite\) but not a child in wiki/);
   assert.equal(await wikiTools(house), 0);
   assert.match(await why(house), /master key.*FAITH never uses it/);
   assert.equal(await wikiTools(parents), 0);

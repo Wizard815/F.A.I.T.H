@@ -2,7 +2,7 @@
 name: receipt-to-coinpile
 title: "Log a receipt in Coinpile"
 description: "The person shows a photo of a receipt or asks to log one: read it, check whether the bank already sent that payment, then record it or fix its category in Coinpile."
-who: [admin, adult]
+who: [admin, parent]
 ---
 1. Read the receipt: the shop, the date, the total paid (after tax and tip), and how it was paid (cash, or a card and its last 4 digits). If the total or the date isn't clear, ask. Never guess a number.
 2. Look for it first. Call coinpile_search_transactions with min_amount and max_amount both set to the total, start 2 days before the receipt's date and end 5 days after. Card payments usually come from the bank within a few days.

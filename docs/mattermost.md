@@ -6,7 +6,7 @@ FAITH joins Mattermost as a bot and looks after three kinds of chat for the fami
 |---|---|---|---|
 | **Personal**: a DM with each person | that person and FAITH | that person's own view, private notes, tasks and money included | happen; locks, alarm and garage wait for them to reply **yes** |
 | **Family** (`~faith-family`) | everyone in `people:` with a Mattermost account | only the family's shared things (the household tokens), whoever asks | a grown-up's happen straight away; a child's are sent to the parents for approval |
-| **Parents** (`~faith-parents`) | admins and adults | shared things, plus whatever a `parents_token_env` gives | happen; **approvals land here** |
+| **Parents** (`~faith-parents`) | admins and parents | shared things, plus whatever a `parents_token_env` gives | happen; **approvals land here** |
 
 FAITH makes the two channels (private) and opens a DM with each person.
 - It keeps the members right: it adds the family, and removes anyone else. A child added to the parents' channel is taken out again within seconds.

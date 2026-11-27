@@ -7,7 +7,7 @@ test("the example config loads", () => {
   const cfg = loadConfig(resolve(import.meta.dirname, "../../config/faith.example.yaml"), {});
   assert.equal(cfg.people.length, 2);
   assert.deepEqual(cfg.connectors.map((c) => c.id), ["wiki", "allglance", "homeassistant", "mealie", "photos", "coinpile", "omi", "orb", "hermes"]);
-  assert.equal(cfg.roles.child.writes, "allowlist");
+  assert.equal(cfg.roles["kid-lite"].writes, "allowlist");
   assert.equal(cfg.hub.devices[0].id, "kitchen");
   assert.equal(cfg.dashboard.cards.find((c) => c.id === "mine")?.who, "person");
 });
@@ -20,7 +20,7 @@ test("per-person token names come from the template", () => {
 
 test("bad configs say what's wrong", () => {
   assert.throws(() => parseConfig({ people: [{ id: "Bob", name: "Bob" }] }, {}), /lowercase/);
-  assert.throws(() => parseConfig({ people: [{ id: "bob", role: "king" }] }, {}), /admin, adult or child/);
+  assert.throws(() => parseConfig({ people: [{ id: "bob", role: "king" }] }, {}), /admin, parent, kid-pro or kid-lite/);
   assert.throws(() => parseConfig({ people: [{ id: "a" }, { id: "a" }] }, {}), /Two people/);
   assert.throws(() => parseConfig({ connectors: [{ id: "x", type: "mcp", url: "ftp://x" }] }, {}), /http/);
   assert.throws(() => parseConfig({ roles: { boss: {} } }, {}), /roles.boss/);

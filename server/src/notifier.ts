@@ -1,4 +1,4 @@
-import type { Config } from "./config.js";
+import { isKid, type Config } from "./config.js";
 import type { HomeAssistant } from "./connectors/homeassistant.js";
 import type { MattermostBot } from "./mattermost.js";
 import type { ApprovalEvent } from "./approvals.js";
@@ -41,14 +41,14 @@ export class Notifier {
     }
     const people = this.cfg().people;
     // The same message waits in each recipient's inbox, for their FAITH apps.
-    for (const p of to === "family" ? people : to === "parents" ? people.filter((x) => x.role !== "child") : people.filter((x) => x.id === to)) {
+    for (const p of to === "family" ? people : to === "parents" ? people.filter((x) => !isKid(x.role)) : people.filter((x) => x.id === to)) {
       this.inbox?.(p.id, { title, text, kind: "message" });   // not counted as "reached": they may have no app
     }
     const say = opts.from && !["routine", "faith"].includes(opts.from) ? `${text}\n\n_from ${people.find((p) => p.id === opts.from)?.name ?? opts.from}_` : text;
     if (to === "family" || to === "parents") {
       const ch = to === "family" ? this.bot?.familyId : this.bot?.parentsId;
       if (ch) { await this.bot!.post(ch, say); sent.push(`mattermost:${to}`); }
-      else for (const p of people.filter((x) => to === "family" || x.role !== "child")) if (await this.push(p.id, title, text)) sent.push(`push:${p.id}`);
+      else for (const p of people.filter((x) => to === "family" || !isKid(x.role))) if (await this.push(p.id, title, text)) sent.push(`push:${p.id}`);
       return sent;
     }
     const dm = this.bot?.dmOf(to);

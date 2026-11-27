@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { roleLabel } from "../roles";
 import { Badge, PageHead, Panel } from "./Shell";
 
 const BLANK = { name: "", title: "", description: "", who: [] as string[], body: "" };
-const ROLES = ["admin", "adult", "child", "household", "parents"];
+const ROLES = ["admin", "parent", "kid-pro", "kid-lite", "household", "parents"];
 
 export function Skills() {
   const [d, setD] = useState<{ skills: any[]; problems: string[] } | null>(null), [edit, setEdit] = useState<typeof BLANK | null>(null), [msg, setMsg] = useState("");
@@ -22,7 +23,7 @@ export function Skills() {
           <label className="flex flex-col gap-1 text-[14px] text-muted sm:col-span-2">When to use it (one line FAITH reads)<input className="field" value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></label>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[14px] text-muted">Who may use it (none ticked = everyone):
-          {ROLES.map((r) => <label key={r} className="flex items-center gap-1"><input type="checkbox" checked={edit.who.includes(r)} onChange={(e) => setEdit({ ...edit, who: e.target.checked ? [...edit.who, r] : edit.who.filter((x) => x !== r) })} />{r}</label>)}</div>
+          {ROLES.map((r) => <label key={r} className="flex items-center gap-1"><input type="checkbox" checked={edit.who.includes(r)} onChange={(e) => setEdit({ ...edit, who: e.target.checked ? [...edit.who, r] : edit.who.filter((x) => x !== r) })} />{roleLabel(r)}</label>)}</div>
         <textarea className="field mt-3 min-h-[240px] py-3 font-mono text-[14px]" value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} placeholder={"1. First, ...\n2. Then, ...\nKeep it short."} />
         <div className="mt-3 flex gap-2"><button className="btn-primary" onClick={save}>Save</button><button className="btn-ghost" onClick={() => setEdit(null)}>Cancel</button></div>
       </Panel>

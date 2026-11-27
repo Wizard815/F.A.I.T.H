@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync,
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
-import type { PolicyName } from "./config.js";
+import { ConfigError, policyList, type PolicyName } from "./config.js";
 
 /** A skill is a written recipe for a family job that takes several steps
  *  ("plan this week's dinners"). It's a Markdown file with a small header:
@@ -11,7 +11,7 @@ import type { PolicyName } from "./config.js";
  *    name: plan-week-dinners
  *    title: Plan the week's dinners
  *    description: One line: when to use it.
- *    who: [admin, adult]        # roles that may use it (household, parents, child too)
+ *    who: [admin, parent]       # roles that may use it (kid-pro, kid-lite, kids, household, parents too)
  *    ---
  *    The steps, in plain words.
  *
@@ -40,7 +40,8 @@ export function parseSkill(text: string, file: string, builtin: boolean): Skill 
   const name = String(head.name || "").trim();
   if (!NAME.test(name)) throw new SkillError(`${file}: name "${name}" must be lowercase letters, digits and dashes.`);
   if (!head.description) throw new SkillError(`${file}: needs a one-line description (when to use it).`);
-  const who = head.who ? (Array.isArray(head.who) ? head.who : [head.who]).map(String) as PolicyName[] : undefined;
+  let who: PolicyName[] | undefined;
+  try { who = head.who ? policyList(head.who, `${file}: who`) : undefined; } catch (e) { throw new SkillError(e instanceof ConfigError ? e.message : String(e)); }
   return { name, title: String(head.title || name), description: String(head.description).replace(/\s+/g, " ").trim(), who, body: m[2].trim(), builtin, file };
 }
 

@@ -22,7 +22,7 @@ await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 test.after(() => server.close());
 
-const person = (id: string, role: Person["role"] = "adult"): Caller => ({ scope: { kind: "person", person: { id, name: id, role } as Person }, channel: "personal" });
+const person = (id: string, role: Person["role"] = "parent"): Caller => ({ scope: { kind: "person", person: { id, name: id, role } as Person }, channel: "personal" });
 const household: Caller = { scope: { kind: "household" }, channel: "hub" };
 
 test("hermes: each person's job runs in their own profile with that profile's own key", async () => {

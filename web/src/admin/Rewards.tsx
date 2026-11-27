@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, PageHead, Panel, Table, Td, when } from "./Shell";
+import { isKid } from "../roles";
 
 export function Rewards() {
   const [d, setD] = useState<any>(null), [msg, setMsg] = useState("");
@@ -8,7 +9,7 @@ export function Rewards() {
   useEffect(() => { load(); }, []);
   const go = (p: Promise<unknown>, ok: string) => p.then(() => { setMsg(ok); load(); }).catch((e) => setMsg(e.message));
   if (!d) return <p className="text-muted">{msg || "Loading…"}</p>;
-  const kids = d.balances.filter((b: any) => b.role === "child");
+  const kids = d.balances.filter((b: any) => isKid(b.role));
   return (<>
     <PageHead title="Points & rewards" sub={`Children earn ${d.allowed_points.join(", ")} points for jobs and spend them on rewards. They claim and ask; a parent approves (on the dashboard, a phone notification, or the parents' chat).`} />
     {msg && <p className="mb-4">{msg}</p>}

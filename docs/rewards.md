@@ -17,7 +17,7 @@ With `payout: firefly`, an approved money reward is recorded in Firefly III as a
 
 ```yaml
 people:
-  - { id: robin, name: Robin, role: child, firefly_account: "Robin's card" }   # Firefly asset account: name or id
+  - { id: robin, name: Robin, role: kid-lite, firefly_account: "Robin's card" }   # Firefly asset account: name or id
 
 rewards:
   payout: firefly

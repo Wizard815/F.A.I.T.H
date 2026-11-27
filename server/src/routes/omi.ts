@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { Config, Person } from "../config.js";
+import { isKid, type Config, type Person } from "../config.js";
 import type { Db } from "../db.js";
 import type { Auth } from "../auth/sessions.js";
 import type { Notifier } from "../notifier.js";
@@ -58,7 +58,7 @@ export function registerOmiRoutes(app: FastifyInstance, x: { cfg: () => Config; 
     const uid = String((req.query as any)?.uid ?? "");
     if (!person.omi_uid) return reply.code(403).send({ error: `Set omi_uid for ${person.name} in faith.yaml first (their Omi account's uid).` });
     if (uid !== person.omi_uid) return reply.code(403).send({ error: `This Omi account isn't ${person.name}'s.` });
-    if (person.role === "child") return reply.code(403).send({ error: "Omi suggestions are for grown-ups." });
+    if (isKid(person.role)) return reply.code(403).send({ error: "Omi suggestions are for grown-ups." });
 
     const conv = (req.body ?? {}) as OmiConversation;
     const id = String(conv.id || req.headers["idempotency-key"] || "").slice(0, 120);

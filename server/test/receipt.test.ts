@@ -65,9 +65,9 @@ test("receipt: a change Coinpile would refuse is refused before anyone is asked"
 });
 
 test("receipt: the skill is offered to grown-ups, not to children", () => {
-  assert.ok(A.skills.forPolicy("adult").some((s) => s.name === "receipt-to-coinpile"));
+  assert.ok(A.skills.forPolicy("parent").some((s) => s.name === "receipt-to-coinpile"));
   assert.ok(A.skills.forPolicy("admin").some((s) => s.name === "receipt-to-coinpile"));
-  assert.ok(!A.skills.forPolicy("child").some((s) => s.name === "receipt-to-coinpile"));
+  assert.ok(!A.skills.forPolicy("kid-pro").some((s) => s.name === "receipt-to-coinpile"));
   assert.match(A.skills.get("receipt-to-coinpile")!.body, /coinpile_search_transactions/);
 });
 

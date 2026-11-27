@@ -1,4 +1,4 @@
-import { anyGlob, envValue, personEnv, type Config, type HomeAssistantConnector as HaCfg } from "../config.js";
+import { anyGlob, envValue, isKid, KID_NEVER_DOMAINS, personEnv, type Config, type HomeAssistantConnector as HaCfg } from "../config.js";
 import { policyOf, type Caller } from "../scope.js";
 import { call, ToolError, type Connector, type Tool } from "./types.js";
 import { MediaError, photo } from "../media.js";
@@ -101,8 +101,10 @@ export class HomeAssistant implements Connector {
   }
   /** May this caller change this entity? */
   controllable(caller: Caller, entityId: string) {
-    const pol = this.config().roles[policyOf(caller)], domain = entityId.split(".")[0];
+    const policy = policyOf(caller), pol = this.config().roles[policy], domain = entityId.split(".")[0];
     if (!this.exposed(entityId)) return false;
+    // Locks, the alarm, covers and the garage: never a kid's, whatever roles: says.
+    if (isKid(policy) && (KID_NEVER_DOMAINS.includes(domain) || /garage.*(door|opener|gate)/.test(entityId))) return false;
     if (!pol.ha_domains && !pol.ha_entities) return true;
     return !!pol.ha_domains?.includes(domain) || anyGlob(pol.ha_entities, entityId);
   }

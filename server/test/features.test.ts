@@ -58,8 +58,8 @@ test("skills: built-in ones load, a family's own wins on a name clash, and who m
   const b = A.skills.get("morning-brief")!;
   assert.equal(b.builtin, false); assert.match(b.body, /pirate/);
   assert.equal(A.skills.all().problems.length, 1);
-  assert.ok(!A.skills.forPolicy("child").some((s) => s.name === "plan-week-dinners"), "parents' skills aren't offered to children");
-  assert.ok(A.skills.forPolicy("adult").some((s) => s.name === "plan-week-dinners"));
+  assert.ok(!A.skills.forPolicy("kid-pro").some((s) => s.name === "plan-week-dinners"), "parents' skills aren't offered to children");
+  assert.ok(A.skills.forPolicy("parent").some((s) => s.name === "plan-week-dinners"));
 
   script = (req) => {
     const tool = req.messages.findLast((m: any) => m.role === "tool");

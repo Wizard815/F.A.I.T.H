@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import { isKid, type Config } from "../config.js";
 import type { Approvals } from "../approvals.js";
 import type { Notifier } from "../notifier.js";
 import { RewardsError, type Rewards } from "../rewards.js";
@@ -18,7 +18,7 @@ export class FaithTools implements Connector {
   /** Who a points or reward call is about: a child always means themselves. */
   private subject(caller: Caller, asked?: string) {
     const me = caller.scope.kind === "person" ? caller.scope.person : caller.speaker;
-    if (me?.role === "child") return me.id;
+    if (me && isKid(me.role)) return me.id;
     if (asked) {
       const k = asked.toLowerCase();
       const p = this.cfg().people.find((x) => x.id === k || x.name.toLowerCase() === k);
@@ -29,7 +29,7 @@ export class FaithTools implements Connector {
     throw new RewardsError(400, "Who is it for? Pass person.");
   }
   private by(caller: Caller) { return caller.speaker ? caller.speaker.id : caller.scope.kind === "person" ? caller.scope.person.id : caller.label; }
-  private isChild(caller: Caller) { return (caller.scope.kind === "person" ? caller.scope.person.role : caller.speaker?.role) === "child"; }
+  private isChild(caller: Caller) { return isKid(caller.scope.kind === "person" ? caller.scope.person.role : caller.speaker?.role); }
   /** A grown-up is asking (signed in, or speaking in a chat); anyone else needs a parent's OK. */
   private needsOk(caller: Caller) {
     if (this.isChild(caller)) return true;
@@ -58,7 +58,7 @@ export class FaithTools implements Connector {
       parameters: { type: "object", properties: { person: { type: "string" } }, additionalProperties: false },
       run: (a) => this.guard(() => {
         if (this.isChild(caller) || a?.person) { const id = this.subject(caller, a?.person); return { person: id, points: this.rewards.balance(id), recent: this.rewards.history(id, 5).map((h) => ({ points: h.delta, reason: h.reason })) }; }
-        return { balances: this.rewards.balances().filter((b) => b.role === "child" || b.points !== 0) };
+        return { balances: this.rewards.balances().filter((b) => isKid(b.role) || b.points !== 0) };
       }) });
     add({ name: "rewards_list", write: false, description: "Jobs that earn points (activities) and rewards points can buy.",
       parameters: { type: "object", properties: {}, additionalProperties: false },

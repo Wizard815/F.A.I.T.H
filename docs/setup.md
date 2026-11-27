@@ -8,6 +8,30 @@ The names of the variables go in `faith.yaml` (`household_token_env`, `person_to
 
 Run `docker exec faith faith doctor` after each step. For each view it lists the sources, the tools (`*` = changes things) and what failed.
 
+## Who can do what (the four tiers)
+
+Each person in `people:` has a `role`. Tokens decide what each person can *see*; the role decides what FAITH lets them *do*.
+
+| Role | Who | Can | Can't |
+|---|---|---|---|
+| `admin` | you | everything a parent can, plus FAITH's admin page | |
+| `parent` | a grown-up | their own things; changes happen; approves the kids' and the shared screen's requests | |
+| `kid-pro` | a teen | their own notes (memory) and photo albums, add to the shopping list, the calendar and chores, lights, media, fans, scenes, the vacuum, the web if you have a web source; ticking off the list and the meal plan wait for a parent | money, locks, the alarm, the garage, covers, photo share links, Hermes, the parents' notes and chat, approving |
+| `kid-lite` | a young child (about six) | lights, media and fans; ask for points and rewards; read their own things; short, simple answers; adding to the shopping list or the meal plan waits for a parent | everything `kid-pro` can't, plus: no notes, no web, no photo albums, no scenes |
+
+- **Old names still work.** `adult` is `parent`. `child` is `kid-lite`, the safer kid tier: make a teen `kid-pro` yourself.
+  - The same goes for `roles.adult:` and `roles.child:` (those settings now apply to `parent` and `kid-lite`).
+  - In a list of who may use something (`roles: [admin, adult, child]` on a connector, a camera's `who`, a skill's `who`), `child` means both kid tiers. `kids` does too.
+- **Both kid tiers, always:** no money tools (`coinpile_*`, `firefly_*`), no locks, alarm, covers or garage doors, never the parents' chat or the parents' notes, and they can't approve or say Yes for someone else. That's in code, so `roles:` can't turn it off.
+- **Change the rest per role** under `roles:` (each field replaces the default): `allow_writes` (changes that just happen), `approve_writes` (changes that wait for a parent, then run with the household's tokens), `deny_tools`, `ha_domains`, `prompt`.
+- **In the wiki both kid tiers are children** (`--role child`). FAITH refuses a kid's wiki token that isn't a child's.
+
+**What goes wrong:**
+- "role must be admin, parent, kid-pro or kid-lite": a typo in `people[].role`.
+- "approvals.approvers: … can't approve": only `admin` and `parent` can approve.
+- "roles.child and roles.kid-lite are the same tier": keep one of them.
+- A kid-lite's "add milk" shows *Waiting for approval*: that's on purpose. Move `shopping_add` to `roles.kid-lite.allow_writes` if you want it to just happen.
+
 ## Argos (the engine)
 
 - Point `model.base_url` at Argos's `/v1`.
@@ -29,11 +53,11 @@ node scripts/family-setup.mjs add-shared faith FAITH   # FAITH as the family's s
 node scripts/family-setup.mjs token faith              # -> WIKI_TOKEN_HOUSEHOLD
 node scripts/family-setup.mjs token sam                # -> WIKI_TOKEN_SAM (one per member)
 node scripts/family-setup.mjs token wizard --label faith --as member   # -> WIKI_TOKEN_WIZARD (the admin: see below)
-node scripts/family-setup.mjs add-member --name Robin --role child     # children: no household/parents/
+node scripts/family-setup.mjs add-member --name Robin --role child     # both kid tiers: no household/parents/
 ```
 
 - **The grown-ups' chat:** `node scripts/family-setup.mjs add-shared faith-parents "FAITH parents" --audience parents`, then `token faith-parents` → `WIKI_TOKEN_PARENTS` (`parents_token_env`). It also reads `household/parents/`, the grown-ups' shared notes; the family view and children never do.
-- **Children:** add them with `--role child` in the wiki too. FAITH refuses a child's wiki token that isn't a child's.
+- **Children** (`kid-pro` and `kid-lite` in FAITH): add them with `--role child` in the wiki too. FAITH refuses a kid's wiki token that isn't a child's.
 - **The master key** (`token master`) reads everyone's notes and writes nothing. It's for your own tools (backups, a dashboard). FAITH never uses it.
 - **FAITH checks every token** with the wiki's `whoami` before using it, and refuses one that's wrong for the view. That view then gets no wiki at all, and the admin page's integrations watch says why:
   - a person's token must be their own member (or child) token: not an admin token, not someone else's, not the master key;
@@ -76,7 +100,7 @@ docker exec allglance node scripts/tokens.mjs add-person wizard faith-wizard    
 ## Home Assistant (and Mealie through it)
 
 1. **Make FAITH an HA user.** In HA: Settings → People → add a user `FAITH`, not an admin. As that user: Profile → Security → Long-lived token → `HA_TOKEN`.
-   - FAITH can still only touch what `expose` lists, and roles narrow it further (children: lights, media, fans).
+   - FAITH can still only touch what `expose` lists, and roles narrow it further (kid-lite: lights, media, fans; kid-pro adds scenes and the vacuum; no kid ever gets locks, the alarm, covers or the garage).
    - Optional: give each person their own HA token (`person_token_env: HA_TOKEN_{ID}`) so HA's logbook shows who did what.
 2. **Mealie.** Add HA's Mealie integration (Mealie URL and an API token from your Mealie profile).
    - Each Mealie shopping list becomes a `todo.*` entity: list them in `shopping_lists`.
@@ -98,7 +122,7 @@ connectors:
 ```
 
 - Then show FAITH a cookbook page or a recipe card ("put this in Mealie"), or send a recipe link. FAITH reads it, shows what it will add, and adds it after your Yes.
-- Grown-ups, the parents chat and the shared screens get it. Add `roles: [admin, adult, child, parents, household]` to let children add recipes too.
+- Grown-ups, the parents chat and the shared screens get it. Add `roles: [admin, parent, kids, parents, household]` to let the kids ask too (a kid-pro's recipe waits for a parent's approval).
 - Needs Mealie 1.10 or newer.
 
 **What goes wrong:**
@@ -175,7 +199,7 @@ FAITH runs as a bot with a personal DM for each person, a family channel and a p
 
 Every app the family uses goes under `apps:` in `faith.yaml`. They become the launcher on the home screen and the Apps tab.
 - `who: person` hides an app until someone signs in.
-- `roles` / `people` limit it further (Orb for Wizard only, Coinpile for adults).
+- `roles` / `people` limit it further (Orb for Wizard only, Coinpile for `[admin, parent]`).
 
 ## Tokens for other apps
 

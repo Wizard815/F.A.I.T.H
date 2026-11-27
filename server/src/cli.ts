@@ -66,13 +66,13 @@ async function init(args: string[]) {
   if (!hosts.length && !yes) hosts = (await ask("Which hosts run your services? (comma-separated IPs or names, e.g. 192.168.1.5,192.168.1.10): ")).split(",").map((h) => h.trim()).filter(Boolean);
   console.log(`\nLooking for services on ${[...hosts, "(and their usual container names)"].join(", ")}…`);
   const found = await discover(hosts, (m) => console.log(m));
-  let people = values("person").map((p) => { const [id, name, role] = p.split(":"); return { id, name: name || id, role: (role || "adult") as any }; });
+  let people = values("person").map((p) => { const [id, name, role] = p.split(":"); return { id, name: name || id, role: (role || "parent") as any }; });
   if (!people.length && !yes) {
-    console.log("\nThe family (empty name to stop). Roles: admin (you), adult, child.");
+    console.log("\nThe family (empty name to stop). Roles: admin (you), parent, kid-pro (a teen), kid-lite (a young child).");
     for (;;) {
       const name = await ask("  Name: "); if (!name) break;
       const id = (await ask(`  Short id for ${name} [${name.toLowerCase().replace(/[^a-z0-9]+/g, "")}]: `)) || name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-      const role = (await ask(`  Role [${people.length ? "adult" : "admin"}]: `)) || (people.length ? "adult" : "admin");
+      const role = (await ask(`  Role [${people.length ? "parent" : "admin"}]: `)) || (people.length ? "parent" : "admin");
       people.push({ id, name, role: role as any });
     }
   }
@@ -98,7 +98,7 @@ async function main(argv: string[]) {
   const person = (id?: string) => { const p = cfg.people.find((x) => x.id === id); if (!p) throw new AuthError(400, `No person "${id}". People: ${cfg.people.map((x) => x.id).join(", ")}`); return p; };
   switch (cmd) {
     case "people":
-      for (const p of cfg.people) { const m = auth.methods(p.id); console.log(`${p.id.padEnd(12)} ${p.name.padEnd(14)} ${p.role.padEnd(6)} pin:${m.pin ? "yes" : "no"} password:${m.password ? "yes" : "no"} faceid:${m.passkey ? "yes" : "no"}`); }
+      for (const p of cfg.people) { const m = auth.methods(p.id); console.log(`${p.id.padEnd(12)} ${p.name.padEnd(14)} ${p.role.padEnd(8)} pin:${m.pin ? "yes" : "no"} password:${m.password ? "yes" : "no"} faceid:${m.passkey ? "yes" : "no"}`); }
       return 0;
     case "set-pin": { const p = person(rest[0]); auth.setPin(p.id, rest[1] || await ask(`New PIN for ${p.name}: `)); console.log(`PIN set for ${p.name}.`); return 0; }
     case "set-password": { const p = person(rest[0]); auth.setPassword(p.id, await ask(`New password for ${p.name}: `)); console.log(`Password set for ${p.name}.`); return 0; }

@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import { isKid, type Config } from "../config.js";
 import type { Caller } from "../scope.js";
 
 const CHANNEL: Record<Caller["channel"], string> = {
@@ -26,8 +26,8 @@ export function systemPrompt(cfg: Config, caller: Caller, sources: string, opts:
   const family = cfg.people.map((p) => `${p.name} (id ${p.id}${p.allglance_owner_id && p.allglance_owner_id !== p.id ? `, ALLGlance owner_id ${p.allglance_owner_id}` : ""}, ${p.role})`).join("; ");
   const sp = caller.speaker;
   const groupLine = caller.audience === "parents"
-    ? `This is the parents' private group chat. Only ${cfg.people.filter((p) => p.role !== "child").map((p) => p.name).join(" and ") || "the grown-ups"} read it; children never see it. ${sp ? `${sp.name} wrote the last message.` : ""} Every grown-up in the chat reads your answer, so use the family's shared things (and what this chat is given), never one parent's private notes or money.`
-    : `This is the whole family's group chat: everyone, children included, reads your answer. ${sp ? `${sp.name} (${sp.role}) wrote the last message.` : ""} Use only the family's shared things; never anyone's private notes, tasks or money, even if the person asking could see them elsewhere. For something private, suggest they message you directly. ${sp && sp.role === "child" ? "Changes a child asks for are sent to a parent for approval." : "Changes asked for here happen straight away, under the name of the person who asked."}`;
+    ? `This is the parents' private group chat. Only ${cfg.people.filter((p) => !isKid(p.role)).map((p) => p.name).join(" and ") || "the grown-ups"} read it; children never see it. ${sp ? `${sp.name} wrote the last message.` : ""} Every grown-up in the chat reads your answer, so use the family's shared things (and what this chat is given), never one parent's private notes or money.`
+    : `This is the whole family's group chat: everyone, children included, reads your answer. ${sp ? `${sp.name} (${sp.role}) wrote the last message.` : ""} Use only the family's shared things; never anyone's private notes, tasks or money, even if the person asking could see them elsewhere. For something private, suggest they message you directly. ${sp && isKid(sp.role) ? "Changes a child asks for are sent to a parent for approval." : "Changes asked for here happen straight away, under the name of the person who asked."}`;
   const whoLine = caller.audience ? groupLine : s.kind === "person"
     ? `You are talking with ${s.person.name} (id ${s.person.id}, ${s.person.role}). They are signed in, so you can see their own private notes, tasks and money as well as the family's shared things. When a tool takes a person, owner or owner_id, ${s.person.name}'s is "${s.person.allglance_owner_id || s.person.id}".`
     : `Nobody is signed in: this is the shared household view. You only see the family's shared things; private notes, money and personal tasks are hidden from you. If someone wants something private, tell them to sign in on the screen. A note to remember goes in the notes of whoever is telling you, not the person it's about (a gift idea for Sam stays out of Sam's notes): ask who's speaking if you can't tell, and pass their id. A task goes to whoever will do it.`;

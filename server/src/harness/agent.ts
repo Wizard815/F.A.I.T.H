@@ -1,4 +1,4 @@
-import { envValue, type Config, type Person } from "../config.js";
+import { envValue, isKid, type Config, type Person } from "../config.js";
 import type { Db } from "../db.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Approvals } from "../approvals.js";
@@ -139,7 +139,7 @@ export class Agent {
           if (!this.canConfirm(c)) return { error: `"${summary}" needs someone to tap Yes on a FAITH screen. It can't be done from here.` };
           // Known by voice and face, not signed in: their own things to read, but a Yes needs a real sign-in.
           if (c.byVoiceAndFace) return { error: `"${summary}" needs a Yes from someone signed in. Tap your picture on the screen and enter your PIN, then ask again.` };
-          if (c.speaker && c.speaker.role === "child") return { error: `"${summary}" is for grown-ups. Ask a parent.` };
+          if (c.speaker && isKid(c.speaker.role)) return { error: `"${summary}" is for grown-ups. Ask a parent.` };
           const id = newId();
           this.db.prepare("INSERT INTO pending (id, conversation_id, owner_key, tool, args, summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .run(id, conversationId, this.ownerKey(c), t.name, JSON.stringify(args ?? {}), summary, Date.now());

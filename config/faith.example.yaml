@@ -26,7 +26,7 @@ model:
 people:
   - id: wizard
     name: Wizard
-    role: admin                  # admin | adult | child
+    role: admin                  # admin | parent | kid-pro (a teen) | kid-lite (a young child); docs/setup.md
     color: "#7c5cff"
     allglance_owner_id: wizard   # from ALLGlance's allglance_list_users, if it differs
     ha_user_id: ""               # Home Assistant user id: Assist from this HA user acts as Wizard
@@ -35,22 +35,28 @@ people:
     # omi_uid: "<uid>"            # their Omi account: only its webhook is accepted for them (docs/omi.md)
   - id: partner
     name: Partner
-    role: adult
+    role: parent
     color: "#ff7a90"
     mattermost_username: partner
 # Later:
-#  - { id: kid1, name: Kid, role: child, color: "#3fb68b", firefly_account: "Kid's card" }
+#  - { id: kid1, name: Kid, role: kid-lite, color: "#3fb68b", firefly_account: "Kid's card" }   # "child" still works: it means kid-lite
+#  - { id: teen1, name: Teen, role: kid-pro, color: "#3f8bb6" }
 #    who's home comes from HA's person.<id>; set ha_person: person.other_name if it differs   # the kid's card (docs/rewards.md)
 
-# What each role may do. Defaults shown for child; admin/adult/household allow everything
-# their tokens can reach.
+# What each role may do (the table: docs/setup.md, "Who can do what"). admin and parent allow
+# everything their tokens can reach. Each field you set replaces that role's default.
+# Both kid tiers never get money tools, locks, the alarm, covers or the garage, whatever this says.
 roles:
-  child:
-    writes: allowlist            # allow | allowlist | deny
-    allow_writes: [shopping_add, home_control, wiki_memory_capture, wiki_memory_log]   # home_control is limited by ha_domains
-    ha_domains: [light, media_player, fan]
-    deny_tools: [hermes_*, coinpile_*]
-  household:                     # nobody signed in, and the family chat: changes wait for an adult's approval
+  # kid-lite:                    # defaults shown
+  #   writes: allowlist          # allow | allowlist | deny | approve
+  #   allow_writes: [home_control, HassTurnOn, HassTurnOff, HassLightSet, "HassMedia*", "HassSetVolume*", points_claim, reward_redeem, message_send]
+  #   approve_writes: [shopping_add, meal_plan]     # these wait for a parent's approval
+  #   ha_domains: [light, media_player, fan]
+  #   deny_tools: [hermes_*, studio_*, coinpile_*, firefly_*, photos_share, photos_album_add, web_*, "*_web_*"]
+  # kid-pro:                     # a teen: adds their own notes, photo albums, shopping adds, scenes, the vacuum
+  #   approve_writes: [shopping_done, meal_plan, recipe_add, recipe_import]
+  #   ha_domains: [light, media_player, fan, scene, vacuum]
+  household:                     # nobody signed in, and the family chat: changes wait for a parent's approval
     deny_tools: [hermes_*]
   # parents:                     # the parents-only chat (writes: allow by default)
 
@@ -102,7 +108,7 @@ connectors:
     cameras:                       # cameras FAITH may look through, and who may ask (docs/home-assistant.md)
       - entity: camera.front_door
         name: Front door
-        who: [admin, adult, parents]
+        who: [admin, parent, parents]
 
   - id: mealie                               # adding recipes from a photo or a link (HA can't add them)
     type: mealie
@@ -122,7 +128,7 @@ connectors:
     url: http://<server-ip>:8190/api/v1/mcp
     description: "Coinpile: this person's money (Firefly III)"
     person_token_env: COINPILE_TOKEN_{ID}    # scopes mcp + act; no household token: money is never in the shared view
-    roles: [admin, adult]
+    roles: [admin, parent]
 
   - id: omi                                  # each person's own Omi (docs/omi.md)
     type: mcp
@@ -131,21 +137,21 @@ connectors:
     person_token_env: OMI_TOKEN_{ID}         # their own read-only key; no household token
     tools: ["get_*", "search_*"]
     heard: true                              # what Omi heard is context: changes after it wait for a Yes
-    roles: [admin, adult]
+    roles: [admin, parent]
 
   - id: orb
     type: mcp
     url: http://<server-ip>:8095/mcp
     description: "Pondering Orb: this person's dashboard, projects and journal"
     person_token_env: ORB_TOKEN_{ID}         # one Orb per person
-    roles: [admin, adult]
+    roles: [admin, parent]
 
   - id: hermes
     type: hermes
     url: http://<server-ip>:8642
     key_env: HERMES_API_KEY_{PROFILE}       # each profile's own API_SERVER_KEY; HERMES_API_KEY_WIZARD
     model: hermes-agent
-    roles: [admin, adult]
+    roles: [admin, parent]
     # household_profile: household
 
 # Mattermost: a DM with each person, a family channel, a parents channel (docs/mattermost.md).

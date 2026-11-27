@@ -1,4 +1,4 @@
-import type { Config } from "./config.js";
+import { isKid, type Config } from "./config.js";
 import type { Db } from "./db.js";
 import type { Agent } from "./harness/agent.js";
 import type { Notifier } from "./notifier.js";
@@ -62,7 +62,7 @@ export class Routines {
     // "each": once per person, in their own view, sent only to them.
     const deliver = run_as === "each" ? ["each"] : (input.deliver?.length ? input.deliver : ["family"]).map(String);
     if (run_as !== "each") for (const t of deliver) if (!["family", "parents", "home"].includes(t) && !cfg.people.some((p) => p.id === t)) throw new RoutineError(400, `Can't deliver to "${t}": use family, parents, home or a person's id.`);
-    if (run_as === "parents" && deliver.some((t) => t === "family" || t === "home" || cfg.people.find((p) => p.id === t)?.role === "child"))
+    if (run_as === "parents" && deliver.some((t) => t === "family" || t === "home" || isKid(cfg.people.find((p) => p.id === t)?.role)))
       throw new RoutineError(400, "A parents' routine can see what only the grown-ups see, so it goes to the parents' chat or a grown-up, not the family or whoever is home.");
     if (run_as === "person" && deliver.some((t) => t !== input.person_id)) throw new RoutineError(400, "A person's routine can see their private things, so it only goes to them.");
     const id = input.id || newId();

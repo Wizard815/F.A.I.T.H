@@ -58,10 +58,11 @@ A request takes one of three ways.
 1. **Tokens: what each view can see.**
    - The household view only ever holds blanket tokens. The wiki's shared-agent token and ALLGlance's household token can't read private items, whatever the model asks for.
    - A source with no household token (Coinpile, Orb) doesn't exist in that view.
-2. **Policy: what each role may do.** This is FAITH's own decision, in `roles:`.
-   - Children get a short allowlist and only some kinds of device.
-   - The household view's changes need an adult's approval.
-   - Hermes is off for children and the household.
+2. **Policy: what each role may do.** This is FAITH's own decision, in `roles:`. Four tiers: `admin`, `parent`, `kid-pro` (a teen), `kid-lite` (a young child); the table is in [setup.md](setup.md#who-can-do-what-the-four-tiers). The defaults live in one place, `DEFAULT_ROLES` in `config.ts`.
+   - Both kid tiers get a short allowlist and only some kinds of device. kid-lite's is shorter, and its shopping and meal changes wait for a parent (`approve_writes`).
+   - Some rules hold for both kid tiers whatever `roles:` says (`isKid` in code): no money tools, no locks, alarm, covers or garage, never the parents' chat.
+   - The household view's changes need a parent's approval.
+   - Hermes is off for kids and the household.
 3. **Confirmation: the riskiest actions.** Locks, alarm, garage and anything an MCP server marks destructive wait for a Yes from the same person, on the same screen or in the same chat. Voice and API callers (including `/mcp`) can't give one, so those actions are refused there (unless `voice.confirm_on_voice`).
 
 **A photo or video can't make changes by itself.** In a turn that carries one, every change waits for the person's own Yes (`Agent.wrap`). Text in a picture or words in a video's sound can read like a request; the model may follow them, the code doesn't let it act alone.

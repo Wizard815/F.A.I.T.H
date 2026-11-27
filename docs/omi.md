@@ -15,7 +15,7 @@ connectors:
     person_token_env: OMI_TOKEN_{ID}        # each person's own key; no household token
     tools: ["get_*", "search_*"]            # reading only
     heard: true                             # what Omi heard is context, never a request
-    roles: [admin, adult]
+    roles: [admin, parent]
 ```
 
 Each person makes their own key, signed in to Omi as themselves:

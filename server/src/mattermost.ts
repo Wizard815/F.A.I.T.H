@@ -1,4 +1,4 @@
-import { envValue, type Config, type Person } from "./config.js";
+import { envValue, isKid, type Config, type Person } from "./config.js";
 import type { Db } from "./db.js";
 import type { Agent, TurnResult } from "./harness/agent.js";
 import { Approvals, type ApprovalEvent } from "./approvals.js";
@@ -116,7 +116,7 @@ export class MattermostBot {
       if (u) { this.users.set(u.id, p); this.ids.set(p.id, u.id); }
     }
     this.rooms.clear();
-    const family = people.filter((p) => this.ids.has(p.id)), parents = family.filter((p) => p.role !== "child");
+    const family = people.filter((p) => this.ids.has(p.id)), parents = family.filter((p) => !isKid(p.role));
     this.familyId = await this.channel(mm.family_channel, "The whole family, with FAITH. Everyone reads this: shared things only.", family);
     this.parentsId = await this.channel(mm.parents_channel, "Grown-ups only, with FAITH. Approvals for the family's requests land here.", parents);
     this.rooms.set(this.familyId, { kind: "family" });
@@ -125,7 +125,7 @@ export class MattermostBot {
       const dm = await this.api("POST", "/channels/direct", [this.me!.id, this.ids.get(p.id)]);
       this.rooms.set(dm.id, { kind: "personal", person: p });
       if (!this.kv(`welcomed:${p.id}`)) {
-        await this.post(dm.id, `Hi ${p.name}, I'm ${this.cfg().name}. This is our private chat: only you see it, so I can help with your own things here too, like your notes, tasks and money. The whole family can also find me in ~${mm.family_channel.name}${p.role !== "child" ? `, and the grown-ups in ~${mm.parents_channel.name}` : ""}.`);
+        await this.post(dm.id, `Hi ${p.name}, I'm ${this.cfg().name}. This is our private chat: only you see it, so I can help with your own things here too, like your notes, tasks and money. The whole family can also find me in ~${mm.family_channel.name}${!isKid(p.role) ? `, and the grown-ups in ~${mm.parents_channel.name}` : ""}.`);
         this.setKv(`welcomed:${p.id}`, String(Date.now()));
       }
     }
@@ -211,7 +211,7 @@ export class MattermostBot {
     }
     if (!person) return; // someone FAITH doesn't know, in a family chat (manage_members takes them out)
     if (room.kind === "personal" && room.person.id !== person.id) return;
-    if (room.kind === "parents" && person.role === "child") return;
+    if (room.kind === "parents" && isKid(person.role)) return;
     let text = String(post.message || "").trim();
     // A voice message counts as what was said; photos go along with the question.
     // In a group chat where FAITH answers only when named, don't fetch every photo people share.

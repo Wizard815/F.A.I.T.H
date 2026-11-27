@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, record } from "../api";
 import { Avatar } from "../ui";
 import { Badge, PageHead, Panel } from "./Shell";
+import { isKid, roleLabel } from "../roles";
 
 export function People({ me, passkeys }: { me: string; passkeys: boolean }) {
   const [list, setList] = useState<any[] | null>(null), [msg, setMsg] = useState(""), [rec, setRec] = useState<{ who: string; stop: () => Promise<Blob> } | null>(null);
@@ -24,7 +25,7 @@ export function People({ me, passkeys }: { me: string; passkeys: boolean }) {
     <div className="grid gap-4 lg:grid-cols-2">
       {list?.map((p) => (
         <Panel key={p.id}>
-          <div className="mb-4 flex items-center gap-3"><Avatar name={p.name} color={p.color} size={48} /><div><div className="font-serif text-[20px] font-semibold">{p.name}</div><div className="text-[14px] text-muted">{p.role} · id {p.id}{p.role === "child" ? ` · ${p.points} points` : ""}</div></div></div>
+          <div className="mb-4 flex items-center gap-3"><Avatar name={p.name} color={p.color} size={48} /><div><div className="font-serif text-[20px] font-semibold">{p.name}</div><div className="text-[14px] text-muted">{roleLabel(p.role)} · id {p.id}{isKid(p.role) ? ` · ${p.points} points` : ""}</div></div></div>
           <div className="mb-4 flex flex-wrap gap-2">
             <Badge ok={p.methods.pin}>{p.methods.pin ? "PIN set" : "no PIN"}</Badge><Badge ok={p.methods.password}>{p.methods.password ? "password set" : "no password"}</Badge><Badge ok={p.methods.passkey}>{p.methods.passkey ? "Face ID set" : "no Face ID"}</Badge>
             <Badge ok={p.voice_samples >= 3 ? true : p.voice_samples ? null : false}>voice: {p.voice_samples} sample{p.voice_samples === 1 ? "" : "s"}</Badge>

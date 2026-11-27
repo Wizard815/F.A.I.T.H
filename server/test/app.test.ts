@@ -137,7 +137,7 @@ test("a child's view has no write tools beyond the allowlist and only some house
   assert.ok(!names.includes("allglance_create_task"), "no task writes for kids");
   assert.ok(names.includes("home_control"), "lights are allowed for kids");
   assert.ok(names.includes("shopping_add"));
-  assert.match(req.messages[0].content, /talking with a child/);
+  assert.match(req.messages[0].content, /talking with a young child/);
   // home_control is offered (lights are allowed) but the lock is refused, and nothing reached HA.
   assert.match(ev.find((e) => e.type === "done").text, /can't control lock.front_door/);
   assert.ok(!ha.services.some((s) => s.service === "unlock"));
@@ -251,7 +251,7 @@ test("the admin can overrule a denial; nobody else can change a decision", async
 
 test("the app launcher shows each viewer only their apps", async () => {
   const dev = await pairedHub();
-  const cfgApps = [{ id: "ha", name: "Home Assistant", url: "http://ha", who: "anyone" }, { id: "money", name: "Coinpile", url: "http://coin", who: "person", roles: ["admin", "adult"] }, { id: "orb", name: "Orb", url: "http://orb", who: "person", people: ["wizard"] }];
+  const cfgApps = [{ id: "ha", name: "Home Assistant", url: "http://ha", who: "anyone" }, { id: "money", name: "Coinpile", url: "http://coin", who: "person", roles: ["admin", "parent"] }, { id: "orb", name: "Orb", url: "http://orb", who: "person", people: ["wizard"] }];
   (A.registry as any).cfg().apps.push(...cfgApps);
   const house = (await A.app.inject({ url: "/api/apps", cookies: { faith_device: dev } })).json().map((a: any) => a.id);
   assert.deepEqual(house, ["ha"]);

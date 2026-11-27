@@ -1,4 +1,4 @@
-import { anyGlob, type Config } from "../config.js";
+import { anyGlob, isKid, KID_NEVER_TOOLS, type Config } from "../config.js";
 import { policyOf, type Caller } from "../scope.js";
 import { Hermes } from "./hermes.js";
 import { HomeAssistant } from "./homeassistant.js";
@@ -41,22 +41,24 @@ export class Registry {
     return !pol.connectors || pol.connectors.includes(id);
   }
 
-  /** Is this write allowed outright for the caller's role? */
+  /** Is this write offered to the caller's role (outright, or as a request to approve)? */
   writeAllowed(caller: Caller, name: string) {
     const pol = this.cfg().roles[policyOf(caller)];
-    return pol.writes === "allow" || pol.writes === "approve" || (pol.writes === "allowlist" && anyGlob(pol.allow_writes, name));
+    return pol.writes === "allow" || pol.writes === "approve" || (pol.writes === "allowlist" && (anyGlob(pol.allow_writes, name) || anyGlob(pol.approve_writes, name)));
   }
 
   /** Household changes wait for approval, unless a known grown-up asked
-   *  (e.g. a parent writing in the family chat): they are the approver. */
+   *  (e.g. a parent writing in the family chat): they are the approver.
+   *  A kid's approve_writes (kid-lite's shopping list) wait for a parent too. */
   needsApproval(caller: Caller, name: string) {
     const cfg = this.cfg(), pol = cfg.roles[policyOf(caller)];
+    if (pol.writes === "allowlist") return !anyGlob(pol.allow_writes, name) && anyGlob(pol.approve_writes, name);
     if (pol.writes !== "approve" || anyGlob(pol.approve_skip, name)) return false;
     return !(caller.speaker && cfg.approvals.approvers.includes(caller.speaker.role));
   }
 
   async toolsFor(caller: Caller): Promise<ToolSet> {
-    const pol = this.cfg().roles[policyOf(caller)];
+    const pol = this.cfg().roles[policyOf(caller)], kid = isKid(policyOf(caller));
     const out: Tool[] = [], sources: string[] = [], problems: string[] = [];
     await Promise.all(this.connectors.map(async (c) => {
       if (!this.allowedConnector(caller, c.id)) return;
@@ -65,6 +67,7 @@ export class Registry {
         if (ts.length) sources.push(c.id);
         for (const t of ts) {
           if (anyGlob(pol.deny_tools, t.name)) continue;
+          if (kid && anyGlob(KID_NEVER_TOOLS, t.name)) continue;   // money: never for a kid, whatever roles: says
           if (t.write && !this.writeAllowed(caller, t.name)) continue;
           out.push(t.write && !t.selfApproves && this.needsApproval(caller, t.name) ? { ...t, approval: true } : t);
         }

@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { stringify } from "yaml";
-import { parseConfig } from "./config.js";
+import { isKid, parseConfig, roleOf, type Role } from "./config.js";
 
 /** `faith init`: find the family's services on the network and write a first
  *  faith.yaml, plus the list of tokens to make (homelab-ai's init wizard,
@@ -52,15 +52,17 @@ export async function discover(hosts: string[], log: (m: string) => void = () =>
   return found;
 }
 
-export type InitPerson = { id: string; name: string; role: "admin" | "adult" | "child" };
+export type InitPerson = { id: string; name: string; role: Role | "adult" | "child" };
 
 /** The config and the .env checklist for what was found. */
-export function build(found: Found, people: InitPerson[], name = "Faith") {
+export function build(found: Found, given: InitPerson[], name = "Faith") {
+  // Old names (adult, child) become the tiers they mean; anything unknown is a parent.
+  const people = given.map((p) => ({ ...p, role: roleOf(p.role) ?? "parent" }));
   const has = (id: string) => !!found[id];
   const env: { key: string; how: string }[] = [];
   const need = (key: string, how: string) => env.push({ key, how });
   const ids = people.map((p) => p.id.toUpperCase());
-  const adults = people.filter((p) => p.role !== "child");
+  const adults = people.filter((p) => !isKid(p.role));
 
   const connectors: any[] = [];
   if (has("wiki")) {
@@ -82,19 +84,19 @@ export function build(found: Found, people: InitPerson[], name = "Faith") {
     need("HA_TOKEN", "in HA: add a non-admin user called FAITH, sign in as it, Profile → Security → Long-lived access tokens");
   }
   if (has("coinpile")) {
-    connectors.push({ id: "coinpile", type: "mcp", url: `${found.coinpile}/api/v1/mcp`, description: "Coinpile: this person's money", person_token_env: "COINPILE_TOKEN_{ID}", roles: ["admin", "adult"] });
+    connectors.push({ id: "coinpile", type: "mcp", url: `${found.coinpile}/api/v1/mcp`, description: "Coinpile: this person's money", person_token_env: "COINPILE_TOKEN_{ID}", roles: ["admin", "parent"] });
     for (const p of adults) need(`COINPILE_TOKEN_${p.id.toUpperCase()}`, `in ${p.name}'s Coinpile: Settings → Home Assistant & API → a token with the mcp and act scopes`);
   }
   if (has("orb")) {
-    connectors.push({ id: "orb", type: "mcp", url: `${found.orb}/mcp`, description: "Pondering Orb: this person's dashboard, projects and journal", person_token_env: "ORB_TOKEN_{ID}", roles: ["admin", "adult"] });
+    connectors.push({ id: "orb", type: "mcp", url: `${found.orb}/mcp`, description: "Pondering Orb: this person's dashboard, projects and journal", person_token_env: "ORB_TOKEN_{ID}", roles: ["admin", "parent"] });
     for (const p of adults) need(`ORB_TOKEN_${p.id.toUpperCase()}`, `in that person's Orb: add faith:<a long random token> to ORB_API_TOKENS, and put the token here`);
   }
   if (has("hermes")) {
-    connectors.push({ id: "hermes", type: "hermes", url: found.hermes, key_env: "HERMES_API_KEY_{PROFILE}", model: "hermes-agent", roles: ["admin", "adult"] });
+    connectors.push({ id: "hermes", type: "hermes", url: found.hermes, key_env: "HERMES_API_KEY_{PROFILE}", model: "hermes-agent", roles: ["admin", "parent"] });
     for (const p of adults) need(`HERMES_API_KEY_${p.id.toUpperCase()}`, `API_SERVER_KEY from ~/.hermes/profiles/${p.id}/.env (make the profile with: hermes profile create ${p.id})`);
   }
   if (has("studio")) {
-    connectors.push({ id: "studio", type: "studio", url: found.studio, user_env: "STUDIO_USER_{ID}", password_env: "STUDIO_PASSWORD_{ID}", roles: ["admin", "adult"] });
+    connectors.push({ id: "studio", type: "studio", url: found.studio, user_env: "STUDIO_USER_{ID}", password_env: "STUDIO_PASSWORD_{ID}", roles: ["admin", "parent"] });
     for (const p of adults) { need(`STUDIO_USER_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio user name`); need(`STUDIO_PASSWORD_${p.id.toUpperCase()}`, `${p.name}'s Hermes Studio password`); }
   }
   if (has("mealie")) {

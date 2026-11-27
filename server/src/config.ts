@@ -1,12 +1,44 @@
 import { readFileSync, existsSync } from "node:fs";
 import { parse } from "yaml";
 
-/** Roles a family member can have. "household" is not a role a person has: it is
- *  the policy used when nobody is signed in (the shared hub view). */
-export type Role = "admin" | "adult" | "child";
-/** "parents" is the policy of the parents-only group chat (only admins and adults read it). */
+/** Tiers a family member can have (docs/setup.md, "Who can do what"):
+ *   admin     runs FAITH; everything a parent can do, plus the admin page
+ *   parent    a grown-up: their own things, approves the kids' and the shared screen's changes
+ *   kid-pro   a teenager: their own notes and photos, shopping adds, a few more devices
+ *   kid-lite  a young child (about six): lights, media and fans; most changes wait for a parent
+ *  Old names still load: "adult" is parent, "child" is kid-lite (the safer kid tier).
+ *  "household" is not a role a person has: it is the policy used when nobody is
+ *  signed in (the shared hub view). */
+export type Role = "admin" | "parent" | "kid-pro" | "kid-lite";
+/** "parents" is the policy of the parents-only group chat (only admins and parents read it). */
 export type PolicyName = Role | "household" | "parents";
-export const ROLES: Role[] = ["admin", "adult", "child"];
+export const ROLES: Role[] = ["admin", "parent", "kid-pro", "kid-lite"];
+export const POLICIES: PolicyName[] = [...ROLES, "household", "parents"];
+export const KID_ROLES: Role[] = ["kid-pro", "kid-lite"];
+/** Both kid tiers. Every children-only rule checks this, never one tier's name. */
+export const isKid = (r: string | undefined | null): boolean => r === "kid-pro" || r === "kid-lite";
+/** Old and loose spellings of a person's role. "child" is the safer kid tier. */
+const ROLE_ALIASES: Record<string, Role> = { adult: "parent", grownup: "parent", child: "kid-lite", kid_lite: "kid-lite", kidlite: "kid-lite", kid_pro: "kid-pro", kidpro: "kid-pro", teen: "kid-pro" };
+export function roleOf(v: unknown): Role | undefined {
+  const r = String(v ?? "").trim().toLowerCase();
+  return (ROLES as string[]).includes(r) ? (r as Role) : ROLE_ALIASES[r];
+}
+/** A list of who may use something (connector roles, camera who, cards, apps, skills).
+ *  There "child" and "kids" mean both kid tiers: what a child could use, a teen can too. */
+export function policyList(v: unknown, where: string): PolicyName[] {
+  const out: PolicyName[] = [];
+  for (const x of list(v)) {
+    const k = x.trim().toLowerCase();
+    const add = k === "child" || k === "kids" ? KID_ROLES : (POLICIES as string[]).includes(k) ? [k as PolicyName] : roleOf(k) ? [roleOf(k)!] : null;
+    if (!add) throw new ConfigError(`${where}: "${x}" isn't a role. Use ${POLICIES.join(", ")} (or kids for both kid tiers).`);
+    for (const a of add) if (!out.includes(a)) out.push(a);
+  }
+  return out;
+}
+/** Never for either kid tier, whatever roles: says: locks, the alarm, covers and the garage. */
+export const KID_NEVER_DOMAINS = ["lock", "alarm_control_panel", "cover", "garage_door"];
+/** Never for either kid tier, whatever roles: says: money. */
+export const KID_NEVER_TOOLS = ["coinpile_*", "firefly_*"];
 
 export type Person = {
   id: string;                 // same id as the wiki's schema/family.md member
@@ -113,6 +145,9 @@ export type RolePolicy = {
    *  approve: changes wait until a family member approves them (the household view's default). */
   writes: "allow" | "allowlist" | "deny" | "approve";
   allow_writes: string[];    // globs, used when writes = allowlist
+  /** globs, used when writes = allowlist: these aren't refused, they wait for a parent's
+   *  approval and then run with the household's tokens (shared things only, like the shopping list). */
+  approve_writes: string[];
   approve_skip: string[];    // globs that skip approval when writes = approve (e.g. shopping_add)
   ha_domains?: string[];     // Home Assistant domains this role may control (default: all exposed)
   ha_entities?: string[];    // or exact entities / globs
@@ -203,21 +238,43 @@ export type MattermostConfig = {
 
 export class ConfigError extends Error {}
 
-const DEFAULT_ROLES: Record<PolicyName, RolePolicy> = {
-  admin: { writes: "allow", allow_writes: [], approve_skip: [] },
-  adult: { writes: "allow", allow_writes: [], approve_skip: [] },
-  child: {
+const KID_RULES = "Never talk about money, locks, the alarm or the garage, or anyone else's private things, and never the parents' notes. If they ask for something you can't do, suggest they ask a parent.";
+const KID_DENY = ["hermes_*", "studio_*", ...KID_NEVER_TOOLS, "photos_share"];
+const HA_BASICS = ["home_control", "HassTurnOn", "HassTurnOff", "HassLightSet", "HassMedia*", "HassSetVolume*"];
+
+/** The role policy defaults: the one place each tier's rules are set. roles: in
+ *  faith.yaml overrides them per field. KID_NEVER_* above apply to both kid tiers
+ *  whatever this says. */
+export const DEFAULT_ROLES: Record<PolicyName, RolePolicy> = {
+  admin: { writes: "allow", allow_writes: [], approve_writes: [], approve_skip: [] },
+  parent: { writes: "allow", allow_writes: [], approve_writes: [], approve_skip: [] },
+  // A teenager: their own notes and photo albums, shopping adds and a few more devices.
+  "kid-pro": {
     writes: "allowlist",
-    allow_writes: ["shopping_add", "home_control", "HassTurnOn", "HassTurnOff", "HassLightSet", "HassMedia*", "HassSetVolume*", "wiki_memory_capture", "wiki_memory_log", "points_claim", "reward_redeem", "message_send"],
+    allow_writes: ["shopping_add", ...HA_BASICS, "HassFanSetSpeed", "HassVacuum*", "wiki_memory_capture", "wiki_memory_log", "wiki_memory_add_source", "photos_album_add", "points_claim", "reward_redeem", "message_send"],
+    approve_writes: ["shopping_done", "meal_plan", "recipe_add", "recipe_import"],
     approve_skip: [],
+    deny_tools: KID_DENY,
+    ha_domains: ["light", "media_player", "fan", "scene", "vacuum"],
+    prompt: `You are talking with a teenager. Be friendly, clear and straight with them. ${KID_RULES}`,
+  },
+  // A young child (about six): lights, media and fans; no notes, no web; the shopping list waits for a parent.
+  "kid-lite": {
+    writes: "allowlist",
+    allow_writes: [...HA_BASICS, "points_claim", "reward_redeem", "message_send"],
+    approve_writes: ["shopping_add", "meal_plan"],
+    approve_skip: [],
+    deny_tools: [...KID_DENY, "photos_album_add", "web_*", "*_web_*", "*websearch*", "*web_search*", "*web_fetch*"],
     ha_domains: ["light", "media_player", "fan"],
-    prompt: "You are talking with a child. Use short, kind, simple sentences. Don't discuss money, locks, alarms or other people's private things. If they ask for something you can't do, suggest they ask a parent.",
+    prompt: `You are talking with a young child, about six years old. Answer in one or two short, kind sentences with easy words. ${KID_RULES}`,
   },
   // Nobody signed in: changes are asked for, and a family member approves them.
-  household: { writes: "approve", allow_writes: [], approve_skip: [] },
+  household: { writes: "approve", allow_writes: [], approve_writes: [], approve_skip: [] },
   // The parents-only chat: only grown-ups read it, so changes go straight through.
-  parents: { writes: "allow", allow_writes: [], approve_skip: [] },
+  parents: { writes: "allow", allow_writes: [], approve_writes: [], approve_skip: [] },
 };
+/** Old names under roles: in faith.yaml. */
+const POLICY_ALIASES: Record<string, PolicyName> = { adult: "parent", child: "kid-lite" };
 
 const DEFAULT_CARDS: Card[] = [
   { id: "today", title: "Today", builtin: "today", who: "anyone" },
@@ -247,8 +304,8 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   const people: Person[] = (raw.people || []).map((p: any, i: number) => {
     const id = str(p?.id).trim();
     if (!ID.test(id)) throw new ConfigError(`people[${i}].id "${id}" must be lowercase letters, digits, - or _ (the wiki's member id).`);
-    const role = str(p.role, "adult") as Role;
-    if (!ROLES.includes(role)) throw new ConfigError(`people[${i}] (${id}): role must be admin, adult or child.`);
+    const role = roleOf(str(p.role, "parent"));
+    if (!role) throw new ConfigError(`people[${i}] (${id}): role must be admin, parent, kid-pro or kid-lite (adult and child still work: child means kid-lite).`);
     return { id, name: str(p.name, id), role, color: p.color ? str(p.color) : undefined, allglance_owner_id: p.allglance_owner_id ? str(p.allglance_owner_id) : undefined,
       ha_user_id: p.ha_user_id ? str(p.ha_user_id) : undefined, face_names: list(p.face_names), omi_uid: p.omi_uid ? str(p.omi_uid) : undefined, immich_user: p.immich_user ? str(p.immich_user).trim() : undefined, hermes_profile: p.hermes_profile ? str(p.hermes_profile) : undefined, firefly_account: p.firefly_account != null ? str(p.firefly_account) : undefined, ha_person: p.ha_person != null ? str(p.ha_person) : undefined,
       mattermost_username: p.mattermost_username ? str(p.mattermost_username).replace(/^@/, "").toLowerCase() : undefined,
@@ -258,14 +315,18 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
   if (dup) throw new ConfigError(`Two people have the id "${dup}".`);
 
   const roles = { ...DEFAULT_ROLES } as Record<PolicyName, RolePolicy>;
-  for (const [k, v] of Object.entries(raw.roles || {})) {
-    if (!(k in DEFAULT_ROLES)) throw new ConfigError(`roles.${k}: use admin, adult, child, household or parents.`);
-    const r: any = v || {}; const base = DEFAULT_ROLES[k as PolicyName];
+  const seenRoles = new Map<PolicyName, string>();
+  for (const [key, v] of Object.entries(raw.roles || {})) {
+    const k = (POLICY_ALIASES[key] ?? key) as PolicyName;
+    if (!(k in DEFAULT_ROLES)) throw new ConfigError(`roles.${key}: use ${POLICIES.join(", ")} (adult and child still work: child means kid-lite).`);
+    if (seenRoles.has(k)) throw new ConfigError(`roles.${key} and roles.${seenRoles.get(k)} are the same tier (${k}). Keep one.`);
+    seenRoles.set(k, key);
+    const r: any = v || {}; const base = DEFAULT_ROLES[k];
     const writes = str(r.writes, base.writes) as RolePolicy["writes"];
     if (!["allow", "allowlist", "deny", "approve"].includes(writes)) throw new ConfigError(`roles.${k}.writes must be allow, allowlist, deny or approve.`);
     roles[k as PolicyName] = {
       connectors: r.connectors ? list(r.connectors) : base.connectors, deny_tools: r.deny_tools ? list(r.deny_tools) : base.deny_tools, writes,
-      allow_writes: r.allow_writes ? list(r.allow_writes) : base.allow_writes, approve_skip: r.approve_skip ? list(r.approve_skip) : base.approve_skip, ha_domains: r.ha_domains ? list(r.ha_domains) : base.ha_domains,
+      allow_writes: r.allow_writes ? list(r.allow_writes) : base.allow_writes, approve_writes: r.approve_writes ? list(r.approve_writes) : base.approve_writes, approve_skip: r.approve_skip ? list(r.approve_skip) : base.approve_skip, ha_domains: r.ha_domains ? list(r.ha_domains) : base.ha_domains,
       ha_entities: r.ha_entities ? list(r.ha_entities) : base.ha_entities, prompt: r.prompt != null ? str(r.prompt) : base.prompt,
     };
   }
@@ -275,7 +336,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!ID.test(id)) throw new ConfigError(`connectors[${i}].id "${id}" must be lowercase letters, digits, - or _.`);
     const url = str(c.url ?? (c.url_env ? "http://from-env.invalid" : "")).replace(/\/+$/, "");
     if (!/^https?:\/\//.test(url)) throw new ConfigError(`connectors.${id}.url must start with http:// or https://.`);
-    const roles = c.roles ? (list(c.roles) as PolicyName[]) : undefined;
+    const roles = c.roles ? policyList(c.roles, `connectors.${id}.roles`) : undefined;
     if (type === "mcp" && c.auth === "none" && !c.roles) throw new ConfigError(`connectors.${id}: with auth: none, say who may use it (roles: [admin] or [admin, parents]); a token-less source would otherwise reach the shared view too.`);
     if (type === "mcp") return { id, type, url, url_env: c.url_env ? str(c.url_env) : undefined, auth: c.auth === "none" ? "none" : "token", household_token_env: c.household_token_env, person_token_env: c.person_token_env, parents_token_env: c.parents_token_env, tools: c.tools ? list(c.tools) : undefined, roles, prefix: c.prefix != null ? str(c.prefix) : undefined, description: c.description,
       teller_tools: c.teller_tools ? list(c.teller_tools) : undefined, always: c.always ? list(c.always) : undefined, heard: bool(c.heard, false), check_identity: c.check_identity === undefined ? undefined : bool(c.check_identity, true) } as McpConnector;
@@ -289,20 +350,18 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
         cameras: (Array.isArray(c.cameras) ? c.cameras : []).map((k: any) => {
           const entity = str(typeof k === "string" ? k : k?.entity);
           if (!/^camera\.[a-z0-9_]+$/.test(entity)) throw new ConfigError(`connectors.${id}.cameras: "${entity}" isn't a camera entity (camera.front_door).`);
-          const who = (k?.who ? list(k.who) : ["admin", "adult"]) as PolicyName[];
-          const bad = who.find((w) => ![...ROLES, "household", "parents"].includes(w));
-          if (bad) throw new ConfigError(`connectors.${id}.cameras ${entity}: who "${bad}" is one of admin, adult, child, household, parents.`);
+          const who: PolicyName[] = k?.who ? policyList(k.who, `connectors.${id}.cameras ${entity}: who`) : ["admin", "parent"];
           const face = k?.face_entity ? str(k.face_entity) : undefined;
           if (face && !/^[a-z_]+\.[a-z0-9_]+$/.test(face)) throw new ConfigError(`connectors.${id}.cameras ${entity}: face_entity "${face}" isn't an entity id (sensor.front_door_last_face).`);
           return { entity, name: str(k?.name, entity.slice(7).replace(/_/g, " ")), who, ...(face ? { face_entity: face } : {}) };
         }) } as HomeAssistantConnector;
     }
-    if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "adult"] } as StudioConnector;
-    if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "adult", "parents", "household"] } as MealieConnector;
+    if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "parent"] } as StudioConnector;
+    if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "parent", "parents", "household"] } as MealieConnector;
     if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
       household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
       share_days: Math.min(30, Math.max(1, num(c.share_days, 7))), roles } as ImmichConnector;
-    if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "adult"] } as HermesConnector;
+    if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "parent"] } as HermesConnector;
     throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie or immich.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
@@ -327,7 +386,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!builtin && !c.tool) throw new ConfigError(`dashboard.cards.${id} needs a tool (a FAITH tool name) or a builtin.`);
     const who = str(c.who, "anyone");
     if (!["anyone", "person", "household"].includes(who)) throw new ConfigError(`dashboard.cards.${id}.who must be anyone, person or household.`);
-    return { id, title: str(c.title, id), tool: c.tool ? str(c.tool) : undefined, args: c.args || undefined, who, builtin, people: c.people ? list(c.people) : undefined, roles: c.roles ? (list(c.roles) as PolicyName[]) : undefined } as Card;
+    return { id, title: str(c.title, id), tool: c.tool ? str(c.tool) : undefined, args: c.args || undefined, who, builtin, people: c.people ? list(c.people) : undefined, roles: c.roles ? policyList(c.roles, `dashboard.cards.${id}.roles`) : undefined } as Card;
   }) : DEFAULT_CARDS;
 
   const apps: AppLink[] = (raw.apps || []).map((a: any, i: number) => {
@@ -335,11 +394,16 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     if (!/^https?:\/\//.test(url)) throw new ConfigError(`apps.${id}.url must start with http:// or https://.`);
     const who = str(a.who, "anyone");
     if (!["anyone", "person"].includes(who)) throw new ConfigError(`apps.${id}.who must be anyone or person.`);
-    return { id, name: str(a.name, id), url, icon: a.icon ? str(a.icon) : undefined, who, roles: a.roles ? (list(a.roles) as PolicyName[]) : undefined, people: a.people ? list(a.people) : undefined } as AppLink;
+    return { id, name: str(a.name, id), url, icon: a.icon ? str(a.icon) : undefined, who, roles: a.roles ? policyList(a.roles, `apps.${id}.roles`) : undefined, people: a.people ? list(a.people) : undefined } as AppLink;
   });
   const ap = raw.approvals || {};
-  const approvers = (ap.approvers ? list(ap.approvers) : ["admin", "adult"]) as Role[];
-  if (approvers.some((r) => !ROLES.includes(r))) throw new ConfigError("approvals.approvers lists roles: admin, adult, child.");
+  const approvers: Role[] = [];
+  for (const a of ap.approvers ? list(ap.approvers) : ["admin", "parent"]) {
+    const r = roleOf(a);
+    if (!r) throw new ConfigError(`approvals.approvers: "${a}" isn't a role. Use admin and parent.`);
+    if (isKid(r)) throw new ConfigError(`approvals.approvers: ${a} can't approve. Only admin and parent can approve changes.`);
+    if (!approvers.includes(r)) approvers.push(r);
+  }
   const samesite = str(raw.embed?.cookie_samesite, "strict");
   if (!["strict", "lax", "none"].includes(samesite)) throw new ConfigError("embed.cookie_samesite is strict, lax or none.");
   let mattermost: MattermostConfig | undefined;
@@ -381,7 +445,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     embed: { allow_from: list(raw.embed?.allow_from), cookie_samesite: samesite as Config["embed"]["cookie_samesite"] },
     mattermost,
     skills: { dir: str(env.FAITH_SKILLS || raw.skills?.dir, "/config/skills"),
-      packs: (raw.skills?.packs || []).map((p: any) => (typeof p === "string" ? { dir: p } : { dir: str(p.dir), who: p.who ? (list(p.who) as PolicyName[]) : undefined })) },
+      packs: (raw.skills?.packs || []).map((p: any) => (typeof p === "string" ? { dir: p } : { dir: str(p.dir), who: p.who ? policyList(p.who, `skills.packs ${p.dir}: who`) : undefined })) },
     voice_id: raw.voice_id?.url ? { url: str(raw.voice_id.url).replace(/\/+$/, ""), token_env: raw.voice_id.token_env ? str(raw.voice_id.token_env) : undefined,
       threshold: num(raw.voice_id.threshold, 0.78), trust_for_changes: bool(raw.voice_id.trust_for_changes, true), face_helps: Math.min(0.2, Math.max(0, num(raw.voice_id.face_helps, 0.08))) } : undefined,
     wyoming: raw.wyoming ? { port: num(raw.wyoming.port, 10300), host: str(raw.wyoming.host, "0.0.0.0"), languages: list(raw.wyoming.languages).length ? list(raw.wyoming.languages) : ["en"], allow_from: list(raw.wyoming.allow_from) } : undefined,
@@ -400,12 +464,7 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
 }
 
 function parseBoard(b: any, people: Person[]): BoardConfig {
-  const policies: PolicyName[] = [...ROLES, "household", "parents"];
-  const roles = (v: unknown, d: PolicyName[], where: string) => {
-    const r = v == null ? d : (list(v) as PolicyName[]);
-    if (r.some((x) => !policies.includes(x))) throw new ConfigError(`${where} lists roles: ${policies.join(", ")}.`);
-    return r;
-  };
+  const roles = (v: unknown, d: PolicyName[], where: string) => (v == null ? d : policyList(v, where));
   const weather = str(b.weather_entity, "");
   if (weather && !/^weather\.[a-z0-9_]+$/.test(weather)) throw new ConfigError(`board.weather_entity must be a weather.* entity, like weather.home (got "${weather}").`);
   const feeds = list(b.news?.feeds);

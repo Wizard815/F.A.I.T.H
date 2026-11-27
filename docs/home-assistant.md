@@ -215,13 +215,13 @@ connectors:
     cameras:
       - entity: camera.front_door
         name: Front door
-        who: [admin, adult, parents]     # parents: automations may use it too
+        who: [admin, parent, parents]     # parents: automations may use it too
       - entity: camera.nursery
         who: [admin]
 ```
 
 - The picture goes to the local vision model (`model.vision_model`, else `model.model`) and nowhere else. Only its words come back.
-- `who` defaults to `[admin, adult]`. Add `household` for the kitchen screen, `parents` for automations.
+- `who` defaults to `[admin, parent]`. Add `household` for the kitchen screen, `parents` for automations.
 - Text in the picture is reported, never followed. A change FAITH wants to make after looking through a camera waits for the person's own Yes, as with a photo.
 - Frigate cameras work the same way through HA's Frigate integration.
 
@@ -230,7 +230,7 @@ connectors:
 ```yaml
       - entity: camera.front_door
         name: Front door
-        who: [admin, adult, parents]
+        who: [admin, parent, parents]
         face_entity: sensor.front_door_last_recognized_face   # Frigate 0.16+, or Double Take's sensor
 ```
 

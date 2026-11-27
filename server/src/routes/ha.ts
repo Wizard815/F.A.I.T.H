@@ -9,7 +9,7 @@ import type { Approvals } from "../approvals.js";
 import type { Registry } from "../connectors/registry.js";
 import type { Rewards } from "../rewards.js";
 import type { Decision, Voices } from "../voice.js";
-import { envValue } from "../config.js";
+import { envValue, isKid } from "../config.js";
 import { dashboard } from "../dashboard.js";
 import { ModelError } from "../harness/llm.js";
 import { speakable, synthesize, transcribe } from "../speech.js";
@@ -182,14 +182,14 @@ export function registerHaRoutes(app: FastifyInstance, x: HaCtx) {
   // ---- points and rewards ----
   app.post("/api/ha/rewards", async (req) => {
     const c = who(req).caller, p = c.scope.kind === "person" ? c.scope.person : undefined;
-    const kids = cfg().people.filter((k) => k.role === "child");
-    const me = p?.role === "child" ? p : undefined;
+    const kids = cfg().people.filter((k) => isKid(k.role));
+    const me = isKid(p?.role) ? p : undefined;
     // The card balance is money: only for the child themself, or a signed-in grown-up. Never the shared view.
-    const parent = !!p && p.role !== "child";
+    const parent = !!p && !isKid(p.role);
     return {
       me: me ? { ...pub(me), points: rewards.balance(me.id), history: rewards.history(me.id, 8), card: (await rewards.card(me.id)) ?? null } : null,
       kids: me ? [] : await Promise.all(kids.map(async (k) => ({ ...pub(k), points: rewards.balance(k.id), card: parent ? (await rewards.card(k.id)) ?? null : null }))),
-      activities: rewards.activities(), rewards: rewards.rewards(), can_give: !!p && p.role !== "child", allowed_points: cfg().rewards.allowed_points,
+      activities: rewards.activities(), rewards: rewards.rewards(), can_give: !!p && !isKid(p.role), allowed_points: cfg().rewards.allowed_points,
     };
   });
   const act = (tool: string) => async (req: FastifyRequest) => {

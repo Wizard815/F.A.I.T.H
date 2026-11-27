@@ -2,7 +2,7 @@
 name: recipe-from-photo
 title: "Add a recipe from a photo"
 description: "The person shows a cookbook page, a recipe card or a handwritten recipe (or sends a recipe link) and wants it in Mealie: read it, check it isn't there already, and add it."
-who: [admin, adult, parents, household]
+who: [admin, parent, parents, household]
 ---
 1. Read the recipe from the photo: its name, servings, prep and cook times, every ingredient with its amount, the steps in order, and any notes written on it.
 2. Handwriting or a blurry page: if an amount, a temperature or a word isn't clear, ask. Never guess a number.

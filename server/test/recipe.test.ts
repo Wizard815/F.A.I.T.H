@@ -101,8 +101,8 @@ test("who gets it: grown-ups yes, children no, and nobody without a token", asyn
 });
 
 test("the skill is offered to grown-ups and the shared view, not to children", () => {
-  for (const p of ["admin", "adult", "parents", "household"] as const) assert.ok(A.skills.forPolicy(p).some((s) => s.name === "recipe-from-photo"), p);
-  assert.ok(!A.skills.forPolicy("child").some((s) => s.name === "recipe-from-photo"));
+  for (const p of ["admin", "parent", "parents", "household"] as const) assert.ok(A.skills.forPolicy(p).some((s) => s.name === "recipe-from-photo"), p);
+  assert.ok(!A.skills.forPolicy("kid-pro").some((s) => s.name === "recipe-from-photo"));
   assert.match(A.skills.get("recipe-from-photo")!.body, /recipe_add/);
 });
 

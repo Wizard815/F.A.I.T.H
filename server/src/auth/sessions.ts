@@ -1,4 +1,4 @@
-import type { Config, Person } from "../config.js";
+import { isKid, type Config, type Person } from "../config.js";
 import type { Db } from "../db.js";
 import { hashSecret, newPairCode, newToken, sha256, validPassword, validPin, verifySecret } from "../secrets.js";
 import { personById, type Caller } from "../scope.js";
@@ -185,7 +185,7 @@ export class Auth {
   addToken(kind: "household" | "person" | "ha" | "omi" | "client", name: string, personId?: string) {
     if (!/^[a-z0-9][a-z0-9_.-]{0,40}$/.test(name)) throw new AuthError(400, "Token names are lowercase letters, digits, ., - or _.");
     if ((kind === "person" || kind === "omi" || kind === "client") && !personById(this.cfg(), personId)) throw new AuthError(400, `No person "${personId}" in the config.`);
-    if (kind === "omi" && personById(this.cfg(), personId)!.role === "child") throw new AuthError(400, "Omi suggestions are for grown-ups: a child's recordings don't go to FAITH.");
+    if (kind === "omi" && isKid(personById(this.cfg(), personId)!.role)) throw new AuthError(400, "Omi suggestions are for grown-ups: a child's recordings don't go to FAITH.");
     if (this.db.prepare("SELECT 1 FROM api_tokens WHERE name = ?").get(name)) throw new AuthError(409, `A token named ${name} exists. Revoke it first.`);
     const token = newToken(kind === "ha" ? "fha_" : kind === "omi" ? "fomi_" : kind === "client" ? "fapp_" : "faith_");
     this.db.prepare("INSERT INTO api_tokens (name, token_hash, kind, person_id, created_at) VALUES (?, ?, ?, ?, ?)").run(name, sha256(token), kind, kind === "person" || kind === "omi" || kind === "client" ? personId! : null, this.now());

@@ -1,4 +1,4 @@
-import { envValue, glob, personEnv, type McpConnector as McpCfg } from "../config.js";
+import { envValue, glob, isKid, personEnv, type McpConnector as McpCfg } from "../config.js";
 import { sha256 } from "../secrets.js";
 import type { Caller } from "../scope.js";
 import { ToolError, type Connector, type Tool } from "./types.js";
@@ -131,7 +131,7 @@ export class McpConnector implements Connector {
       if (who.kind === "admin") return `${env} is an admin token: it reads every person's notes, so ${p.name}'s chats could show someone else's. Issue it as a member (family-setup.mjs token ${p.id} --label faith --as member).`;
       if (who.kind !== "member" && who.kind !== "child") return `${env} is a ${who.kind} token, not ${p.name}'s own. Give ${p.name} their own (family-setup.mjs token ${p.id}).`;
       if (who.id !== p.id) return `${env} belongs to ${who.id}, not ${p.name}: ${p.name} would see ${who.id}'s notes. Give ${p.name} their own token.`;
-      if (p.role === "child" && who.kind !== "child") return `${p.name} is a child in FAITH but not in ${this.id}, so they could read the grown-ups' notes. Make them a child there (role: child).`;
+      if (isKid(p.role) && who.kind !== "child") return `${p.name} is a kid in FAITH (${p.role}) but not a child in ${this.id}, so they could read the grown-ups' notes. Make them a child there (role: child).`;
       return null;
     }
     if (who.kind !== "shared" && who.kind !== "shared-parents") return `${env} is ${who.kind === "member" || who.kind === "child" ? `${who.id}'s own` : `a ${who.kind}`} token, so the shared view would see private notes. Use a shared agent's token (family-setup.mjs add-shared).`;

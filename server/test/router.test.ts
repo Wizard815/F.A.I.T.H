@@ -106,7 +106,7 @@ test("a SKILL.md pack loads, only for the roles given, and its reference files c
   assert.equal(s.description, "Home Assistant best practices. Load first on any HA request.");
   assert.deepEqual(s.references, ["references/triggers.md"]);
   assert.deepEqual(s.who, ["admin"]);
-  assert.equal(skills.forPolicy("child").length, 0);
+  assert.equal(skills.forPolicy("kid-pro").length, 0);
   assert.equal(skills.reference(s.name, "references/triggers.md"), "Prefer state triggers.");
   assert.throws(() => skills.reference(s.name, "../../secret.md"), /has no file/);
   assert.throws(() => skills.remove(s.name), /skill pack/);
