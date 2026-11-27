@@ -112,6 +112,20 @@ projects:
 - **A thread vanished from the list:** it was put away (by hand or after `auto_resolve_days`). Open *Put away* to bring it back. Throwaway threads are deleted instead.
 - **"A thread can't start other threads":** ask the project's coordinator, or start the next thread yourself.
 
+## Hermes Studio
+
+Studio has its own Projects for coding work. herdr is the engine behind its threads, and Studios pair into groups (about 6) through a bridge on each one. FAITH connects to that as the person, never as a Studio in the group:
+
+- **As the person.** FAITH signs in to Studio with the person's own Studio account (`STUDIO_USER_{ID}`), the same as `studio_start`. A household view, a group chat or someone without a Studio account gets no Studio tools.
+- **`studio_projects`** lists that person's Studio projects with their open threads and stages (the same names as here). **`studio_project_message`** sends a project's coordinator a job or a question (Studio shows it as sent through FAITH). **`studio_project_task`** adds a task to its board, with the whole job in its notes. Both are changes, so they need a Yes like any other.
+- **Studio decides.** FAITH never starts a Studio thread or a coding agent itself. Studio's coordinator, or the person, starts the task. If the work belongs on another Studio in the group, that coordinator sends it there through the bridge.
+- **Why not join the group?** A paired Studio has one key for the whole box. FAITH's privacy comes from each person's own tokens, so a box-wide key would let one family member's work reach another's.
+
+What goes wrong:
+- **"Studio Projects are only for Studio's super admins":** Studio's project routes need a super admin. Use that person's Studio account, or start the job with `studio_start` instead.
+- **A throwaway thread can't message or add a task:** it only looks things up.
+- **"…has no coordinator" or a 429:** the Studio project has no coordinator chat, or 50 messages are still unread there. Open the project in Studio.
+
 ## In the apps
 
 - **Desktop and Android:** a Projects tab, with its count of threads that need you. Threads are grouped by stage, with *Put away* folded at the bottom; each shows a *New* mark when it's ready for review and how long ago it changed. Read one, send more, put it away, start one, or edit the project's instructions. Family and Parents show the Yes card first. Voice focus shows *Projects: 1 needs you*, and Voice panel has a Projects tile.
@@ -123,4 +137,4 @@ projects:
 - Projects for the wiki's groups. FAITH has no groups list yet.
 - A Home Assistant card (the HA integration's `CARD_PATHS` doesn't allow `/api/projects` yet) and a Mattermost command.
 - Starting or answering threads from D.A.S.H. Its Projects screen reads `/api/projects/glance` and is read-only until hold-to-talk and pairing.
-- Handing a thread's work to Hermes Studio's Projects once those have per-person owners. Today a thread can use `studio_start` as its owner's own Studio account.
+- Studio projects for family members who aren't Studio super admins (Studio would need a project member role). News from a Studio project coming back into a FAITH thread.

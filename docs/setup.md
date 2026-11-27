@@ -164,7 +164,7 @@ people:
   - Hermes refuses one shared key on a person's profile (401). A person whose key is missing gets no Hermes in FAITH.
   - Children don't get Hermes by default.
 - **Hermes Studio:** each person signs in with their own Studio account (`STUDIO_USER_<ID>`, `STUDIO_PASSWORD_<ID>`).
-  - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio.
+  - FAITH can list and read their Studio chats, and start a job there (`studio_start`), which they follow in Studio. Studio's super admins also get their Studio projects (`studio_projects`) and can message one's coordinator or add a task to it (`studio_project_message`, `studio_project_task`); see [projects.md](projects.md#hermes-studio).
   - Studio's MCP bridge is stdio-only, so this goes through Studio's REST API, like Orb does.
 
 ## Mattermost
