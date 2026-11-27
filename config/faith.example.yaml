@@ -142,14 +142,14 @@ connectors:
 
   # FAITH's own Hermes (the faith-hermes service in docker-compose.example.yml): for project
   # threads only, never a chat. One profile per person, so each person's Hermes memory stays theirs.
-  - id: faith-hermes
-    type: hermes
-    url: http://faith-hermes:8642
-    key_env: FAITH_HERMES_KEY_{PROFILE}     # each profile's own API_SERVER_KEY; FAITH_HERMES_KEY_WIZARD
-    projects_only: true
-    roles: [admin, adult]                   # add household, parents to give Family and Parents threads Hermes too
-    # household_profile: family             # the Family project's profile
-    # parents_profile: parents              # the Parents project's profile (kept apart from Family)
+  # - id: faith-hermes
+  #   type: hermes
+  #   url: http://faith-hermes:8642
+  #   key_env: FAITH_HERMES_KEY_{PROFILE}   # each profile's own API_SERVER_KEY; FAITH_HERMES_KEY_WIZARD
+  #   projects_only: true
+  #   roles: [admin, adult]                 # add household, parents to give Family and Parents threads Hermes too
+  #   household_profile: family             # the Family project's profile
+  #   parents_profile: parents              # the Parents project's profile (kept apart from Family)
 
   # The admin's own Hermes cluster. owner: only that one person gets it, in chats and in their threads.
   - id: hermes
