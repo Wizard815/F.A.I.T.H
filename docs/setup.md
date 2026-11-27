@@ -195,6 +195,30 @@ people:
 
 FAITH runs as a bot with a personal DM for each person, a family channel and a parents' channel: see [mattermost.md](mattermost.md).
 
+## ntfy (phone notifications)
+
+FAITH can also send its notifications to your own ntfy server: approval requests, the integrations watch, messages and the morning brief. It's one more way, next to Mattermost and HA's phone app.
+
+```yaml
+notifications:
+  ntfy:
+    url: http://<server-ip>:8091          # your ntfy (Wizard's: odysseus-ntfy-1)
+    topic: faith-{id}                     # each person's own topic: faith-wizard, faith-robin
+    household_topic: faith-household      # the family's messages; leave it out to skip them
+    token_env: NTFY_TOKEN                 # an ntfy access token (tk_…), sent as Bearer
+```
+
+- **Who gets what.** A person's notification goes only to their topic. "To everyone" goes to the household topic. The parents' alerts (a source is down) and approval requests go to each grown-up's own topic, never a kid's.
+- **Bodies stay plain.** Links (photo share links too), map coordinates and anything that looks like a token are taken out. Tapping a notification opens FAITH (`public_url`). Approve or deny there; ntfy has no buttons for it.
+- **Lock the topics.** Topic names are easy to guess. In ntfy, set `auth-default-access: deny-all`, make one user for FAITH with write access to `faith-*`, and give each person read access to their own topic only (`ntfy access sam faith-sam read-only`). Subscribe on each phone with that person's login.
+- **Your own server only.** FAITH refuses `ntfy.sh`.
+
+**What goes wrong:**
+- "ntfy refused the token (403)" in the log: the token can't write that topic. Run `ntfy access <faith-user> 'faith-*' write-only`.
+- "ntfy … isn't answering": check `url` from inside FAITH's container (`docker exec faith node -e "fetch('http://<server-ip>:8091/v1/health').then(r => r.text()).then(console.log)"`).
+- "needs {id} in it": `topic` must differ per person, or everyone would read everyone's notifications.
+- Nothing arrives but no error: the phone is subscribed to the wrong topic, or to another server.
+
 ## The other apps
 
 Every app the family uses goes under `apps:` in `faith.yaml`. They become the launcher on the home screen and the Apps tab.

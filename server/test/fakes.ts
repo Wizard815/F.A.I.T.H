@@ -281,3 +281,21 @@ export async function fakeImmich(accounts: Record<string, { email: string; name:
   const url = await listen(s);
   return { url, seen, albums, links, smart: (on: boolean) => { smartOn = on; }, close: () => s.close() };
 }
+
+/** Enough of ntfy for FAITH: JSON publishing to the root, with an access token.
+ *  `fail` makes it answer 500 (a broken ntfy). Only `token` may write. */
+export async function fakeNtfy(token = "tk_test") {
+  const got: { topic: string; title?: string; message: string; priority?: number; tags?: string[]; click?: string; token: string }[] = [];
+  const state = { fail: false };
+  const s = createServer(async (req, res) => {
+    const auth = String(req.headers.authorization || "").replace(/^Bearer /, ""), b = await body(req);
+    const json = (v: unknown, code = 200) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(v)); };
+    if (state.fail) return json({ error: "boom" }, 500);
+    if (auth !== token) return json({ code: 40301, error: "forbidden" }, 403);
+    if (req.method !== "POST" || req.url !== "/" || !b?.topic) return json({ error: "bad request" }, 400);
+    got.push({ ...b, token: auth });
+    json({ id: String(got.length), topic: b.topic, event: "message" });
+  });
+  const url = await listen(s);
+  return { url, got, state, close: () => s.close() };
+}

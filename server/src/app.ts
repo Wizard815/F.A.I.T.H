@@ -51,7 +51,7 @@ export async function buildApp(opts: { config: () => Config; dataFile: string; w
   const voices = new Voices(db, cfg, env);
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true, bodyLimit: 12_000_000 }); // photos for the vision model
   await app.register(cookie);
-  const notifier = new Notifier(cfg, registry.ha, app.log);
+  const notifier = new Notifier(cfg, registry.ha, app.log, env);
   // The inbox: what FAITH sends a person, kept for their FAITH apps to fetch (docs/clients.md).
   db.exec("CREATE TABLE IF NOT EXISTS inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL, ref TEXT)");
   notifier.inbox = (personId, i) => {

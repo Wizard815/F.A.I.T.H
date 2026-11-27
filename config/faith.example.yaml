@@ -199,6 +199,15 @@ voice:
 # health:
 #   interval_s: 120              # 0 turns it off
 
+# ntfy: notifications to your own ntfy server too (docs/setup.md). Each person's own topic;
+# the parents' alerts and approvals only to grown-ups' topics. No links or places in the text.
+# notifications:
+#   ntfy:
+#     url: http://<server-ip>:8091
+#     topic: faith-{id}
+#     household_topic: faith-household
+#     token_env: NTFY_TOKEN
+
 # More tools than this: FAITH offers the model only the ones that fit the question
 # (ranked by model.embed_model embeddings when set, else by shared words).
 # tools:

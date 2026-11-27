@@ -202,7 +202,7 @@ export type Config = {
   /** A person's chat, once put away ("new topic" or quiet), is filed in their own wiki folder for Ingest (the wiki's conversation_log). */
   memory: { file_conversations: boolean };
   rewards: { allowed_points: number[]; currency: string; payout: "manual" | "firefly"; firefly?: { url: string; token_env: string; from_account: string } };
-  notifications: { approvals_push: boolean };
+  notifications: { approvals_push: boolean; ntfy?: NtfyConfig };
   /** Checking every source on a schedule and telling the parents when one goes down (health.ts). 0 = off. */
   health: { interval_s: number };
   /** The info board for FAITH's apps (board/), brought over from Pondering Orb. */
@@ -224,6 +224,18 @@ export type BoardConfig = {
   brief: { time: string; days: string; people: string[]; send: boolean };
   /** The longest log entry, in characters (Orb's logMax). */
   log_max: number;
+};
+
+/** ntfy (your own server on the LAN) as one more way to reach phones: each person's own
+ *  topic, one household topic for the family's messages. */
+export type NtfyConfig = {
+  url: string;
+  /** Each person's topic: {id} is their id, {ID} the same in capitals. Default faith-{id}. */
+  topic: string;
+  /** The family's messages ("to everyone"). None: they don't go to ntfy. */
+  household_topic?: string;
+  /** An ntfy access token (tk_…) with write access to these topics, sent as Bearer. */
+  token_env?: string;
 };
 
 /** FAITH as a Mattermost bot: a DM with each person, a family channel, a parents channel. */
@@ -457,10 +469,31 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
       return { allowed_points: allowed, currency: str(r.currency, "$"), payout: payout as "manual" | "firefly",
         firefly: r.firefly?.url ? { url: str(r.firefly.url), token_env: str(r.firefly.token_env, "FIREFLY_TOKEN"), from_account: String(r.firefly.from_account) } : undefined };
     })(),
-    notifications: { approvals_push: bool(raw.notifications?.approvals_push, true) },
+    notifications: { approvals_push: bool(raw.notifications?.approvals_push, true), ntfy: parseNtfy(raw.notifications?.ntfy, people) },
     health: { interval_s: num(raw.health?.interval_s, 120) },
     board: parseBoard(raw.board || {}, people),
   };
+}
+
+const TOPIC = /^[A-Za-z0-9_-]{1,64}$/;
+/** A person's ntfy topic from the template. */
+export const ntfyTopic = (n: NtfyConfig, personId: string) => personEnv(n.topic, personId)!;
+
+function parseNtfy(n: any, people: Person[]): NtfyConfig | undefined {
+  if (!n?.url) return undefined;
+  const url = str(n.url).replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(url)) throw new ConfigError("notifications.ntfy.url must start with http:// or https:// (your own ntfy, e.g. http://<server-ip>:8091).");
+  // Your own server only: ntfy.sh is a cloud service, and anyone who guesses a topic there reads it.
+  if (/^https?:\/\/([^/]*\.)?ntfy\.sh(:|\/|$)/i.test(url)) throw new ConfigError("notifications.ntfy.url points at ntfy.sh, a cloud service. Use your own ntfy server on the LAN.");
+  const topic = str(n.topic, "faith-{id}");
+  if (!/\{id\}|\{ID\}/.test(topic)) throw new ConfigError(`notifications.ntfy.topic "${topic}" needs {id} in it: one topic per person, or everyone would read everyone's notifications.`);
+  const cfg: NtfyConfig = { url, topic, household_topic: n.household_topic ? str(n.household_topic) : undefined, token_env: n.token_env ? str(n.token_env) : undefined };
+  const topics = people.map((p) => ntfyTopic(cfg, p.id));
+  for (const t of [...topics, ...(cfg.household_topic ? [cfg.household_topic] : [])]) if (!TOPIC.test(t)) throw new ConfigError(`notifications.ntfy: "${t}" isn't a usable topic (letters, digits, - and _, up to 64).`);
+  const dupT = topics.find((t, i) => topics.indexOf(t) !== i);
+  if (dupT) throw new ConfigError(`notifications.ntfy.topic gives two people the same topic (${dupT}).`);
+  if (cfg.household_topic && topics.includes(cfg.household_topic)) throw new ConfigError(`notifications.ntfy.household_topic "${cfg.household_topic}" is also someone's own topic. Pick another name.`);
+  return cfg;
 }
 
 function parseBoard(b: any, people: Person[]): BoardConfig {

@@ -108,7 +108,7 @@ The loop is OpenAI-compatible, so the model is whatever Argos serves, and FAITH 
 | Home Assistant dashboard | FAITH's cards over HA's websocket (`faith/call`, a fixed list of paths) | the HA user who's looking, or whoever signed in on that tablet |
 | HA Assist and voice satellites | FAITH as conversation agent; FAITH's own Wyoming speech-to-text and voice (`wyoming.ts`) | the mapped HA user, or the household with a recognised speaker |
 | Mattermost | the bot: a DM each, a family channel, a parents' channel | the person (DM), or the household with a speaker (channels) |
-| Phones | HA notifications; Approve / Deny buttons | the person who tapped |
+| Phones | HA notifications with Approve / Deny buttons; ntfy (each person's own topic, no buttons) | the person who tapped |
 | Other agents | `/v1/chat/completions` and `/mcp` with a `faith token` | that token's view |
 | FAITH's own page | the admin console | admins only |
 
@@ -116,7 +116,7 @@ The loop is OpenAI-compatible, so the model is whatever Argos serves, and FAITH 
 
 - **Routines** (`routines.ts`): scheduled skills, checked every 30 seconds, caught up within the hour.
 - **The morning brief** (`board/board.ts`): for the people in `board.brief.people`, once a day ([dashboard.md](dashboard.md)).
-- **The integrations watch** (`health.ts`): every source checked every two minutes; the parents hear when one goes down and when it's back.
+- **The integrations watch** (`health.ts`): every source checked every two minutes; the parents hear when one goes down and when it's back (their chat, phones, and their own ntfy topics).
 - **Presence** (`auth/presence.ts`): each screen's camera sensors for sign-out, and HA's `person.*` entities for who's home.
 - **The Mattermost bot** keeps its channels' members right.
 
