@@ -68,6 +68,10 @@ test("throwaway: reads only, tells nobody what it said, and is gone when put awa
   assert.match(audit, /a throwaway thread \(done\)/);
   assert.match(inbox, /throwaway thread has an answer/);
 
+  const glance = (await A.app.inject({ url: "/api/projects/glance", headers: as(sam) })).body;
+  assert.match(glance, /Throwaway thread/);
+  for (const word of ["SURPRISE", "SECRET", "Gift idea"]) assert.ok(!glance.includes(word), `a little screen (D.A.S.H) doesn't show "${word}"`);
+
   const put = await A.app.inject({ method: "PUT", url: `/api/projects/person-sam/threads/${id}/resolved`, headers: as(sam), payload: { resolved: true } });
   assert.equal(put.statusCode, 200, put.body);
   assert.equal(put.json().deleted, true);

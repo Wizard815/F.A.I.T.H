@@ -312,7 +312,11 @@ export class Projects {
         needs_you: p.threads.filter((t) => t.stage === "needs_you").length,
         working: p.threads.filter((t) => t.stage === "working").length,
         review: p.threads.filter((t) => t.stage === "review").length,
-        threads: p.threads.slice(0, 5).map((t) => ({ id: t.id, title: clip(t.title, 32), status: t.status, stage: t.stage, last: clip(t.last_text.replace(/\s+/g, " "), 60), ...(t.throwaway ? { throwaway: true } : {}) })),
+        // A little screen sits where others can see it (a dashboard, a desk), so a throwaway
+        // thread shows only that it exists: no title, no words.
+        threads: p.threads.slice(0, 5).map((t) => t.throwaway
+          ? { id: t.id, title: "Throwaway thread", status: t.status, stage: t.stage, last: "", throwaway: true }
+          : { id: t.id, title: clip(t.title, 32), status: t.status, stage: t.stage, last: clip(t.last_text.replace(/\s+/g, " "), 60) }),
       })),
     };
   }

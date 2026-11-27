@@ -76,7 +76,7 @@ Every route shows only this caller's projects and goes through the tools above.
 | Call | Does |
 |---|---|
 | `GET /api/projects` (`?resolved=1`) | Your projects, each with its threads |
-| `GET /api/projects/glance` | For little screens (D.A.S.H): at most 8 projects and 5 threads, short lines, counts of `needs_you` and `working` |
+| `GET /api/projects/glance` | For little screens (D.A.S.H's FAITH mod): at most 8 projects and 5 threads, short lines, each thread's `stage`, counts of `needs_you`, `working` and `review`. A throwaway thread shows only "Throwaway thread", no words. Reading it doesn't review anything |
 | `PUT /api/projects/:id` `{ "instructions" }` | The project's standing instructions, given to every thread (2000 characters at most) |
 | `POST /api/projects/:id/threads` `{ "brief", "title"?, "throwaway"? }` | Start one. Returns `{ thread }`, or `pending` (a Yes to tap) or `requests` (waiting for approval). `throwaway: true` only in your own project |
 | `GET /api/projects/:id/threads/:thread` | Its latest messages |
