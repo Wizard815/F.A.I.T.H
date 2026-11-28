@@ -1,5 +1,7 @@
 # FAITH: Family Agent for Intelligent Tasks & Help
 
+[![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue)](LICENSE)
+
 One assistant the whole family talks to, by text or voice, running entirely on
 your own hardware. FAITH is the family's front door: a home screen and
 homepage for every app, and an agent that can use all of them. Home Assistant
@@ -182,4 +184,9 @@ Design references (not code FAITH uses):
 
 ## License
 
-MIT
+FAITH is source-available under the
+[PolyForm Shield License 1.0.0](LICENSE). You can read, run, change and share
+it for free, including at work. You can't sell it or offer it as a competing
+product or hosted service without permission: open an issue titled
+"License request" to ask. [docs/LICENSING.md](docs/LICENSING.md) explains it
+in plain English. Versions published before the switch stay under MIT.
