@@ -162,6 +162,38 @@ people:
 - No photos in the answer on the kitchen screen: there's no family key (step 3). That's on purpose.
 - Share links that don't open outside the house: set `public_url`.
 
+## Homebox (the house inventory)
+
+FAITH searches and sorts the house inventory in Homebox: "where's the HDMI cable?", "what's in the garage?", "everything tagged Camping", "put these in the blue bin" (with a photo), "we used the last AA batteries".
+
+1. In Homebox, make an account for FAITH in the household's group (invite it from your group settings), so it sees the same items you do.
+2. Put its email and password in `HOMEBOX_USER` and `HOMEBOX_PASSWORD`. FAITH signs in and keeps the token until it expires.
+
+```yaml
+connectors:
+  - id: homebox
+    type: homebox
+    url: http://<server-ip>:7745     # the port you mapped (8111 on Unraid's template here)
+    user_env: HOMEBOX_USER
+    password_env: HOMEBOX_PASSWORD
+    private_tags: [private]          # items with these tags: grown-ups only
+```
+
+- Tools: `inventory_search`, `inventory_item`, `inventory_locations`, `inventory_tags` (looking), and `inventory_add`, `inventory_update`, `inventory_add_location` (changing). Changing waits for a Yes like any change.
+- There's no delete. "It's gone" archives the item, so it drops out of searches but you can bring it back in Homebox.
+- New tags are made when an item needs one. Locations aren't: FAITH asks, or adds one with `inventory_add_location`.
+- **Who sees what.** Everyone in a Homebox group sees the same items, so FAITH uses one account for the house. FAITH itself keeps these from the kids, the shared screens and the family chat:
+  - items with a tag in `private_tags` (tag jewellery, documents, the spare keys `private`);
+  - prices, serial and model numbers, where it was bought, and warranty details.
+  Grown-ups signed in, and the parents chat, see everything.
+- Kids can look things up. To let a teenager move or add things, add `inventory_update` or `inventory_add` to `roles.kid-pro.allow_writes` (or `approve_writes`, so a parent says Yes first).
+- Works with Homebox before and after labels became tags (0.23), and with the newer "entities" API. FAITH asks Homebox which it is.
+
+**What goes wrong:**
+- "Homebox refused the login": sign in to Homebox with `HOMEBOX_USER` and `HOMEBOX_PASSWORD` yourself. If that works, check FAITH can reach the URL from its container.
+- An item that should be private shows on the kitchen screen: give it the `private` tag in Homebox (or the tag you listed in `private_tags`). Tags are matched by name, any case.
+- "More than one location matches": two locations share a name (two "Top shelf"s). Rename one in Homebox, or say the full name.
+
 ## Coinpile
 
 - In Coinpile: Settings → Home Assistant & API → make a token with the **mcp** and **act** scopes for each person → `COINPILE_TOKEN_<ID>`.

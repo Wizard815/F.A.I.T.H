@@ -20,6 +20,7 @@ export const SERVICES: Service[] = [
   { id: "studio", port: 6060, path: "/", kind: "http", what: "Hermes Studio" },
   { id: "immich", port: 2283, path: "/api/server/ping", kind: "http", what: "Immich (photos)", names: ["immich_server", "immich"] },
   { id: "mealie", port: 9000, path: "/api/app/about", kind: "http", what: "Mealie (recipes)", names: ["mealie"] },
+  { id: "homebox", port: 7745, path: "/api/v1/status", kind: "http", what: "Homebox (the house inventory)", names: ["homebox"] },
   { id: "mattermost", port: 8065, path: "/api/v4/system/ping", kind: "http", what: "Mattermost", names: ["mattermost"] },
   { id: "voiceid", port: 8099, path: "/health", kind: "http", what: "voice ID (FAITH's voiceid service)", names: ["voiceid"] },
   { id: "hamcp", port: 9584, path: "/", kind: "http", what: "ha-mcp (Home Assistant for agents)" },
@@ -102,6 +103,11 @@ export function build(found: Found, given: InitPerson[], name = "Faith") {
   if (has("mealie")) {
     connectors.push({ id: "mealie", type: "mealie", url: found.mealie, token_env: "MEALIE_TOKEN" });
     need("MEALIE_TOKEN", "in Mealie: your profile → API Tokens (for adding recipes; the meal plan and shopping lists go through HA's Mealie integration)");
+  }
+  if (has("homebox")) {
+    connectors.push({ id: "homebox", type: "homebox", url: found.homebox, user_env: "HOMEBOX_USER", password_env: "HOMEBOX_PASSWORD" });
+    need("HOMEBOX_USER", "the email of a Homebox account in your household's group (make one for FAITH: Homebox → invite to the group)");
+    need("HOMEBOX_PASSWORD", "that Homebox account's password");
   }
   if (has("immich")) {
     connectors.push({ id: "photos", type: "immich", url: found.immich, person_key_env: "IMMICH_KEY_{ID}" });

@@ -6,7 +6,7 @@ import { glob, loadConfig, parseConfig, personEnv } from "../src/config.js";
 test("the example config loads", () => {
   const cfg = loadConfig(resolve(import.meta.dirname, "../../config/faith.example.yaml"), {});
   assert.equal(cfg.people.length, 2);
-  assert.deepEqual(cfg.connectors.map((c) => c.id), ["wiki", "allglance", "homeassistant", "mealie", "photos", "coinpile", "omi", "orb", "hermes"]);
+  assert.deepEqual(cfg.connectors.map((c) => c.id), ["wiki", "allglance", "homeassistant", "mealie", "homebox", "photos", "coinpile", "omi", "orb", "hermes"]);
   assert.equal(cfg.roles["kid-lite"].writes, "allowlist");
   assert.equal(cfg.hub.devices[0].id, "kitchen");
   assert.equal(cfg.dashboard.cards.find((c) => c.id === "mine")?.who, "person");

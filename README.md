@@ -47,6 +47,7 @@ is its hands, and Argos (local models) is its brain.
 | Wiki | memory, notes, each person's context; it loads `context_for` when someone new starts talking |
 | ALLGlance | the day, tasks, chores, life events |
 | Home Assistant | devices and sensors, plus Mealie's shopping lists and meal plan through HA's Mealie integration |
+| Homebox | the house inventory: where things are, tags, adding and moving items ([setup](docs/setup.md#homebox-the-house-inventory)) |
 | Coinpile | money, only for that person |
 | Pondering Orb | Wizard's own dashboard, only for Wizard |
 | Hermes | big jobs, run in each person's own Hermes profile |
@@ -167,6 +168,7 @@ FAITH ties these together. Each is its own repository:
 | [Wizard815/plaid-firefly-connector](https://github.com/Wizard815/plaid-firefly-connector) and [Wizard815/firefly-iii](https://github.com/Wizard815/firefly-iii) | the kid's card: approved money rewards are recorded as transfers to the child's account ([how](docs/rewards.md)) |
 | [home-assistant/core](https://github.com/home-assistant/core) | the house, Assist voice, phones, and the family dashboard |
 | [mealie-recipes/mealie](https://github.com/mealie-recipes/mealie) | meals and shopping lists, through Home Assistant's Mealie integration |
+| [sysadminsmedia/homebox](https://github.com/sysadminsmedia/homebox) | the house inventory: items, locations and tags |
 | [mattermost/mattermost](https://github.com/mattermost/mattermost) | the family's chats: a personal chat each, family, parents |
 
 Design references (not code FAITH uses):

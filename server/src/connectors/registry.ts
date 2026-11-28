@@ -2,6 +2,7 @@ import { anyGlob, isKid, KID_NEVER_TOOLS, type Config } from "../config.js";
 import { policyOf, type Caller } from "../scope.js";
 import { Hermes } from "./hermes.js";
 import { HomeAssistant } from "./homeassistant.js";
+import { Homebox } from "./homebox.js";
 import { McpConnector } from "./mcp.js";
 import { Immich } from "./immich.js";
 import { Mealie } from "./mealie.js";
@@ -29,6 +30,7 @@ export class Registry {
       else if (c.type === "studio") this.connectors.push(new Studio(c, env));
       else if (c.type === "mealie") this.connectors.push(new Mealie(c, env));
       else if (c.type === "immich") this.connectors.push(new Immich(c, cfg, env));
+      else if (c.type === "homebox") this.connectors.push(new Homebox(c, env));
     }
   }
 

@@ -133,7 +133,15 @@ export type ImmichConnector = {
   share_days: number;            // how long a share link works by default
   roles?: PolicyName[];
 };
-export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector | MealieConnector | ImmichConnector;
+export type HomeboxConnector = {
+  id: string; type: "homebox"; url: string;
+  user_env: string;              // the household's Homebox account (email), e.g. HOMEBOX_USER
+  password_env: string;          // e.g. HOMEBOX_PASSWORD
+  token_env?: string;            // or a ready token instead of the login
+  private_tags: string[];        // items with one of these tags are for grown-ups only (default: private)
+  roles?: PolicyName[];
+};
+export type Connector = McpConnector | HomeAssistantConnector | HermesConnector | StudioConnector | MealieConnector | ImmichConnector | HomeboxConnector;
 
 /** An app on the family homepage (the launcher). */
 export type AppLink = { id: string; name: string; url: string; icon?: string; who: "anyone" | "person"; roles?: PolicyName[]; people?: string[] };
@@ -370,11 +378,13 @@ export function parseConfig(raw: any, env: NodeJS.ProcessEnv = process.env): Con
     }
     if (type === "studio") return { id, type, url, user_env: str(c.user_env, "STUDIO_USER_{ID}"), password_env: str(c.password_env, "STUDIO_PASSWORD_{ID}"), roles: roles ?? ["admin", "parent"] } as StudioConnector;
     if (type === "mealie") return { id, type, url, token_env: str(c.token_env, "MEALIE_TOKEN"), roles: roles ?? ["admin", "parent", "parents", "household"] } as MealieConnector;
+    if (type === "homebox") return { id, type, url: url.replace(/\/api(\/v1)?$/, ""), user_env: str(c.user_env, "HOMEBOX_USER"), password_env: str(c.password_env, "HOMEBOX_PASSWORD"), token_env: c.token_env ? str(c.token_env) : undefined,
+      private_tags: c.private_tags ? list(c.private_tags) : ["private"], roles } as HomeboxConnector;
     if (type === "immich") return { id, type, url: url.replace(/\/api$/, ""), public_url: c.public_url ? str(c.public_url).replace(/\/+$/, "") : undefined, person_key_env: str(c.person_key_env, "IMMICH_KEY_{ID}"),
       household_key_env: c.household_key_env ? str(c.household_key_env) : undefined, parents_key_env: c.parents_key_env ? str(c.parents_key_env) : undefined,
       share_days: Math.min(30, Math.max(1, num(c.share_days, 7))), roles } as ImmichConnector;
     if (type === "hermes") return { id, type, url, key_env: c.key_env, model: str(c.model, "hermes-agent"), household_profile: c.household_profile ? str(c.household_profile) : undefined, roles: roles ?? ["admin", "parent"] } as HermesConnector;
-    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie or immich.`);
+    throw new ConfigError(`connectors.${id}.type must be mcp, homeassistant, hermes, studio, mealie, immich or homebox.`);
   });
   const dupC = connectors.map((c) => c.id).find((id, i, a) => a.indexOf(id) !== i);
   if (dupC) throw new ConfigError(`Two connectors have the id "${dupC}".`);

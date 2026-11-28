@@ -115,6 +115,13 @@ connectors:
     url: http://<server-ip>:9000
     token_env: MEALIE_TOKEN                  # Mealie: your profile > API Tokens
 
+  - id: homebox                              # Homebox: the house inventory (docs/setup.md)
+    type: homebox
+    url: http://<server-ip>:7745
+    user_env: HOMEBOX_USER                   # a Homebox account in the household's group (email)
+    password_env: HOMEBOX_PASSWORD
+    private_tags: [private]                  # items with these tags: grown-ups only
+
   - id: photos                               # Immich: each person's own photo library (docs/setup.md)
     type: immich
     url: http://<server-ip>:2283
